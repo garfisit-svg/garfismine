@@ -111,26 +111,6 @@ export const LandingPage: React.FC = () => {
               <span>Search Arenas</span>
             </button>
           </div>
-
-          {/* Stats section */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto mt-20 text-center">
-            <div>
-              <p className="text-2xl sm:text-3xl font-display font-bold text-brand-purple">500+</p>
-              <p className="text-xs sm:text-sm text-text-secondary">Verified Arenas</p>
-            </div>
-            <div>
-              <p className="text-2xl sm:text-3xl font-display font-bold text-brand-cyan">50,000+</p>
-              <p className="text-xs sm:text-sm text-text-secondary">Confirmed Bookings</p>
-            </div>
-            <div>
-              <p className="text-2xl sm:text-3xl font-display font-bold text-brand-green">8</p>
-              <p className="text-xs sm:text-sm text-text-secondary">Major Cities Active</p>
-            </div>
-            <div>
-              <p className="text-2xl sm:text-3xl font-display font-bold text-yellow-500">⭐ 4.8</p>
-              <p className="text-xs sm:text-sm text-text-secondary">User Satisfaction</p>
-            </div>
-          </div>
         </div>
       </section>
 

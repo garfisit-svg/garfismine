@@ -27,7 +27,7 @@ import { OwnerSettingsPage } from './pages/OwnerSettingsPage';
 // Icons Import
 import { 
   ShieldCheck, User, Search, Gift, LogOut, LayoutDashboard, Calendar, 
-  MapPin, HelpCircle, Users, Menu, X, ArrowUpRight 
+  MapPin, HelpCircle, Users, Menu, X, ArrowUpRight, Gamepad2, Zap 
 } from 'lucide-react';
 
 export default function App() {
@@ -137,13 +137,22 @@ export default function App() {
           <div className="flex justify-between items-center h-16 sm:h-20">
             
             {/* Logo */}
-            <Link to={isOwner ? "/owner-dashboard" : "/"} className="flex items-center gap-1.5 focus:outline-none">
+            <Link to={isOwner ? "/owner-dashboard" : "/"} className="flex items-center gap-2 focus:outline-none group">
+              <div className={`p-1.5 sm:p-2 rounded-xl bg-gradient-to-br ${isOwner ? 'from-cyan-500/20 to-[#06B6D4]/5 border border-[#06B6D4]/30 group-hover:border-[#06B6D4]' : 'from-brand-purple/20 to-brand-pink/5 border border-brand-purple/30 group-hover:border-brand-purple'} transition-all duration-300`}>
+                {isOwner ? (
+                  <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-[#06B6D4] animate-pulse" />
+                ) : (
+                  <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5 text-brand-purple group-hover:scale-110 transition-transform duration-300" />
+                )}
+              </div>
               <span className={`text-2xl sm:text-3xl font-display font-black tracking-tighter ${isOwner ? 'text-[#06B6D4]' : 'text-gradient'}`}>
                 GARF
               </span>
-              <span className={`text-[10px] sm:text-xs font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${isOwner ? 'text-cyan-400 bg-cyan-950/20 border-cyan-500/20 animate-pulse' : 'text-text-secondary bg-[#121219] border-[#2a2a3e]'}`}>
-                {isOwner ? 'OWNER PORTAL' : 'BETA'}
-              </span>
+              {isOwner && (
+                <span className="text-[8px] sm:text-[10px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded border text-cyan-400 bg-cyan-950/20 border-cyan-500/20 animate-pulse">
+                  OWNER
+                </span>
+              )}
             </Link>
 
             {/* Desktop Center Links */}
@@ -381,8 +390,11 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-2 md:grid-cols-4 gap-8">
           
           <div className="col-span-2 md:col-span-1 space-y-4">
-            <Link to="/" className="text-2xl font-display font-black tracking-tight text-white mb-2 block">
-              GARF
+            <Link to="/" className="flex items-center gap-2 text-2xl font-display font-black tracking-tight text-white mb-2 focus:outline-none group">
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-brand-purple/20 to-brand-pink/5 border border-brand-purple/30 group-hover:border-brand-purple transition">
+                <Gamepad2 className="w-3.5 h-3.5 text-brand-purple" />
+              </div>
+              <span>GARF</span>
             </Link>
             <p className="text-xs text-text-secondary leading-relaxed max-w-xs">
               Gaming Arena & Recreation Finder. Seamless, lightning-fast on-demand reservation portal for PC lounges, console booths, and athletic pitches.

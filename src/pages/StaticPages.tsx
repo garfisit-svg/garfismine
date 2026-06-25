@@ -18,24 +18,6 @@ export const AboutPage: React.FC = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20 text-center">
-        <div className="glass-card p-8">
-          <p className="text-5xl font-display font-extrabold text-brand-purple mb-2">500+</p>
-          <h3 className="text-lg font-semibold mb-1">Elite Venues</h3>
-          <p className="text-sm text-text-secondary">Verified premium cafes and turfs with state-of-the-art specs</p>
-        </div>
-        <div className="glass-card p-8">
-          <p className="text-5xl font-display font-extrabold text-brand-cyan mb-2">50K+</p>
-          <h3 className="text-lg font-semibold mb-1">Bookings Playday</h3>
-          <p className="text-sm text-text-secondary">Consecutive slots secured in real-time with zero friction</p>
-        </div>
-        <div className="glass-card p-8">
-          <p className="text-5xl font-display font-extrabold text-brand-green mb-2">8</p>
-          <h3 className="text-lg font-semibold mb-1">Metros Active</h3>
-          <p className="text-sm text-text-secondary">Spreading massive gaming culture across Indian epicenters</p>
-        </div>
-      </div>
-
       <div className="glass-card p-8 md:p-12 mb-16">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <div>
