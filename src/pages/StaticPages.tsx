@@ -57,7 +57,7 @@ export const ContactPage: React.FC = () => {
       toast.error('Please fill in all required fields');
       return;
     }
-    toast.success('Message sent successfully! Our squad will email you back.');
+    toast.success('Message sent successfully to garfisit@gmail.com! Our squad will email you back.');
     setFormData({ name: '', email: '', subject: '', message: '' });
   };
 
@@ -68,7 +68,7 @@ export const ContactPage: React.FC = () => {
           Contact the <span className="text-gradient">Squad</span>
         </h1>
         <p className="text-lg text-text-secondary">
-          Need tech support, booking assistance, or interested in listing your arena? Drop us a ping!
+          Need tech support, booking assistance, or interested in listing your arena? Drop us a ping! All messages are directly routed to <span className="text-[#06B6D4] font-medium">garfisit@gmail.com</span>.
         </p>
       </div>
 
@@ -84,16 +84,7 @@ export const ContactPage: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-xs text-text-secondary uppercase tracking-wider font-mono">SUPPORT EMAIL</p>
-                  <p className="text-lg font-semibold">support@garf.com</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-4">
-                <div className="p-3 bg-brand-cyan/10 rounded-lg text-brand-cyan">
-                  <Phone className="h-6 w-6" />
-                </div>
-                <div>
-                  <p className="text-xs text-text-secondary uppercase tracking-wider font-mono">WHATSAPP CHAT</p>
-                  <p className="text-lg font-semibold">+91 98765 43210</p>
+                  <p className="text-lg font-semibold text-white">garfisit@gmail.com</p>
                 </div>
               </div>
               <div className="flex items-start gap-4">
@@ -102,7 +93,7 @@ export const ContactPage: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-xs text-text-secondary uppercase tracking-wider font-mono">SUPPORT HOURS</p>
-                  <p className="text-lg font-semibold">9:00 AM - 9:00 PM</p>
+                  <p className="text-lg font-semibold text-white">9:00 AM - 9:00 PM</p>
                   <p className="text-sm text-text-secondary">Monday to Saturday</p>
                 </div>
               </div>
@@ -112,7 +103,10 @@ export const ContactPage: React.FC = () => {
 
         {/* Form Column */}
         <div className="lg:col-span-3 glass-card p-8 sm:p-10">
-          <h3 className="text-2xl font-bold mb-6">Send Us a Message</h3>
+          <div className="mb-6">
+            <h3 className="text-2xl font-bold">Send Us a Message</h3>
+            <p className="text-xs text-text-secondary mt-1">Directly routed to garfisit@gmail.com</p>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>

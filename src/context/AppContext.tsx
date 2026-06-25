@@ -871,7 +871,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (profile.is_suspended) {
-      throw new Error('Your account has been suspended. Contact support at support@garf.com');
+      throw new Error('Your account has been suspended. Contact support at garfisit@gmail.com');
     }
 
     // CHECK BIRTHDAY BONUS (Rule 9)
