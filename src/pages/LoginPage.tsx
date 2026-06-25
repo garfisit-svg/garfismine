@@ -57,12 +57,6 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleQuickLogin = (roleEmail: string) => {
-    setEmail(roleEmail);
-    setPassword('password123');
-    toast.success(`Credentials loaded for ${roleEmail}`);
-  };
-
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12 font-sans">
       <div className="w-full max-w-md glass-card p-8 sm:p-10 space-y-8">
@@ -72,34 +66,6 @@ export const LoginPage: React.FC = () => {
           </div>
           <h2 className="text-3xl font-display font-bold">Log in to <span className="text-gradient">GARF</span></h2>
           <p className="text-text-secondary mt-2 text-sm sm:text-base">Securing slots and exploring arenas</p>
-        </div>
-
-        {/* 📑 DUAL PORTAL INSTANT SELECTORS */}
-        <div className="bg-[#12121A] p-1 rounded-xl border border-[#2a2a3e] flex text-center text-xs font-bold leading-normal">
-          <button
-            type="button"
-            onClick={() => handleQuickLogin('player@garf.com')}
-            className={`w-full py-2 px-1.5 rounded-lg transition ${email === 'player@garf.com' ? 'bg-gradient text-white font-black' : 'text-text-secondary hover:text-white'}`}
-          >
-            🕹️ Player Quick Login
-          </button>
-        </div>
-
-        <div className="flex flex-wrap justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleQuickLogin('player@garf.com')}
-            className="text-[10px] uppercase font-mono px-2.5 py-1 bg-[#12121A] hover:bg-brand-purple/15 border border-[#2a2a3e] hover:border-brand-purple/30 text-text-secondary hover:text-brand-purple rounded-full transition"
-          >
-            Quick Player Demo
-          </button>
-          <button
-            type="button"
-            onClick={() => handleQuickLogin('founder@garf.com')}
-            className="text-[10px] uppercase font-mono px-2.5 py-1 bg-[#12121A] hover:bg-brand-purple/15 border border-[#2a2a3e] hover:border-brand-purple/30 text-text-secondary hover:text-brand-purple rounded-full transition"
-          >
-            Quick Admin Demo
-          </button>
         </div>
 
         {error && (
@@ -130,7 +96,7 @@ export const LoginPage: React.FC = () => {
               </span>
               <input
                 type="text"
-                placeholder="player@garf.com, owner@arena.com, or founder@garf.com"
+                placeholder="you@example.com"
                 className="w-full bg-[#161622] border border-[#2a2a3e] rounded-lg pl-10 pr-4 py-3 text-white focus:outline-none focus:border-brand-purple text-sm"
                 value={email}
                 onChange={e => setEmail(e.target.value)}

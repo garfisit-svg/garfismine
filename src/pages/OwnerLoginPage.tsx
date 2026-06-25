@@ -51,12 +51,6 @@ export const OwnerLoginPage: React.FC = () => {
     }
   };
 
-  const selectDemoCredentials = (selectedEmail: string) => {
-    setEmail(selectedEmail);
-    setPassword('password');
-    toast.success(`Selected Demo Credentials for ${selectedEmail}!`);
-  };
-
   return (
     <div className="min-h-screen bg-[#07070B] text-white flex items-center justify-center font-sans p-4 sm:p-6 lg:p-8">
       <div className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-12 bg-[#0E0E17]/60 border border-border-dark rounded-3xl overflow-hidden shadow-2xl">
@@ -113,17 +107,6 @@ export const OwnerLoginPage: React.FC = () => {
                 🏢 For Venue Owners Only
               </div>
               <h2 className="text-3xl font-display font-bold text-white">Owner Portal Login</h2>
-            </div>
-
-            {/* DEMO SWITCHER */}
-            <div className="bg-[#181825] p-1 rounded-xl border border-border-dark/60 text-center text-[10px] sm:text-xs">
-              <button
-                type="button"
-                onClick={() => selectDemoCredentials('owner@arena.com')}
-                className={`w-full py-2 rounded-lg font-bold transition-all cursor-pointer ${email === 'owner@arena.com' ? 'bg-[#06B6D4]/20 border border-[#06B6D4] text-[#06B6D4]' : 'text-text-secondary hover:text-white'}`}
-              >
-                🏢 Load Partner Demo Credentials (owner@arena.com)
-              </button>
             </div>
 
             {error && (

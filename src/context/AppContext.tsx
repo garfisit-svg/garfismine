@@ -166,6 +166,43 @@ const getOffsetDateString = (offsetDays: number) => {
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // One-time purge of old seeded demo data so we start fresh and ready for real venues!
+  const PURGE_KEY = 'garf_purged_dummy_data_v2';
+  if (!localStorage.getItem(PURGE_KEY)) {
+    const keysToClear = [
+      'garf_profiles',
+      'garf_current_user',
+      'garf_venues',
+      'garf_resources',
+      'garf_slots',
+      'garf_bookings',
+      'garf_reviews',
+      'garf_coin_transactions',
+      'garf_offers',
+      'garf_notifications',
+      'garf_admin_logs',
+      'garf_gaming_equipments',
+      'garf_turf_details',
+      'garf_equipment_sessions',
+      'garf_walk_in_sessions',
+      'garf_turf_bookings',
+      'garf_squad_profiles',
+      'garf_squads',
+      'garf_squad_members',
+      'garf_messages',
+      'garf_polls',
+      'garf_poll_votes',
+      'garf_player_needed_posts',
+      'garf_player_needed_responses',
+      'garf_dm_threads',
+      'garf_nearby_checkins',
+      'garf_squad_invites',
+      'garf_squad_events'
+    ];
+    keysToClear.forEach(k => localStorage.removeItem(k));
+    localStorage.setItem(PURGE_KEY, 'true');
+  }
+
   // Define default platform settings
   const [commissionPercent, setCommissionPercent] = useState<number>(() => {
     return Number(localStorage.getItem('garf_commission_percent') || '10');
@@ -179,57 +216,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem('garf_profiles');
     if (saved) return JSON.parse(saved);
 
-    // Initial base profiles seed
-    const seed: Profile[] = [
-      {
-        id: 'user-admin-1',
-        full_name: 'Gaurav Shinde',
-        email: 'founder@garf.com',
-        phone: '9876543210',
-        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-        role: 'admin',
-        garf_coins: 1200,
-        referral_code: 'GARF-FNDR',
-        referred_by: null,
-        date_of_birth: '1995-10-15',
-        city: 'Mumbai',
-        is_suspended: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'user-owner-1',
-        full_name: 'Rajesh Kumar',
-        email: 'owner@arena.com',
-        phone: '9123456789',
-        avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-        role: 'owner',
-        garf_coins: 50,
-        referral_code: 'GARF-OWNR',
-        referred_by: null,
-        date_of_birth: '1988-05-20',
-        city: 'Mumbai',
-        is_suspended: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'user-customer-1',
-        full_name: 'Karan Malhotra',
-        email: 'player@garf.com',
-        phone: '9988776655',
-        avatar_url: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150',
-        role: 'customer',
-        garf_coins: 450,
-        referral_code: 'GARF-PLAY',
-        referred_by: null,
-        date_of_birth: '2001-08-12',
-        city: 'Mumbai',
-        is_suspended: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ];
+    const seed: Profile[] = [];
     return seed;
   });
 
@@ -252,174 +239,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [venues, setVenues] = useState<Venue[]>(() => {
     const saved = localStorage.getItem('garf_venues');
     if (saved) return JSON.parse(saved);
-
-    // Initial venues seed
-    const seed: Venue[] = [
-      {
-        id: 'venue-1',
-        owner_id: 'user-owner-1',
-        name: 'The Esports Lounge',
-        type: 'gaming_cafe',
-        description: 'Mumbai\'s premier GenZ gaming destination with top-tier Nvidia RTX 4080 systems, PlayStation 5 zones, and dedicated VR cockpits. High speed redundant fiber line and custom mechanical gear included!',
-        address: 'Shop 4, Sunrise Heights, Linking Road, Bandra West',
-        city: 'Mumbai',
-        state: 'Maharashtra',
-        pincode: '400050',
-        phone: '9820098200',
-        email: 'info@esportslounge.in',
-        cover_image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800',
-        gallery_images: [
-          'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800',
-          'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800',
-          'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800',
-          'https://images.unsplash.com/photo-1527690786968-3d1f36402488?w=800'
-        ],
-        amenities: ['wifi', 'ac', 'parking', 'food_counter', 'washroom', 'lockers', 'cctv', 'power_backup'],
-        games_available: ['valorant', 'csgo', 'bgmi', 'gta5', 'fifa', 'fortnite', 'minecraft', 'warzone'],
-        price_per_hour: 120,
-        rating: 4.8,
-        total_reviews: 24,
-        is_verified: true,
-        is_active: true,
-        is_featured: true,
-        is_suspended: false,
-        operating_hours_start: '09:00',
-        operating_hours_end: '23:00',
-        operating_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-        commission_percent: 10,
-        rejection_reason: null,
-        verified_at: new Date().toISOString(),
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'venue-2',
-        owner_id: 'user-owner-1',
-        name: 'Hattrick Arena',
-        type: 'turf',
-        description: 'Spacious, high-fidelity artificial grass turfs for massive 7v7 football campaigns or intense indoor box cricket runs. Fully backlit, with premium sound systems and recovery showers.',
-        address: 'Survey No. 42, Outer Ring Road, Bellandur',
-        city: 'Bangalore',
-        state: 'Karnataka',
-        pincode: '560103',
-        phone: '9880098800',
-        email: 'bookings@hattrickarena.com',
-        cover_image: 'https://images.unsplash.com/photo-1459865264687-595d652de67e?w=800',
-        gallery_images: [
-          'https://images.unsplash.com/photo-1459865264687-595d652de67e?w=800',
-          'https://images.unsplash.com/photo-1575361204480-aadea2d10739?w=800',
-          'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=800'
-        ],
-        amenities: ['parking', 'washroom', 'lockers', 'cctv', 'food_counter', 'power_backup'],
-        games_available: ['cricket', 'football', 'badminton', 'basketball'],
-        price_per_hour: 600,
-        rating: 4.6,
-        total_reviews: 15,
-        is_verified: true,
-        is_active: true,
-        is_featured: true,
-        is_suspended: false,
-        operating_hours_start: '06:00',
-        operating_hours_end: '23:59',
-        operating_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-        commission_percent: 10,
-        rejection_reason: null,
-        verified_at: new Date().toISOString(),
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'venue-3',
-        owner_id: 'user-owner-1',
-        name: 'LXG Gaming & Turf Palace',
-        type: 'both',
-        description: 'The ultimate hybrid recreational sports palace. Boasts a standard 5v5 multi-sport synthetic turf side-by-side with a 30-seater elite ROG PC cafe, and massive food options.',
-        address: 'Plot 15, Sector 4, Dwarka',
-        city: 'Delhi',
-        state: 'Delhi',
-        pincode: '110075',
-        phone: '9110091100',
-        email: 'dwarka@lxgme.in',
-        cover_image: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800',
-        gallery_images: [
-          'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800',
-          'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800'
-        ],
-        amenities: ['wifi', 'ac', 'parking', 'washroom', 'cctv', 'food_counter', 'lockers', 'power_backup'],
-        games_available: ['valorant', 'csgo', 'bgmi', 'gta5', 'fifa', 'cricket', 'football', 'badminton'],
-        price_per_hour: 150,
-        rating: 4.7,
-        total_reviews: 32,
-        is_verified: true,
-        is_active: true,
-        is_featured: false,
-        is_suspended: false,
-        operating_hours_start: '09:00',
-        operating_hours_end: '23:59',
-        operating_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-        commission_percent: 10,
-        rejection_reason: null,
-        verified_at: new Date().toISOString(),
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'venue-pending',
-        owner_id: 'user-owner-1',
-        name: 'ProGamer Hub Pune',
-        type: 'gaming_cafe',
-        description: 'Elite Asus Republic of Gamers branded esports spot waiting for regulatory approvals, equipped with high-performance gears.',
-        address: 'Viman Nagar Main Rd, Opp Phoenix Mall',
-        city: 'Pune',
-        state: 'Maharashtra',
-        pincode: '411014',
-        phone: '9651296512',
-        email: 'pune@progamers.in',
-        cover_image: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800',
-        gallery_images: ['https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800'],
-        amenities: ['wifi', 'ac', 'parking', 'washroom', 'cctv'],
-        games_available: ['valorant', 'csgo', 'fifa'],
-        price_per_hour: 100,
-        rating: 0,
-        total_reviews: 0,
-        is_verified: false,
-        is_active: false,
-        is_featured: false,
-        is_suspended: false,
-        operating_hours_start: '10:00',
-        operating_hours_end: '22:00',
-        operating_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-        commission_percent: 10,
-        rejection_reason: null,
-        verified_at: null,
-        created_at: new Date().toISOString()
-      }
-    ];
+    const seed: Venue[] = [];
     return seed;
   });
 
   const [resources, setResources] = useState<VenueResource[]>(() => {
     const saved = localStorage.getItem('garf_resources');
     if (saved) return JSON.parse(saved);
-
-    // Initial resources seed
-    const seed: VenueResource[] = [
-      // Esports Lounge (venue-1)
-      { id: 'res-101', venue_id: 'venue-1', name: 'PC Stage Asus RTX 4080 (PC 1)', type: 'pc', specifications: 'Intel Core i7 13700KF, Geforce RTX 4080, 32GB RAM DDR5, 240Hz Gaming Screen, G502 Mouse, Razer Huntsman Keyboard', price_per_hour: 120, is_active: true, sort_order: 1, created_at: new Date().toISOString() },
-      { id: 'res-102', venue_id: 'venue-1', name: 'PC Stage Asus RTX 4080 (PC 2)', type: 'pc', specifications: 'Intel Core i7 13700KF, Geforce RTX 4080, 32GB RAM DDR5, 240Hz Gaming Screen, G502 Mouse, Razer Huntsman Keyboard', price_per_hour: 120, is_active: true, sort_order: 2, created_at: new Date().toISOString() },
-      { id: 'res-103', venue_id: 'venue-1', name: 'PS5 Elite Arena #1', type: 'ps5', specifications: 'Sony PlayStation 5 Console (Disc), DualSense wireless controllers, 55\" LG C3 4K OLED Gaming TV, 3D Audio Headset', price_per_hour: 150, is_active: true, sort_order: 3, created_at: new Date().toISOString() },
-      { id: 'res-104', venue_id: 'venue-1', name: 'PlayStation 5 Suite #2', type: 'ps5', specifications: 'Sony PlayStation 5 Console (Disc), DualSense wireless controllers, 55\" LG C3 4K OLED Gaming TV', price_per_hour: 150, is_active: true, sort_order: 4, created_at: new Date().toISOString() },
-      { id: 'res-105', venue_id: 'venue-1', name: 'Meta Quest 3 VR Cockpit', type: 'vr', specifications: 'Meta Quest 3 VR goggles with haptic controllers and preloaded games like Beat Saber, Superhot, Half-Life Alyx', price_per_hour: 200, is_active: true, sort_order: 5, created_at: new Date().toISOString() },
-
-      // Hattrick Arena (venue-2)
-      { id: 'res-201', venue_id: 'venue-2', name: 'Santiago Football Field (7v7)', type: 'turf', specifications: 'Premium FIFA 2-Star certified shockpad artificial grass, full state-of-the-art night floodlights, 7-a-side dimensions.', price_per_hour: 800, is_active: true, sort_order: 1, created_at: new Date().toISOString() },
-      { id: 'res-202', venue_id: 'venue-2', name: 'Lord\'s Box Cricket Net #1', type: 'turf', specifications: 'Closed high-tension cricket nets with premium artificial grass carpet, heavy high-speed bowling machine with automatic feeder.', price_per_hour: 400, is_active: true, sort_order: 2, created_at: new Date().toISOString() },
-
-      // LXG Palace (venue-3)
-      { id: 'res-301', venue_id: 'venue-3', name: 'Zotac RTX 4070 PC Space', type: 'pc', specifications: 'Intel Core i5, RTX 4070, 16GB RAM, 165Hz Monitor, Logitech G Gear', price_per_hour: 100, is_active: true, sort_order: 1, created_at: new Date().toISOString() },
-      { id: 'res-302', venue_id: 'venue-3', name: 'Xbox Series X Console Deck', type: 'xbox', specifications: 'Xbox Series X console, GamePass Ultimate active, 4K Display, Dual wireless controllers', price_per_hour: 120, is_active: true, sort_order: 2, created_at: new Date().toISOString() },
-      { id: 'res-303', venue_id: 'venue-3', name: 'Multisport Turf Net #1', type: 'turf', specifications: 'Multi-purpose synthetic turf for football 5v5 or box cricket, under bright roof-style canopy', price_per_hour: 500, is_active: true, sort_order: 3, created_at: new Date().toISOString() },
-
-      // Pending (venue-pending)
-      { id: 'res-pending-1', venue_id: 'venue-pending', name: 'Asus PC Station #1', type: 'pc', specifications: 'RTX 3060 specifications workstation', price_per_hour: 100, is_active: true, sort_order: 1, created_at: new Date().toISOString() }
-    ];
+    const seed: VenueResource[] = [];
     return seed;
   });
 
@@ -433,196 +260,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [bookings, setBookings] = useState<Booking[]>(() => {
     const saved = localStorage.getItem('garf_bookings');
     if (saved) return JSON.parse(saved);
-    
-    // Seed some past completed bookings to load charts and histories nicely
-    const seed: Booking[] = [
-      {
-        id: 'book-seed-1',
-        booking_ref: 'GARF-283419',
-        customer_id: 'user-customer-1',
-        venue_id: 'venue-1',
-        resource_id: 'res-101',
-        booking_date: getOffsetDateString(-5),
-        start_time: '14:00',
-        end_time: '16:00',
-        duration_hours: 2,
-        base_amount: 240,
-        discount_amount: 0,
-        coins_used: 0,
-        coins_discount_amount: 0,
-        platform_fee: 5,
-        final_amount: 245,
-        payment_method: 'online',
-        payment_status: 'completed',
-        booking_status: 'completed',
-        hold_expires_at: null,
-        checked_in_at: new Date(new Date().setDate(new Date().getDate() - 5)).toISOString(),
-        completed_at: new Date(new Date().setDate(new Date().getDate() - 5)).toISOString(),
-        cancelled_at: null,
-        cancellation_reason: null,
-        refund_amount: 0,
-        garf_coins_earned: 24,
-        offer_id: null,
-        walk_in_customer_name: null,
-        walk_in_customer_phone: null,
-        created_at: new Date(new Date().setDate(new Date().getDate() - 5)).toISOString(),
-        updated_at: new Date(new Date().setDate(new Date().getDate() - 5)).toISOString()
-      },
-      {
-        id: 'book-seed-2',
-        booking_ref: 'GARF-734125',
-        customer_id: 'user-customer-1',
-        venue_id: 'venue-2',
-        resource_id: 'res-201',
-        booking_date: getOffsetDateString(-2),
-        start_time: '18:00',
-        end_time: '20:00',
-        duration_hours: 2,
-        base_amount: 1600,
-        discount_amount: 100,
-        coins_used: 100,
-        coins_discount_amount: 10,
-        platform_fee: 5,
-        final_amount: 1495,
-        payment_method: 'online',
-        payment_status: 'completed',
-        booking_status: 'completed',
-        hold_expires_at: null,
-        checked_in_at: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString(),
-        completed_at: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString(),
-        cancelled_at: null,
-        cancellation_reason: null,
-        refund_amount: 0,
-        garf_coins_earned: 149,
-        offer_id: null,
-        walk_in_customer_name: null,
-        walk_in_customer_phone: null,
-        created_at: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString(),
-        updated_at: new Date(new Date().setDate(new Date().getDate() - 2)).toISOString()
-      }
-    ];
+    const seed: Booking[] = [];
     return seed;
   });
 
   const [reviews, setReviews] = useState<Review[]>(() => {
     const saved = localStorage.getItem('garf_reviews');
     if (saved) return JSON.parse(saved);
-
-    // Seed reviews
-    const seed: Review[] = [
-      {
-        id: 'rev-seed-1',
-        booking_id: 'book-seed-1',
-        customer_id: 'user-customer-1',
-        venue_id: 'venue-1',
-        rating: 5,
-        comment: 'Amazing spec PCs! Valorant was butter smooth at lock 240FPS! Highly recommended.',
-        owner_reply: 'Thank you Karan! Glad you enjoyed the gaming zone. Do visit soon for the next tournament!',
-        owner_replied_at: new Date().toISOString(),
-        created_at: getOffsetDateString(-5)
-      },
-      {
-        id: 'rev-seed-2',
-        booking_id: 'book-seed-2',
-        customer_id: 'user-customer-1',
-        venue_id: 'venue-2',
-        rating: 4,
-        comment: 'Great turf, turf grass quality is excellent. Fully backlit cricket action was great under lights!',
-        owner_reply: null,
-        owner_replied_at: null,
-        created_at: getOffsetDateString(-2)
-      }
-    ];
+    const seed: Review[] = [];
     return seed;
   });
 
   const [coinTransactions, setCoinTransactions] = useState<CoinTransaction[]>(() => {
     const saved = localStorage.getItem('garf_coin_transactions');
     if (saved) return JSON.parse(saved);
-
-    // Initial transactions seed
-    const seed: CoinTransaction[] = [
-      { id: 'txn-1', user_id: 'user-customer-1', amount: 50, type: 'welcome_bonus', description: 'Joined the GARF gaming arena! 🎉 Bonus added.', reference_id: null, balance_after: 50, created_at: getOffsetDateString(-10) },
-      { id: 'txn-2', user_id: 'user-customer-1', amount: 24, type: 'booking_earn', description: 'Earned from Booking GARF-283419', reference_id: 'book-seed-1', balance_after: 74, created_at: getOffsetDateString(-5) },
-      { id: 'txn-3', user_id: 'user-customer-1', amount: 10, type: 'review_earn', description: 'Left a detailed review - +10 coins!', reference_id: 'rev-seed-1', balance_after: 84, created_at: getOffsetDateString(-5) },
-      { id: 'txn-4', user_id: 'user-customer-1', amount: -100, type: 'redemption', description: 'Redeemed off booking GARF-734125', reference_id: 'book-seed-2', balance_after: -16, created_at: getOffsetDateString(-2) }, // adjustment
-      { id: 'txn-5', user_id: 'user-customer-1', amount: 149, type: 'booking_earn', description: 'Earned from Booking GARF-734125', reference_id: 'book-seed-2', balance_after: 450, created_at: getOffsetDateString(-2) }
-    ];
+    const seed: CoinTransaction[] = [];
     return seed;
   });
 
   const [offers, setOffers] = useState<Offer[]>(() => {
     const saved = localStorage.getItem('garf_offers');
     if (saved) return JSON.parse(saved);
-
-    // Seed active offers
-    const seed: Offer[] = [
-      {
-        id: 'offer-1',
-        venue_id: 'venue-1',
-        title: 'WEEKDAY BLITZ',
-        description: 'Get an instant 15% discount on bookings over 2 hours scheduled Monday through Friday.',
-        discount_type: 'percentage',
-        discount_value: 15,
-        max_discount_amount: 100,
-        min_booking_hours: 2,
-        valid_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-        valid_from_time: '10:00',
-        valid_to_time: '18:00',
-        valid_from_date: null,
-        valid_to_date: null,
-        is_active: true,
-        usage_count: 5,
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'offer-2',
-        venue_id: 'venue-2',
-        title: 'TURF CHAMPION',
-        description: 'Flat ₹100 discount on your weekend football matches. Clear turf action under floodlights!',
-        discount_type: 'flat',
-        discount_value: 100,
-        max_discount_amount: null,
-        min_booking_hours: 1,
-        valid_days: ['Saturday', 'Sunday'],
-        valid_from_time: '06:00',
-        valid_to_time: '23:59',
-        valid_from_date: null,
-        valid_to_date: null,
-        is_active: true,
-        usage_count: 2,
-        created_at: new Date().toISOString()
-      }
-    ];
+    const seed: Offer[] = [];
     return seed;
   });
 
   const [notifications, setNotifications] = useState<Notification[]>(() => {
     const saved = localStorage.getItem('garf_notifications');
     if (saved) return JSON.parse(saved);
-
-    // Seed notifications
-    const seed: Notification[] = [
-      {
-        id: 'notif-1',
-        user_id: 'user-customer-1',
-        title: 'Welcome to GARF! 🎮',
-        message: 'Discover India\'s core gaming cafe and turf portal! Enjoy 10 welcome coins.',
-        type: 'coins',
-        is_read: false,
-        action_url: '/my-coins',
-        created_at: new Date(Date.now() - 3600000 * 24).toISOString() // 1 day ago
-      }
-    ];
+    const seed: Notification[] = [];
     return seed;
   });
 
   const [adminLogs, setAdminLogs] = useState<AdminLog[]>(() => {
     const saved = localStorage.getItem('garf_admin_logs');
     if (saved) return JSON.parse(saved);
-    return [
-      { id: 'log-1', admin_id: 'user-admin-1', action: 'Whitelisted founder account role', target_type: 'user', target_id: 'user-admin-1', details: 'Setup admin', created_at: getOffsetDateString(-10) }
-    ];
+    return [];
   });
 
   // ==========================================
@@ -631,219 +304,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [gamingEquipments, setGamingEquipments] = useState<GamingEquipment[]>(() => {
     const saved = localStorage.getItem('garf_gaming_equipments');
     if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'res-101',
-        venue_id: 'venue-1',
-        equipment_type: 'pc',
-        custom_name: 'High Performance PC Zone',
-        total_quantity: 10,
-        available_quantity: 10,
-        specifications: 'Intel Core i7 13700KF, Geforce RTX 4080, 32GB RAM DDR5, 240Hz Gaming Screen, G502 Mouse, Razer Huntsman Keyboard',
-        price_per_hour: 120,
-        per_head_or_per_station: 'per_station',
-        min_booking_hours: 1,
-        games_available: ['valorant', 'csgo', 'bgmi', 'gta5', 'fortnite', 'minecraft', 'warzone'],
-        accessories_included: ['headphones', 'gaming_chair', 'keyboard', 'mouse', 'mousepad'],
-        is_active: true,
-        photos: ['https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800'],
-        sort_order: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'res-103',
-        venue_id: 'venue-1',
-        equipment_type: 'ps5',
-        custom_name: 'PS5 Elite Suite',
-        total_quantity: 4,
-        available_quantity: 4,
-        specifications: 'Sony PlayStation 5 Console (Disc), DualSense wireless controllers, 55" LG C3 4K OLED Gaming TV, 3D Audio Headset',
-        price_per_hour: 150,
-        per_head_or_per_station: 'per_station',
-        min_booking_hours: 1,
-        games_available: ['fifa', 'god_of_war', 'spider_man'],
-        accessories_included: ['headphones', 'controller'],
-        is_active: true,
-        photos: ['https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800'],
-        sort_order: 2,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'res-105',
-        venue_id: 'venue-1',
-        equipment_type: 'vr_headset',
-        custom_name: 'Meta Quest 3 VR Cockpit',
-        total_quantity: 1,
-        available_quantity: 1,
-        specifications: 'Meta Quest 3 VR goggles with haptic controllers and preloaded games like Beat Saber, Superhot, Half-Life Alyx',
-        price_per_hour: 200,
-        per_head_or_per_station: 'per_station',
-        min_booking_hours: 1,
-        games_available: ['minecraft', 'warzone'],
-        accessories_included: ['headphones', 'controller'],
-        is_active: true,
-        photos: ['https://images.unsplash.com/photo-1593508512255-86ab42a8e620?w=800'],
-        sort_order: 3,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'res-301',
-        venue_id: 'venue-3',
-        equipment_type: 'pc',
-        custom_name: 'Elite PC Zone',
-        total_quantity: 15,
-        available_quantity: 15,
-        specifications: 'Intel Core i5, RTX 4070, 16GB RAM, 165Hz Monitor, Logitech G Gear',
-        price_per_hour: 100,
-        per_head_or_per_station: 'per_station',
-        min_booking_hours: 1,
-        games_available: ['valorant', 'csgo', 'fifa'],
-        accessories_included: ['headphones', 'gaming_chair', 'keyboard', 'mouse', 'mousepad'],
-        is_active: true,
-        photos: ['https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800'],
-        sort_order: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'res-302',
-        venue_id: 'venue-3',
-        equipment_type: 'xbox_series_x',
-        custom_name: 'Xbox Series X Console Deck',
-        total_quantity: 4,
-        available_quantity: 4,
-        specifications: 'Xbox Series X console, GamePass Ultimate active, 4K Display, Dual wireless controllers',
-        price_per_hour: 120,
-        per_head_or_per_station: 'per_station',
-        min_booking_hours: 1,
-        games_available: ['fifa', 'warzone'],
-        accessories_included: ['controller'],
-        is_active: true,
-        photos: ['https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800'],
-        sort_order: 2,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'res-pending-1',
-        venue_id: 'venue-pending',
-        equipment_type: 'pc',
-        custom_name: 'Asus PC Station #1',
-        total_quantity: 10,
-        available_quantity: 10,
-        specifications: 'RTX 3060 specifications workstation',
-        price_per_hour: 100,
-        per_head_or_per_station: 'per_station',
-        min_booking_hours: 1,
-        games_available: ['valorant', 'csgo', 'fifa'],
-        accessories_included: ['headphones', 'gaming_chair'],
-        is_active: true,
-        photos: ['https://images.unsplash.com/photo-1538481199705-c710c4e965fc?w=800'],
-        sort_order: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ];
+    return [];
   });
 
   const [turfDetails, setTurfDetails] = useState<TurfDetails[]>(() => {
     const saved = localStorage.getItem('garf_turf_details');
     if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'res-201',
-        venue_id: 'venue-2',
-        turf_name: 'Santiago Football Field (7v7)',
-        turf_type: 'football_7aside',
-        sports_allowed: ['football'],
-        surface_type: 'synthetic_turf',
-        dimensions: '100ft x 60ft',
-        capacity_per_team: 7,
-        total_capacity: 14,
-        has_flood_lights: true,
-        has_changing_room: true,
-        has_equipment_rental: true,
-        equipment_rental_details: 'Football rental ₹50 per session',
-        hourly_rate: 800,
-        weekend_rate: 1000,
-        peak_hour_rate: 1200,
-        peak_hours_start: '18:00',
-        peak_hours_end: '22:00',
-        advance_booking_discount: 10,
-        advance_booking_min_hours: 24,
-        per_head_rate: null,
-        min_booking_hours: 1,
-        requires_full_payment: false,
-        is_active: true,
-        photos: ['https://images.unsplash.com/photo-1459865264687-595d652de67e?w=800'],
-        sort_order: 1,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'res-202',
-        venue_id: 'venue-2',
-        turf_name: 'Lord\'s Box Cricket Net #1',
-        turf_type: 'cricket_box',
-        sports_allowed: ['cricket'],
-        surface_type: 'synthetic_turf',
-        dimensions: '60ft x 40ft',
-        capacity_per_team: 6,
-        total_capacity: 12,
-        has_flood_lights: true,
-        has_changing_room: true,
-        has_equipment_rental: true,
-        equipment_rental_details: 'Cricket Bat ₹50/hr, ball ₹30',
-        hourly_rate: 400,
-        weekend_rate: 500,
-        peak_hour_rate: 600,
-        peak_hours_start: '18:00',
-        peak_hours_end: '22:00',
-        advance_booking_discount: 5,
-        advance_booking_min_hours: 12,
-        per_head_rate: null,
-        min_booking_hours: 1,
-        requires_full_payment: false,
-        is_active: true,
-        photos: ['https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=800'],
-        sort_order: 2,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      },
-      {
-        id: 'res-303',
-        venue_id: 'venue-3',
-        turf_name: 'Multisport Turf Net #1',
-        turf_type: 'multi_sport',
-        sports_allowed: ['football', 'cricket'],
-        surface_type: 'synthetic_turf',
-        dimensions: '70ft x 50ft',
-        capacity_per_team: 5,
-        total_capacity: 10,
-        has_flood_lights: true,
-        has_changing_room: true,
-        has_equipment_rental: true,
-        equipment_rental_details: 'Standard items available at counter',
-        hourly_rate: 500,
-        weekend_rate: 600,
-        peak_hour_rate: 700,
-        peak_hours_start: '18:00',
-        peak_hours_end: '22:00',
-        advance_booking_discount: 10,
-        advance_booking_min_hours: 24,
-        per_head_rate: null,
-        min_booking_hours: 1,
-        requires_full_payment: false,
-        is_active: true,
-        photos: ['https://images.unsplash.com/photo-1511512578047-dfb367046420?w=800'],
-        sort_order: 3,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ];
+    return [];
   });
 
   const [equipmentSessions, setEquipmentSessions] = useState<EquipmentSession[]>(() => {
@@ -940,279 +407,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [squadProfiles, setSquadProfiles] = useState<GarfSquadProfile[]>(() => {
     const saved = localStorage.getItem('garf_squad_profiles');
     if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'user-customer-1',
-        username: 'karan_pro',
-        gamer_tag: 'ProSniper99',
-        bio: 'Competitive Valorant duelist and weekend astro-turf striker. Let\'s lobby up!',
-        favorite_games: ['valorant', 'fifa', 'gta5'],
-        favorite_sports: ['football', 'cricket'],
-        preferred_city: 'Mumbai',
-        is_online: true,
-        last_seen: new Date().toISOString(),
-        total_squads_joined: 2,
-        is_profile_public: true,
-        created_at: new Date(Date.now() - 30 * 86400000).toISOString()
-      },
-      {
-        id: 'user-admin-1',
-        username: 'gaurav_shinde',
-        gamer_tag: 'SysAdmin',
-        bio: 'GARF Moderator and RPG gamer. Hit me up for server issues or community bans.',
-        favorite_games: ['valorant', 'minecraft'],
-        favorite_sports: ['badminton'],
-        preferred_city: 'Mumbai',
-        is_online: true,
-        last_seen: new Date().toISOString(),
-        total_squads_joined: 1,
-        is_profile_public: true,
-        created_at: new Date(Date.now() - 30 * 86400000).toISOString()
-      }
-    ];
+    return [];
   });
 
   const [squads, setSquads] = useState<Squad[]>(() => {
     const saved = localStorage.getItem('garf_squads');
     if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'squad-1',
-        name: 'Mumbai Valorant Squad',
-        description: 'Ready to run standard Mumbai server competitive queues. Netizens welcome.',
-        type: 'gaming',
-        squad_code: 'SQMVAL',
-        cover_image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=150',
-        city: 'Mumbai',
-        game_or_sport: 'valorant',
-        max_members: 10,
-        is_private: false,
-        created_by: 'user-customer-1',
-        venue_id: 'venue-1',
-        is_active: true,
-        created_at: new Date(Date.now() - 10 * 86400000).toISOString(),
-        updated_at: new Date(Date.now() - 10 * 86400000).toISOString()
-      },
-      {
-        id: 'squad-2',
-        name: 'Turf King Box Football',
-        description: 'Casual 5v5 turf games on Anderi and Bandra pitches. Join if you can play weekly.',
-        type: 'sports',
-        squad_code: 'SQFTB',
-        cover_image: 'https://images.unsplash.com/photo-1459865264687-595d652de67e?w=150',
-        city: 'Mumbai',
-        game_or_sport: 'football',
-        max_members: 12,
-        is_private: false,
-        created_by: 'user-customer-1',
-        venue_id: null,
-        is_active: true,
-        created_at: new Date(Date.now() - 8 * 86400000).toISOString(),
-        updated_at: new Date(Date.now() - 8 * 86400000).toISOString()
-      }
-    ];
+    return [];
   });
 
   const [squadMembers, setSquadMembers] = useState<SquadMember[]>(() => {
     const saved = localStorage.getItem('garf_squad_members');
     if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'sm-1',
-        squad_id: 'squad-1',
-        user_id: 'user-customer-1',
-        role: 'admin',
-        status: 'active',
-        invited_by: null,
-        joined_at: new Date(Date.now() - 10 * 86400000).toISOString(),
-        invited_at: null,
-        created_at: new Date(Date.now() - 10 * 86400000).toISOString()
-      },
-      {
-        id: 'sm-2',
-        squad_id: 'squad-1',
-        user_id: 'user-admin-1',
-        role: 'member',
-        status: 'active',
-        invited_by: null,
-        joined_at: new Date(Date.now() - 9 * 86400000).toISOString(),
-        invited_at: null,
-        created_at: new Date(Date.now() - 10 * 86400000).toISOString()
-      },
-      {
-        id: 'sm-3',
-        squad_id: 'squad-2',
-        user_id: 'user-customer-1',
-        role: 'admin',
-        status: 'active',
-        invited_by: null,
-        joined_at: new Date(Date.now() - 8 * 86400000).toISOString(),
-        invited_at: null,
-        created_at: new Date(Date.now() - 8 * 86400000).toISOString()
-      }
-    ];
+    return [];
   });
 
   const [messages, setMessages] = useState<Message[]>(() => {
     const saved = localStorage.getItem('garf_messages');
     if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'msg-1',
-        type: 'global_city',
-        sender_id: 'user-customer-1',
-        squad_id: null,
-        receiver_id: null,
-        city: 'Mumbai',
-        content: 'Anyone up for a Valorant custom lobby at Bandra Esports Lounge tonight at 7 PM?',
-        message_type: 'text',
-        poll_id: null,
-        booking_id: null,
-        player_needed_id: null,
-        is_deleted: false,
-        is_edited: false,
-        edited_at: null,
-        reply_to_id: null,
-        created_at: new Date(Date.now() - 3600000 * 4).toISOString()
-      },
-      {
-        id: 'msg-2',
-        type: 'global_city',
-        sender_id: 'user-admin-1',
-        squad_id: null,
-        receiver_id: null,
-        city: 'Mumbai',
-        content: 'I\'m down! I\'ll play duelist.',
-        message_type: 'text',
-        poll_id: null,
-        booking_id: null,
-        player_needed_id: null,
-        is_deleted: false,
-        is_edited: false,
-        edited_at: null,
-        reply_to_id: 'msg-1',
-        created_at: new Date(Date.now() - 3600000 + 120000).toISOString()
-      },
-      {
-        id: 'msg-3',
-        type: 'global_city',
-        sender_id: 'user-customer-1',
-        squad_id: null,
-        receiver_id: null,
-        city: 'Mumbai',
-        content: '[Poll Shared]',
-        message_type: 'poll',
-        poll_id: 'poll-sample-1',
-        booking_id: null,
-        player_needed_id: null,
-        is_deleted: false,
-        is_edited: false,
-        edited_at: null,
-        reply_to_id: null,
-        created_at: new Date(Date.now() - 3600000 + 440000).toISOString()
-      },
-      {
-        id: 'msg-4',
-        type: 'squad',
-        sender_id: 'user-customer-1',
-        squad_id: 'squad-1',
-        receiver_id: null,
-        city: null,
-        content: 'Welcome to the Mumbai Valorant Squad room. We will plan our custom sessions here!',
-        message_type: 'text',
-        poll_id: null,
-        booking_id: null,
-        player_needed_id: null,
-        is_deleted: false,
-        is_edited: false,
-        edited_at: null,
-        reply_to_id: null,
-        created_at: new Date(Date.now() - 3600000 * 12).toISOString()
-      },
-      {
-        id: 'msg-5',
-        type: 'squad',
-        sender_id: 'user-admin-1',
-        squad_id: 'squad-1',
-        receiver_id: null,
-        city: null,
-        content: 'Awesome, thanks for the invite Karan! Let\'s schedule something for this Saturday.',
-        message_type: 'text',
-        poll_id: null,
-        booking_id: null,
-        player_needed_id: null,
-        is_deleted: false,
-        is_edited: false,
-        edited_at: null,
-        reply_to_id: null,
-        created_at: new Date(Date.now() - 3600000 * 11).toISOString()
-      }
-    ];
+    return [];
   });
 
   const [polls, setPolls] = useState<Poll[]>(() => {
     const saved = localStorage.getItem('garf_polls');
     if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'poll-sample-1',
-        created_by: 'user-customer-1',
-        squad_id: null,
-        city: 'Mumbai',
-        question: 'Which game are we running this Saturday?',
-        options: ['Valorant Competitive', 'CS2 Prime Lobby', 'PUBG Mobile Custom Room', 'Apex Legends Showcase'],
-        expires_at: new Date(Date.now() + 5 * 86400000).toISOString(),
-        allow_multiple_choice: false,
-        is_closed: false,
-        total_votes: 2,
-        created_at: new Date(Date.now() - 3600000 * 4).toISOString()
-      }
-    ];
+    return [];
   });
 
   const [pollVotes, setPollVotes] = useState<PollVote[]>(() => {
     const saved = localStorage.getItem('garf_poll_votes');
     if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'vote-1',
-        poll_id: 'poll-sample-1',
-        user_id: 'user-customer-1',
-        selected_options: [0],
-        created_at: new Date(Date.now() - 14000000).toISOString()
-      },
-      {
-        id: 'vote-2',
-        poll_id: 'poll-sample-1',
-        user_id: 'user-admin-1',
-        selected_options: [1],
-        created_at: new Date(Date.now() - 13000000).toISOString()
-      }
-    ];
+    return [];
   });
 
   const [playerNeededPosts, setPlayerNeededPosts] = useState<PlayerNeededPost[]>(() => {
     const saved = localStorage.getItem('garf_player_needed_posts');
     if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'post-1',
-        posted_by: 'user-customer-1',
-        city: 'Mumbai',
-        venue_id: 'venue-2',
-        title: 'Need 2 more for football! ⚽',
-        description: '5-a-side match at Hattrick Arena, this Saturday at 4 PM. We have 3 confirmed already, need 2 good players. Hit join!',
-        game_or_sport: 'football',
-        players_needed: 2,
-        players_joined: 0,
-        booking_date: new Date(Date.now() + 4 * 86400000).toISOString().split('T')[0],
-        booking_time: '16:00',
-        venue_booked: true,
-        status: 'open',
-        expires_at: new Date(Date.now() + 86400000).toISOString(),
-        created_at: new Date(Date.now() - 3600000 * 2).toISOString()
-      }
-    ];
+    return [];
   });
 
   const [playerNeededResponses, setPlayerNeededResponses] = useState<PlayerNeededResponse[]>(() => {
