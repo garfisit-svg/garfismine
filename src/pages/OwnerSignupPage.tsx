@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Lock, Mail, AlertCircle, User, Phone, CheckCircle, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const OwnerSignupPage: React.FC = () => {
-  const { signUp } = useApp();
+  const { signUp, detectedCity } = useApp();
   const navigate = useNavigate();
 
   const [fullName, setFullName] = useState('');
@@ -13,8 +13,14 @@ export const OwnerSignupPage: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [city, setCity] = useState('Mumbai');
+  const [city, setCity] = useState(detectedCity || 'Mumbai');
   const [isConfirmed, setIsConfirmed] = useState(false);
+
+  useEffect(() => {
+    if (detectedCity) {
+      setCity(detectedCity);
+    }
+  }, [detectedCity]);
 
   const CARTOON_AVATARS = [
     { name: 'Gamer Bot', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Felix' },

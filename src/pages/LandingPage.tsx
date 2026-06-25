@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { 
@@ -9,16 +9,28 @@ import toast from 'react-hot-toast';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-  const { currentUser, notifications } = useApp();
+  const { currentUser, notifications, detectedCity } = useApp();
   
   // Search state
-  const [searchCity, setSearchCity] = useState('Mumbai');
+  const [searchCity, setSearchCity] = useState(currentUser?.city || detectedCity || 'Mumbai');
   const [searchCategory, setSearchCategory] = useState('All');
+  const [hasManuallyChanged, setHasManuallyChanged] = useState(false);
 
   // Newsletter state
   const [email, setEmail] = useState('');
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  // Sync searchCity with user preference or detectedCity on load
+  useEffect(() => {
+    if (!hasManuallyChanged) {
+      if (currentUser?.city) {
+        setSearchCity(currentUser.city);
+      } else if (detectedCity) {
+        setSearchCity(detectedCity);
+      }
+    }
+  }, [currentUser, detectedCity, hasManuallyChanged]);
 
   const handleSearch = () => {
     let url = `/explore?city=${searchCity}`;
@@ -73,7 +85,10 @@ export const LandingPage: React.FC = () => {
               <select
                 className="w-full bg-transparent text-white font-semibold py-1 focus:outline-none cursor-pointer text-sm sm:text-base border-b border-border-dark py-2 md:border-none"
                 value={searchCity}
-                onChange={e => setSearchCity(e.target.value)}
+                onChange={e => {
+                  setSearchCity(e.target.value);
+                  setHasManuallyChanged(true);
+                }}
               >
                 <option value="Mumbai" className="bg-card-dark">Mumbai</option>
                 <option value="Delhi" className="bg-card-dark">Delhi</option>

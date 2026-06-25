@@ -154,6 +154,11 @@ interface AppContextType {
   rsvpToSquadEvent: (eventId: string, rsvp: 'going' | 'maybe' | 'not_going') => void;
   updateNearbyCheckinMeetStatus: (status: boolean) => void;
   checkoutNearbyCheckin: () => void;
+  
+  // Geolocation city detection
+  detectedCity: string;
+  isDetectingCity: boolean;
+  detectUserCity: () => Promise<string>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -210,6 +215,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [platformFee, setPlatformFee] = useState<number>(() => {
     return Number(localStorage.getItem('garf_platform_fee') || '5');
   });
+
+  // Geolocation city detection state
+  const [detectedCity, setDetectedCity] = useState<string>(() => {
+    return localStorage.getItem('garf_detected_city') || 'Mumbai';
+  });
+  const [isDetectingCity, setIsDetectingCity] = useState<boolean>(false);
+
+  const detectUserCity = async (): Promise<string> => {
+    if (!navigator.geolocation) {
+      return 'Mumbai';
+    }
+    setIsDetectingCity(true);
+    return new Promise<string>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          const SUPPORTED_CITIES = [
+            { name: 'Mumbai', lat: 19.0760, lng: 72.8777 },
+            { name: 'Delhi', lat: 28.6139, lng: 77.2090 },
+            { name: 'Bangalore', lat: 12.9716, lng: 77.5946 },
+            { name: 'Hyderabad', lat: 17.3850, lng: 78.4867 },
+            { name: 'Pune', lat: 18.5204, lng: 73.8567 },
+            { name: 'Chennai', lat: 13.0827, lng: 80.2707 },
+            { name: 'Kolkata', lat: 22.5726, lng: 88.3639 },
+            { name: 'Jaipur', lat: 26.9124, lng: 75.7873 }
+          ];
+          let nearestCity = 'Mumbai';
+          let minDistance = Infinity;
+          for (const city of SUPPORTED_CITIES) {
+            const d = Math.pow(city.lat - lat, 2) + Math.pow(city.lng - lng, 2);
+            if (d < minDistance) {
+              minDistance = d;
+              nearestCity = city.name;
+            }
+          }
+          setDetectedCity(nearestCity);
+          localStorage.setItem('garf_detected_city', nearestCity);
+          setIsDetectingCity(false);
+          resolve(nearestCity);
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          setIsDetectingCity(false);
+          resolve('Mumbai');
+        },
+        { timeout: 8000 }
+      );
+    });
+  };
+
+  useEffect(() => {
+    if (!localStorage.getItem('garf_detected_city')) {
+      detectUserCity();
+    }
+  }, []);
 
   // Load state from localStorage or seed
   const [profiles, setProfiles] = useState<Profile[]>(() => {
@@ -3022,7 +3083,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       squadProfiles, squads, squadMembers, messages, polls, pollVotes, playerNeededPosts, playerNeededResponses, dmThreads, nearbyCheckins, squadInvites, squadEvents,
 
       // Garf Squad Actions
-      createSquadProfile, updateSquadProfile, createSquad, joinSquadWithCode, joinPublicSquad, leaveSquad, acceptSquadJoinRequest, declineSquadJoinRequest, editSquad, deleteSquad, sendMessage, deleteMessage, replyToMessage, createPoll, voteInPoll, createPlayerNeededPost, requestToJoinPlayerNeeded, respondToPlayerNeededJoin, managePlayerNeededPost, sendSquadInvite, respondToSquadInvite, createSquadEvent, rsvpToSquadEvent, updateNearbyCheckinMeetStatus, checkoutNearbyCheckin
+      createSquadProfile, updateSquadProfile, createSquad, joinSquadWithCode, joinPublicSquad, leaveSquad, acceptSquadJoinRequest, declineSquadJoinRequest, editSquad, deleteSquad, sendMessage, deleteMessage, replyToMessage, createPoll, voteInPoll, createPlayerNeededPost, requestToJoinPlayerNeeded, respondToPlayerNeededJoin, managePlayerNeededPost, sendSquadInvite, respondToSquadInvite, createSquadEvent, rsvpToSquadEvent, updateNearbyCheckinMeetStatus, checkoutNearbyCheckin,
+
+      // Geolocation city detection
+      detectedCity, isDetectingCity, detectUserCity
     }}>
       {children}
     </AppContext.Provider>

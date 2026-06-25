@@ -1,21 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { User, Phone, Lock, Mail, MapPin, Cake, AlertCircle, Gamepad2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const SignupPage: React.FC = () => {
-  const { signUp } = useApp();
+  const { signUp, detectedCity } = useApp();
   const navigate = useNavigate();
   
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [dob, setDob] = useState('');
-  const [city, setCity] = useState('Mumbai');
+  const [city, setCity] = useState(detectedCity || 'Mumbai');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [referralCode, setReferralCode] = useState('');
+
+  useEffect(() => {
+    if (detectedCity) {
+      setCity(detectedCity);
+    }
+  }, [detectedCity]);
   
   const CARTOON_AVATARS = [
     { name: 'Gamer Bot', url: 'https://api.dicebear.com/7.x/bottts/svg?seed=Felix' },

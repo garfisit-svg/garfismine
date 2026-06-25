@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 
 export const ExplorePage: React.FC = () => {
   const navigate = useNavigate();
-  const { venues, currentUser } = useApp();
+  const { venues, currentUser, detectedCity } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Filters State
@@ -20,6 +20,7 @@ export const ExplorePage: React.FC = () => {
   const [sortBy, setSortBy] = useState<string>('nearby');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [hasManuallyChanged, setHasManuallyChanged] = useState(false);
 
   // Mobile Drawer Toggle
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
@@ -43,8 +44,10 @@ export const ExplorePage: React.FC = () => {
     }
     if (cityParam) {
       setSelectedCity(cityParam);
+    } else if (!hasManuallyChanged) {
+      setSelectedCity(currentUser?.city || detectedCity || 'All');
     }
-  }, [searchParams]);
+  }, [searchParams, currentUser, detectedCity, hasManuallyChanged]);
 
   // Options Definitions
   const citiesList = ['Mumbai', 'Delhi', 'Bangalore', 'Hyderabad', 'Pune', 'Chennai', 'Kolkata', 'Jaipur'];
@@ -232,7 +235,10 @@ export const ExplorePage: React.FC = () => {
             <select
               className="w-full bg-[#161622] border border-[#2a2a3e] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-purple"
               value={selectedCity}
-              onChange={e => setSelectedCity(e.target.value)}
+              onChange={e => {
+                setSelectedCity(e.target.value);
+                setHasManuallyChanged(true);
+              }}
             >
               <option value="All">All Cities</option>
               {citiesList.map(c => <option key={c} value={c}>{c}</option>)}
@@ -640,7 +646,10 @@ export const ExplorePage: React.FC = () => {
               <select
                 className="w-full bg-[#161622] border border-[#2a2a3e] rounded-lg px-4 py-3 text-sm text-white focus:outline-none"
                 value={selectedCity}
-                onChange={e => setSelectedCity(e.target.value)}
+                onChange={e => {
+                  setSelectedCity(e.target.value);
+                  setHasManuallyChanged(true);
+                }}
               >
                 <option value="All">All Cities</option>
                 {citiesList.map(c => <option key={c} value={c}>{c}</option>)}

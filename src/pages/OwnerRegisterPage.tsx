@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Building2, MapPin, Gamepad, Info, ArrowRight, Sparkles, User, Mail, Phone, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const OwnerRegisterPage: React.FC = () => {
-  const { currentUser, signUp, logIn, registerVenue } = useApp();
+  const { currentUser, signUp, logIn, registerVenue, detectedCity } = useApp();
   const navigate = useNavigate();
 
   // Auth States for logged out users
@@ -24,8 +24,14 @@ export const OwnerRegisterPage: React.FC = () => {
   const [venuePhone, setVenuePhone] = useState('');
   const [venueEmail, setVenueEmail] = useState('');
   const [address, setAddress] = useState('');
-  const [city, setCity] = useState('Mumbai');
+  const [city, setCity] = useState(detectedCity || 'Mumbai');
   const [pincode, setPincode] = useState('');
+
+  useEffect(() => {
+    if (detectedCity) {
+      setCity(detectedCity);
+    }
+  }, [detectedCity]);
   const [basePrice, setBasePrice] = useState(150);
   
   // Resources initial list
