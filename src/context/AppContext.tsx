@@ -790,7 +790,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // AUTH ACTIONS
   const signUp = async (data: { full_name: string, email: string, phone: string, d_o_b?: string, city?: string, referral_code?: string, password?: string, role?: 'customer' | 'owner' | 'admin' | 'owner_pending', avatar_url?: string }) => {
     // Unique email check
-    const exist = profiles.some(p => p?.full_name?.toLowerCase() === data.full_name?.toLowerCase()); // basic duplicate catch
+    const exist = profiles.some(p => p?.email?.toLowerCase() === data.email?.toLowerCase()); // basic duplicate catch
     
     // Auto-generate ref code
     const rFour = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -886,7 +886,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       // Find inside profiles list by matching custom email if present, or search by name.
       // Since it is simulated, we support direct login for any profile!
-      profile = profiles.find(p => p.phone === email || p.full_name.toLowerCase().replace(/\s+/g, '') === cleanEmail.split('@')[0].toLowerCase());
+      profile = profiles.find(p => p.email?.trim().toLowerCase() === cleanEmail || p.phone === email || p.full_name.toLowerCase().replace(/\s+/g, '') === cleanEmail.split('@')[0].toLowerCase());
     }
 
     if (!profile) {
@@ -989,8 +989,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       owner_id: currentUser.id,
       rating: 0,
       total_reviews: 0,
-      is_verified: false,
-      is_active: false,
+      is_verified: true,
+      is_active: true,
       is_featured: false,
       is_suspended: false,
       commission_percent: 10,
@@ -2132,8 +2132,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       owner_id: currentUser.id,
       rating: 0,
       total_reviews: 0,
-      is_verified: false,
-      is_active: false,
+      is_verified: true,
+      is_active: true,
       is_featured: false,
       is_suspended: false,
       commission_percent: 10,

@@ -5,7 +5,7 @@ import { Building2, MapPin, Gamepad, Info, ArrowRight, Sparkles, User, Mail, Pho
 import toast from 'react-hot-toast';
 
 export const OwnerRegisterPage: React.FC = () => {
-  const { currentUser, signUp, logIn, registerVenue, detectedCity } = useApp();
+  const { currentUser, signUp, logIn, registerVenue, detectedCity, updateProfile } = useApp();
   const navigate = useNavigate();
 
   // Auth States for logged out users
@@ -26,6 +26,7 @@ export const OwnerRegisterPage: React.FC = () => {
   const [address, setAddress] = useState('');
   const [city, setCity] = useState(detectedCity || 'Mumbai');
   const [pincode, setPincode] = useState('');
+  const [upiId, setUpiId] = useState(currentUser?.upi_id || '');
 
   useEffect(() => {
     if (detectedCity) {
@@ -125,6 +126,15 @@ export const OwnerRegisterPage: React.FC = () => {
     try {
       setLoading(true);
       
+      if (upiId.trim()) {
+        if (!upiId.includes('@')) {
+          toast.error('Please enter a valid UPI ID (e.g. name@okaxis)');
+          setLoading(false);
+          return;
+        }
+        updateProfile({ upi_id: upiId.trim() });
+      }
+
       const venueData = {
         name: venueName,
         type: venueType,
@@ -155,7 +165,7 @@ export const OwnerRegisterPage: React.FC = () => {
 
       await registerVenue(venueData, resourcesData);
       
-      toast.success('🎉 Register successful! Arena is waiting verification.', { duration: 6000 });
+      toast.success('🎉 Register successful! Arena is live and verified.', { duration: 6000 });
       navigate('/owner-dashboard');
     } catch (err: any) {
       toast.error(err.message || 'Failed to submit registration form');
@@ -437,6 +447,25 @@ export const OwnerRegisterPage: React.FC = () => {
                         required
                       />
                     </div>
+                  </div>
+
+                  {/* UPI DIRECT ROUTING OPTION */}
+                  <div className="bg-[#12121A] border border-cyan-500/25 p-5 rounded-xl space-y-3">
+                    <div className="flex items-center gap-2 text-cyan-400 font-sans">
+                      <span className="font-mono text-base font-black">₹</span>
+                      <label className="block text-xs font-bold uppercase tracking-wider">Business UPI ID (for Direct Split Settlement)</label>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g. businessname@okaxis"
+                      className="w-full bg-[#161622] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none focus:border-cyan-500 font-mono text-white placeholder:text-text-secondary/40"
+                      value={upiId}
+                      onChange={e => setUpiId(e.target.value)}
+                      required
+                    />
+                    <p className="text-[11px] text-[#8e8ea8] leading-relaxed font-sans">
+                      💡 <strong>Instant direct routing:</strong> Booking revenues are sent directly to this address, minus the ₹5 platform fee which is routed directly to the administrator (<strong className="text-cyan-400">9076055212@fam</strong>).
+                    </p>
                   </div>
 
                   <div className="pt-4 flex justify-end">
