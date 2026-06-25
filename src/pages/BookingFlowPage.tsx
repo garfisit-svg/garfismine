@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Slot, VenueResource, Booking, Offer } from '../types';
 import { 
   Tv, Cpu, Landmark, Sparkles, Check, ChevronRight, Play, AlertTriangle, 
-  HelpCircle, CreditCard, ShieldCheck, Ticket, QrCode, ArrowLeft, Loader2, Clock, ShieldAlert
+  HelpCircle, CreditCard, ShieldCheck, Ticket, QrCode, ArrowLeft, Loader2, Clock, ShieldAlert, Copy
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -14,15 +14,24 @@ export const BookingFlowPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   
   const { 
-    venues, resources, slots, currentUser, offers, createBookingHold, confirmOnlineBooking, platformFee, bookings
+    venues, resources, slots, currentUser, offers, createBookingHold, confirmOnlineBooking, platformFee, bookings, profiles
   } = useApp();
 
   const venue = venues.find(v => v.id === venueId);
   const venueResources = resources.filter(r => r.venue_id === venueId && r.is_active);
 
+  const ownerProfile = React.useMemo(() => {
+    if (!venue) return null;
+    return profiles.find(p => p.id === venue.owner_id);
+  }, [venue, profiles]);
+
   // Flow State
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);
+
+  // Direct split UPI payment verification state
+  const [paidOwner, setPaidOwner] = useState(false);
+  const [paidPlatform, setPaidPlatform] = useState(false);
 
   // Step 1 Selections
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -554,6 +563,163 @@ export const BookingFlowPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Direct Split UPI Payment (Direct to Owner and Direct to Admin) */}
+            {paymentMethod === 'online' && (
+              <div className="bg-[#12121A] border border-brand-purple/20 rounded-2xl p-6 space-y-6 animate-fade-in relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-2 h-full bg-brand-purple" />
+                
+                <div className="flex gap-3 items-start">
+                  <div className="p-2.5 bg-brand-purple/10 border border-brand-purple/20 text-brand-purple rounded-xl">
+                    <QrCode className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg text-white font-display">Direct Split UPI Payment</h3>
+                    <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
+                      To secure your slot, please complete the two UPI transfers below. The arena booking fee goes directly to the owner's bank account, and the ₹5 platform fee goes directly to the administrator.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                  
+                  {/* TRANSFER 1: VENUE OWNER SHARE */}
+                  <div className="bg-[#161622] border border-[#2a2a3e] rounded-xl p-5 flex flex-col justify-between space-y-4">
+                    <div className="space-y-2 font-sans">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold font-mono tracking-wider uppercase text-brand-cyan">1. VENUE SHARE</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-brand-cyan/10 border border-brand-cyan/20 text-brand-cyan font-bold font-mono">
+                          Direct to Owner
+                        </span>
+                      </div>
+                      
+                      <div className="pt-1">
+                        <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Amount to pay</p>
+                        <p className="text-2xl font-black text-white font-mono">₹{Math.max(0, finalCheckoutAmount - 5)}</p>
+                      </div>
+
+                      <div className="pt-1">
+                        <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Recipient UPI ID</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <code className="text-xs text-white font-mono bg-black/40 px-2 py-1 rounded border border-[#2a2a3e] truncate max-w-[170px]">
+                            {ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '')}@okaxis`}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '')}@okaxis`);
+                              toast.success('Owner UPI ID copied! 📋');
+                            }}
+                            className="p-1.5 bg-[#202030] hover:bg-brand-purple/20 hover:text-white text-text-secondary rounded-lg transition"
+                            title="Copy UPI ID"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
+                        {!ownerProfile?.upi_id && (
+                          <p className="text-[9px] text-yellow-500 mt-1">
+                            ⚠️ Simulated default (owner has not set UPI ID yet)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* QR Code and Checkbox */}
+                    <div className="pt-2 border-t border-border-dark/60 space-y-3 font-sans">
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 bg-white rounded-lg border border-border-dark">
+                          <QrCode className="h-14 w-14 text-black" />
+                        </div>
+                        <p className="text-[10px] text-text-secondary leading-relaxed">
+                          Scan to pay the owner directly. Use <strong>Garf Booking</strong> as transaction reference note.
+                        </p>
+                      </div>
+
+                      <label className="flex items-center gap-2 p-2.5 rounded-lg bg-[#11111A] border border-[#232338] hover:border-brand-cyan/30 cursor-pointer transition">
+                        <input
+                          type="checkbox"
+                          checked={paidOwner}
+                          onChange={(e) => setPaidOwner(e.target.checked)}
+                          className="rounded text-brand-cyan bg-[#1A1A2E] border-[#2a2a3e] focus:ring-brand-cyan focus:ring-offset-0 h-4 w-4 cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-[#b4b4d8] select-none">
+                          I have paid ₹{Math.max(0, finalCheckoutAmount - 5)} to Owner
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* TRANSFER 2: PLATFORM FEE */}
+                  <div className="bg-[#161622] border border-[#2a2a3e] rounded-xl p-5 flex flex-col justify-between space-y-4">
+                    <div className="space-y-2 font-sans">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold font-mono tracking-wider uppercase text-brand-purple">2. PLATFORM FEE</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-brand-purple/10 border border-brand-purple/20 text-brand-purple font-bold font-mono">
+                          To Platform
+                        </span>
+                      </div>
+                      
+                      <div className="pt-1">
+                        <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Amount to pay</p>
+                        <p className="text-2xl font-black text-white font-mono">₹{Math.min(5, finalCheckoutAmount)}</p>
+                      </div>
+
+                      <div className="pt-1">
+                        <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Recipient UPI ID</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <code className="text-xs text-white font-mono bg-black/40 px-2 py-1 rounded border border-[#2a2a3e] truncate">
+                            9076055212@fam
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText('9076055212@fam');
+                              toast.success('Platform UPI ID copied! 📋');
+                            }}
+                            className="p-1.5 bg-[#202030] hover:bg-brand-purple/20 hover:text-white text-text-secondary rounded-lg transition"
+                            title="Copy UPI ID"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* QR Code and Checkbox */}
+                    <div className="pt-2 border-t border-border-dark/60 space-y-3 font-sans">
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 bg-white rounded-lg border border-border-dark">
+                          <QrCode className="h-14 w-14 text-black" />
+                        </div>
+                        <p className="text-[10px] text-text-secondary leading-relaxed">
+                          Scan to pay the platform administrator. Use <strong>Platform Fee</strong> as transaction note.
+                        </p>
+                      </div>
+
+                      <label className="flex items-center gap-2 p-2.5 rounded-lg bg-[#11111A] border border-[#232338] hover:border-brand-purple/30 cursor-pointer transition">
+                        <input
+                          type="checkbox"
+                          checked={paidPlatform}
+                          onChange={(e) => setPaidPlatform(e.target.checked)}
+                          className="rounded text-brand-purple bg-[#1A1A2E] border-[#2a2a3e] focus:ring-brand-purple focus:ring-offset-0 h-4 w-4 cursor-pointer"
+                        />
+                        <span className="text-xs font-bold text-[#b4b4d8] select-none">
+                          I have paid ₹{Math.min(5, finalCheckoutAmount)} to Platform
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                </div>
+
+                {(!paidOwner || !paidPlatform) && (
+                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex items-center gap-2.5 text-yellow-500 text-xs leading-normal font-sans">
+                    <AlertTriangle className="h-4.5 w-4.5 shrink-0" />
+                    <span>Please complete both direct UPI transfers and check the confirmation boxes to activate the final booking trigger.</span>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
 
           {/* STEP 2 FINAL BILL BREAKDOWN PANEL (1/3 width, sticky) */}
@@ -584,40 +750,45 @@ export const BookingFlowPage: React.FC = () => {
                   <span className="text-2xl font-black font-mono text-white leading-none">₹{finalCheckoutAmount}</span>
                 </div>
               </div>
-          </div>
+            </div>
 
-          {/* Action Checkout Trigger */}
-          {paymentMethod === 'online' ? (
-            <button
-              onClick={handleFinalCheckout}
-              disabled={loading}
-              className="w-full py-4 text-center btn-gradient font-black text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-lg"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span>Authorizing Online Gateway...</span>
-                </>
-              ) : (
-                <>
-                  <span>Confirm and Pay ₹{finalCheckoutAmount}</span>
-                </>
-              )}
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                setSoftHoldCheckboxAccepted(false);
-                setPayAtVenueConfirmModal(true);
-              }}
-              disabled={loading}
-              className="w-full py-4 text-center bg-yellow-500 hover:bg-yellow-600 font-black text-sm text-black rounded-xl transition flex items-center justify-center gap-1.5 shadow-md font-sans"
-            >
-              <span>Confirm - Pay at Venue</span>
-            </button>
-          )}
+            {/* Action Checkout Trigger */}
+            {paymentMethod === 'online' ? (
+              <button
+                onClick={handleFinalCheckout}
+                disabled={loading || !paidOwner || !paidPlatform}
+                className={`w-full py-4 text-center font-black text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-lg ${
+                  (!paidOwner || !paidPlatform) 
+                    ? 'bg-[#1e1e2d] text-text-secondary/40 border border-border-dark cursor-not-allowed hover:bg-[#1e1e2d]' 
+                    : 'btn-gradient hover:opacity-95 text-white cursor-pointer'
+                }`}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span>Authorizing Split Settlements...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Verify Transfers & Book (₹{finalCheckoutAmount})</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setSoftHoldCheckboxAccepted(false);
+                  setPayAtVenueConfirmModal(true);
+                }}
+                disabled={loading}
+                className="w-full py-4 text-center bg-yellow-500 hover:bg-yellow-600 font-black text-sm text-black rounded-xl transition flex items-center justify-center gap-1.5 shadow-md font-sans cursor-pointer"
+              >
+                <span>Confirm - Pay at Venue</span>
+              </button>
+            )}
 
-            <p className="text-[10px] text-text-secondary/60 text-center uppercase tracking-wider font-mono">Demo mode - zero actual bank withdrawals taken</p>
+            <p className="text-[10px] text-text-secondary/60 text-center uppercase tracking-wider font-mono">Direct routing active: Owner UPI ID + Admin Platform Fee split</p>
           </aside>
 
         </div>

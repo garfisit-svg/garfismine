@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { User, Mail, Phone, Lock, Save, Shield, Bell, Camera, Upload, X } from 'lucide-react';
+import { User, Mail, Phone, Lock, Save, Shield, Bell, Camera, Upload, X, Wallet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Navigate, Link } from 'react-router-dom';
 
@@ -9,6 +9,7 @@ export const OwnerSettingsPage: React.FC = () => {
 
   const [name, setName] = useState(currentUser?.full_name || '');
   const [phone, setPhone] = useState(currentUser?.phone || '');
+  const [upiId, setUpiId] = useState(currentUser?.upi_id || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -262,6 +263,57 @@ export const OwnerSettingsPage: React.FC = () => {
                   >
                     <Save className="h-4 w-4" />
                     <span>Save specifications</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Direct UPI Settlement Settings */}
+            <div className="bg-[#12121A] border border-border-dark rounded-2xl p-6 sm:p-8 space-y-6">
+              <div className="flex items-center gap-2.5 border-b border-border-dark pb-4">
+                <Wallet className="h-5 w-5 text-[#06B6D4]" />
+                <div>
+                  <h2 className="text-lg font-bold font-display">Direct UPI Settlement Settings</h2>
+                  <p className="text-xs text-text-secondary mt-0.5">Configure your business UPI VPA address to receive direct customer payments instantly.</p>
+                </div>
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (!upiId.trim() || !upiId.includes('@')) {
+                  toast.error('Please enter a valid UPI ID (e.g. name@okaxis)');
+                  return;
+                }
+                updateProfile({ upi_id: upiId.trim() });
+                toast.success('Your business UPI address has been successfully saved! 🚀');
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Your Business UPI ID</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-cyan-400 font-mono text-sm font-black">
+                      ₹
+                    </span>
+                    <input
+                      type="text"
+                      className="w-full bg-[#1A1A2E] border border-border-dark rounded-lg pl-8 pr-4 py-2.5 text-sm outline-none focus:border-cyan-500 text-white font-mono placeholder:text-text-secondary/40"
+                      placeholder="e.g. ownername@okaxis"
+                      value={upiId}
+                      onChange={e => setUpiId(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <p className="text-[11px] text-[#8e8ea8] mt-2 leading-relaxed">
+                    💡 <strong>Direct routing active:</strong> When customers book online, the venue's portion (total booking amount minus ₹5 platform fee) will go directly to this UPI address, while the remaining ₹5 platform fee will go directly to the platform admin (<strong className="text-cyan-400">9076055212@fam</strong>).
+                  </p>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer shadow-lg shadow-cyan-500/10 transition-all flex items-center gap-1.5"
+                  >
+                    <Save className="h-4 w-4" />
+                    <span>Save UPI Address</span>
                   </button>
                 </div>
               </form>

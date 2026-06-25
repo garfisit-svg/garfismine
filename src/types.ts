@@ -20,6 +20,7 @@ export interface Profile {
   updated_at: string;
   no_show_count?: number;
   pay_at_venue_blocked?: boolean;
+  upi_id?: string;
 }
 
 export interface Venue {
