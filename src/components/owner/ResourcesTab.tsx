@@ -319,7 +319,6 @@ export const ResourcesTab: React.FC<ResourcesTabProps> = ({ venue }) => {
                     <option value="ps5">🎮 PlayStation 5</option>
                     <option value="xbox">💚 Xbox Series Console</option>
                     <option value="vr">🥽 Premium VR Station</option>
-                    <option value="turf">🏟️ Astro turf ground pitch</option>
                   </select>
                 </div>
                 <div>
@@ -335,11 +334,11 @@ export const ResourcesTab: React.FC<ResourcesTabProps> = ({ venue }) => {
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-wider text-text-secondary font-mono mb-1">Hardware / Court measurements bio specifications</label>
+                <label className="block text-xs uppercase tracking-wider text-text-secondary font-mono mb-1">Hardware & specs specifications</label>
                 <textarea
                   rows={3}
                   required
-                  placeholder="e.g. Intel i9, RTX 4080 GPU, Dual monitors, 240Hz, or turf dimensions details."
+                  placeholder="e.g. Intel i9, RTX 4080 GPU, Dual monitors, 240Hz, or specialized keyboard details."
                   className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-2.5 text-xs outline-none text-white focus:border-brand-purple font-mono"
                   value={resSpecs}
                   onChange={e => setResSpecs(e.target.value)}

@@ -94,7 +94,7 @@ export const StaffTab: React.FC<StaffTabProps> = ({ venue }) => {
           <div className="bg-[#12121A] border border-border-dark p-3.5 rounded-xl space-y-1.5 text-[9px] text-text-secondary leading-relaxed uppercase">
             <span className="text-yellow-400 font-bold block mb-1">Staff Access rules applied:</span>
             <span className="text-emerald-400 block font-bold font-mono">✅ View today bookings checklist</span>
-            <span className="text-emerald-400 block font-bold font-mono">✅ Check-in soft hold timers</span>
+            <span className="text-emerald-400 block font-bold font-mono">✅ Check-in active players</span>
             <span className="text-emerald-400 block font-bold font-mono">✅ Settle Walk-in registrations</span>
             <span className="text-red-400 block font-mono font-bold mt-1">❌ No Revenue financial details tab</span>
             <span className="text-red-400 block font-mono font-bold">❌ No Specs listings delete tab</span>

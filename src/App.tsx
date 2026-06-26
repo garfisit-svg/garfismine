@@ -399,7 +399,7 @@ export default function App() {
               <span>GARF</span>
             </Link>
             <p className="text-xs text-text-secondary leading-relaxed max-w-xs">
-              Gaming Arena & Recreation Finder. Seamless, lightning-fast on-demand reservation portal for PC lounges, console booths, and athletic pitches.
+              Gaming Arena & Recreation Finder. Seamless, lightning-fast on-demand reservation portal for PC lounges, console booths, and VR zones.
             </p>
           </div>
 
@@ -407,8 +407,8 @@ export default function App() {
             <h5 className="font-bold text-white uppercase tracking-widest font-mono text-xs">Explore Links</h5>
             <ul className="space-y-2">
               <li><Link to="/explore" className="hover:text-white transition">Explore Venues</Link></li>
-              <li><Link to="/explore?type=gaming_cafe" className="hover:text-white transition">Gaming Cafes</Link></li>
-              <li><Link to="/explore?type=turf" className="hover:text-white transition">Sports Pitch Turfs</Link></li>
+              <li><Link to="/explore?type=pc" className="hover:text-white transition">Esports PCs</Link></li>
+              <li><Link to="/explore?type=ps5" className="hover:text-white transition">Console Lounges</Link></li>
             </ul>
           </div>
 

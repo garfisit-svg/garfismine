@@ -32,6 +32,7 @@ export const BookingFlowPage: React.FC = () => {
   // Direct split UPI payment verification state
   const [paidOwner, setPaidOwner] = useState(false);
   const [paidPlatform, setPaidPlatform] = useState(false);
+  const [upiTxnId, setUpiTxnId] = useState('');
 
   // Step 1 Selections
   const [selectedDate, setSelectedDate] = useState<string>(() => {
@@ -241,7 +242,7 @@ export const BookingFlowPage: React.FC = () => {
         await new Promise(res => setTimeout(res, 1500));
         
         // Confirm booking as paid online
-        const confirmedResult = await confirmOnlineBooking(bookingHold.id);
+        const confirmedResult = await confirmOnlineBooking(bookingHold.id, upiTxnId);
         setConfirmedBooking(confirmedResult);
         toast.success('Online Payment complete! Slot confirmed 🎉');
       } else {
@@ -603,28 +604,49 @@ export const BookingFlowPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <label className="flex items-center gap-2.5 p-3 rounded-lg bg-[#11111A] border border-brand-cyan/20 hover:border-brand-cyan/40 cursor-pointer transition">
-                      <input
-                        type="checkbox"
-                        checked={paidOwner && paidPlatform}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setPaidOwner(checked);
-                          setPaidPlatform(checked);
-                        }}
-                        className="rounded text-brand-cyan bg-[#1A1A2E] border-[#2a2a3e] focus:ring-brand-cyan focus:ring-offset-0 h-4.5 w-4.5 cursor-pointer"
-                      />
-                      <span className="text-xs font-bold text-white select-none leading-tight">
-                        I have paid ₹{finalCheckoutAmount} directly to Owner
-                      </span>
-                    </label>
+                    <div className="space-y-3 p-4 bg-[#11111A] rounded-xl border border-brand-cyan/20">
+                      <div className="space-y-1">
+                        <label className="block text-[11px] text-[#8e8ea8] uppercase tracking-wider font-bold">
+                          Enter 12-digit UPI Transaction Ref ID <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={upiTxnId}
+                          onChange={(e) => setUpiTxnId(e.target.value.replace(/[^0-9A-Za-z]/g, ''))}
+                          placeholder="e.g. 628491038592"
+                          maxLength={16}
+                          className="w-full px-3.5 py-2 bg-[#1A1A2E] border border-[#2a2a3e] rounded-lg text-xs font-mono text-white focus:border-brand-cyan focus:outline-none"
+                        />
+                        <p className="text-[10px] text-[#8e8ea8]">
+                          💡 <strong>Owner Verification:</strong> Owners manually verify this Transaction ID against their UPI ledger. Providing false references will result in instant cancellation of your slot and a potential ban!
+                        </p>
+                      </div>
+
+                      <label className="flex items-center gap-2.5 p-2 rounded-lg bg-[#161625] hover:bg-[#1C1C2D] cursor-pointer transition">
+                        <input
+                          type="checkbox"
+                          checked={paidOwner && paidPlatform}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setPaidOwner(checked);
+                            setPaidPlatform(checked);
+                          }}
+                          disabled={upiTxnId.trim().length < 8}
+                          className="rounded text-brand-cyan bg-[#1A1A2E] border-[#2a2a3e] focus:ring-brand-cyan focus:ring-offset-0 h-4.5 w-4.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                        <span className="text-xs font-bold text-white select-none leading-tight">
+                          I have paid ₹{finalCheckoutAmount} and entered my correct reference
+                        </span>
+                      </label>
+                    </div>
                   </div>
                 </div>
 
-                {(!paidOwner || !paidPlatform) && (
+                {(!paidOwner || !paidPlatform || upiTxnId.trim().length < 8) && (
                   <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex items-center gap-2.5 text-yellow-500 text-xs leading-normal font-sans justify-center">
                     <AlertTriangle className="h-4.5 w-4.5 shrink-0" />
-                    <span>Please complete the UPI transfer and check the confirmation box to activate the booking.</span>
+                    <span>Please enter your UPI transaction reference ID and check the confirmation box.</span>
                   </div>
                 )}
               </div>
@@ -662,13 +684,20 @@ export const BookingFlowPage: React.FC = () => {
               </div>
             </div>
 
+            {paymentMethod === 'online' && (
+              <div className="text-[10px] text-red-400 font-mono text-center flex items-center justify-center gap-1.5 p-2 bg-red-500/10 border border-red-500/20 rounded-xl leading-tight">
+                <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                <span>No refund on cancellation</span>
+              </div>
+            )}
+
             {/* Action Checkout Trigger */}
             {paymentMethod === 'online' ? (
               <button
                 onClick={handleFinalCheckout}
-                disabled={loading || !paidOwner || !paidPlatform}
+                disabled={loading || !paidOwner || !paidPlatform || upiTxnId.trim().length < 8}
                 className={`w-full py-4 text-center font-black text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-lg ${
-                  (!paidOwner || !paidPlatform) 
+                  (!paidOwner || !paidPlatform || upiTxnId.trim().length < 8) 
                     ? 'bg-[#1e1e2d] text-text-secondary/40 border border-border-dark cursor-not-allowed hover:bg-[#1e1e2d]' 
                     : 'btn-gradient hover:opacity-95 text-white cursor-pointer'
                 }`}

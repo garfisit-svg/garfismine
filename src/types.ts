@@ -115,6 +115,7 @@ export interface Booking {
   walk_in_actual_start_time?: string | null; // e.g. "11:15"
   walk_in_actual_end_time?: string | null; // e.g. "12:15"
   quantity?: number;
+  upi_transaction_id?: string;
   created_at: string;
   updated_at: string;
 }

@@ -113,16 +113,20 @@ export const MyBookingsPage: React.FC = () => {
   // Refund calculation previews (Rule 4)
   const previewCancellationRefund = (booking: Booking) => {
     if (booking.payment_method !== 'online') {
-      return { refund: 0, pct: 100, msg: 'Pay-at-Venue hold cancelled safely!' };
+      return { refund: 0, pct: 0, msg: 'Pay-at-Venue hold will be cancelled safely. Zero charge is applied!' };
     }
-    return { refund: booking.final_amount, pct: 100, msg: `Full refund (100%): You will receive ₹${booking.final_amount} back instantly!` };
+    return { refund: 0, pct: 0, msg: '⚠️ NO REFUND APPLICABLE: Paid online bookings do not qualify for any refund on cancellation under our policy.' };
   };
 
   const handleCancelConfirm = async () => {
     if (!selectedCancelBooking) return;
     try {
       await cancelBooking(selectedCancelBooking.id, cancelReason || 'Cancelled by player');
-      toast.success('Reservation cancelled safely and slots recycled! ❌');
+      if (selectedCancelBooking.payment_method === 'online') {
+        toast.success('Slot cancelled and recycled! (No refund was issued as per policy) ❌');
+      } else {
+        toast.success('Reservation cancelled safely and slots recycled! ❌');
+      }
       setSelectedCancelBooking(null);
       setCancelReason('');
     } catch (err: any) {

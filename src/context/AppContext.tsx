@@ -81,7 +81,7 @@ interface AppContextType {
   
   // Customer Booking actions
   createBookingHold: (data: { venueId: string, resourceId: string, date: string, slots: string[], coinsToUse: number, offerId: string | null, paymentMethod: 'online' | 'pay_at_venue' | 'token_advance' }) => Promise<Booking>;
-  confirmOnlineBooking: (bookingId: string) => Promise<Booking>;
+  confirmOnlineBooking: (bookingId: string, upiTransactionId?: string) => Promise<Booking>;
   cancelBooking: (bookingId: string, reason: string) => Promise<{ refund: number; coinsRestored: number }>;
   
   // Owner operation actions
@@ -1540,7 +1540,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newBooking;
   };
 
-  const confirmOnlineBooking = async (bookingId: string) => {
+  const confirmOnlineBooking = async (bookingId: string, upiTransactionId?: string) => {
     let matchedB: Booking | undefined;
     let finalEarnings = 0; // Simplified requirements: no booking cashback earnings
 
@@ -1552,6 +1552,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...b,
           booking_status: 'confirmed' as const,
           payment_status: 'completed' as const,
+          upi_transaction_id: upiTransactionId,
           garf_coins_earned: finalEarnings,
           hold_expires_at: null,
           advance_paid_amount: isToken ? Math.round(b.final_amount * 0.3) : undefined,
@@ -1665,36 +1666,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const diffMinutes = Math.floor(diffMs / 60000);
 
     let refund = 0;
-    let refundStatus: Booking['payment_status'] = 'pending';
-
-    if (finalB.payment_method === 'online') {
-      if (diffMinutes > 120) {
-        refund = finalB.final_amount; // 100%
-        refundStatus = 'refunded';
-      } else if (diffMinutes >= 60 && diffMinutes <= 120) {
-        refund = Math.floor(finalB.final_amount * 0.5); // 50%
-        refundStatus = 'partial_refund';
-      } else {
-        refund = 0; // 0%
-        refundStatus = 'completed'; // booking stays marked paid, but status = cancelled
-      }
-    } else if (finalB.payment_method === 'token_advance') {
-      const paidAdvance = finalB.advance_paid_amount || Math.round(finalB.final_amount * 0.3);
-      if (diffMinutes > 120) {
-        refund = paidAdvance; // 100% of the advance amount
-        refundStatus = 'refunded';
-      } else if (diffMinutes >= 60 && diffMinutes <= 120) {
-        refund = Math.floor(paidAdvance * 0.5); // 50% of the advance amount
-        refundStatus = 'partial_refund';
-      } else {
-        refund = 0; // 0%
-        refundStatus = 'completed';
-      }
-    } else {
-      // pay_at_venue: no upfront charges, so refund = 0
-      refund = 0;
-      refundStatus = 'pending';
-    }
+    let refundStatus: Booking['payment_status'] = 'completed';
 
     // Cancel slots (make available again)
     setSlots(prev => prev.map(s => {
@@ -1789,7 +1761,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return b;
     }));
 
-    addNotificationSilently(finalB.customer_id, 'Booking Cancelled ❌', `Your booking ${finalB.booking_ref} was cancelled. Refund of ₹${refund} processed.`, 'booking');
+    addNotificationSilently(finalB.customer_id, 'Booking Cancelled ❌', `Your booking ${finalB.booking_ref} was cancelled and slot released. No refund is processed as per policy.`, 'booking');
 
     // Notify owner
     const matchedV = venues.find(v => v.id === finalB!.venue_id);

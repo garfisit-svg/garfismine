@@ -1670,7 +1670,7 @@ export function GarfSquadPage() {
                     className="w-full bg-[#07070F] border border-border-dark p-3 rounded-lg text-xs text-white"
                   >
                     <option value="gaming">Gaming / PC Esports Lounge</option>
-                    <option value="sports">Athletic Arena / Sports Pitches</option>
+                    <option value="console">Console & VR Arcade Lounge</option>
                   </select>
                 </div>
 
@@ -1950,7 +1950,7 @@ export function GarfSquadPage() {
                     required 
                     value={postTitle}
                     onChange={e => setPostTitle(e.target.value)}
-                    placeholder="e.g. Need striker for Football match at Turf arena"
+                    placeholder="e.g. Need dual-duo partner for Valorant competitive session"
                     className="w-full bg-[#07070F] border border-border-dark p-3 rounded-lg text-xs text-white"
                   />
                 </div>

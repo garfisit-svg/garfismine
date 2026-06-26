@@ -323,6 +323,9 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({ venue, onOpenWalkIn })
                   const correspondingRes = currentVenueResources.find(r => r.id === b.resource_id);
                   const isToken = b.payment_method === 'token_advance';
                   const isHold = b.payment_method === 'pay_at_venue';
+                  const clientProfile = profiles?.find(p => p.id === b.customer_id);
+                  const clientName = b.walk_in_customer_name || clientProfile?.full_name || 'Anonymous player';
+                  const clientPhone = b.walk_in_customer_phone || clientProfile?.phone || '';
 
                   return (
                     <tr key={b.id} className="hover:bg-[#12121A]/30 transition text-white">
@@ -336,9 +339,9 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({ venue, onOpenWalkIn })
                         </button>
                       </td>
                       <td className="py-3.5 px-3">
-                        <div className="font-semibold">{b.walk_in_customer_name || 'Anonymous client'}</div>
-                        {b.walk_in_customer_phone && (
-                          <div className="text-[10px] text-text-secondary/70 font-mono mt-0.5">{b.walk_in_customer_phone}</div>
+                        <div className="font-semibold text-white">{clientName}</div>
+                        {clientPhone && (
+                          <div className="text-[10px] text-text-secondary/70 font-mono mt-0.5">{clientPhone}</div>
                         )}
                       </td>
                       <td className="py-3.5 px-3">
@@ -370,6 +373,11 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({ venue, onOpenWalkIn })
                               ? 'Counter settle (Hold)'
                               : 'Full Pre-Paid Online'}
                         </div>
+                        {b.upi_transaction_id && (
+                          <div className="text-[9px] text-cyan-400 font-mono mt-1 bg-cyan-950/45 border border-cyan-500/20 px-1.5 py-0.5 rounded w-fit" title="User reported Transaction reference">
+                            Txn ID: {b.upi_transaction_id}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3.5 px-3 text-center">
                         <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase font-mono font-bold leading-none ${

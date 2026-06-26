@@ -73,7 +73,7 @@ export const MyCoinsPage: React.FC = () => {
           </div>
 
           <p className="text-text-secondary text-sm sm:text-base leading-relaxed max-w-sm">
-            That stores as <strong className="text-brand-green">₹{rupeeEstimate} discount</strong> off your first gaming cafe session or turf match!
+            That stores as <strong className="text-brand-green">₹{rupeeEstimate} discount</strong> off your first gaming cafe session!
           </p>
           <p className="text-[11px] font-mono text-text-secondary/60">Conversion Index: 1 GARF Coin = ₹1 Discount (Welcome Bonus!)</p>
         </div>
@@ -135,7 +135,7 @@ export const MyCoinsPage: React.FC = () => {
             <span className="text-3xl select-none filter drop-shadow">🔥</span>
             <div>
               <h4 className="font-bold text-white text-sm sm:text-base">First Order Redemption</h4>
-              <p className="text-xs text-text-secondary leading-relaxed mt-1.5">Redeem your coins instantly on your very first turf or cafe booking checkout. No complex tasks or investment needed.</p>
+              <p className="text-xs text-text-secondary leading-relaxed mt-1.5">Redeem your coins instantly on your very first gaming cafe booking checkout. No complex tasks or investment needed.</p>
             </div>
           </div>
         </div>

@@ -9,7 +9,7 @@ interface SettingsTabProps {
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
-  const { updateVenue, deleteVenue } = useApp();
+  const { currentUser, updateProfile, updateVenue, deleteVenue } = useApp();
 
   const [activeSegment, setActiveSegment] = useState<'profile' | 'hours' | 'bank' | 'danger'>('profile');
 
@@ -24,10 +24,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
   const [operationFrom, setOperationFrom] = useState(venue?.operating_hours_start || '09:00');
   const [operationTo, setOperationTo] = useState(venue?.operating_hours_end || '23:00');
 
-  // Vault Bank Details (simulated placeholders)
-  const [bankNum, setBankNum] = useState('6500 2410 9314 0021');
-  const [bankIfsc, setBankIfsc] = useState('ICIC0001041');
-  const [holderName, setHolderName] = useState('Rahul Aggarwal (Arena Owner Account)');
+  // UPI configuration state
+  const [upiId, setUpiId] = useState(currentUser?.upi_id || '');
 
   // Refresh values on venue loaded updates
   React.useEffect(() => {
@@ -42,6 +40,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
       setOperationTo(venue.operating_hours_end || '23:00');
     }
   }, [venue]);
+
+  // Sync UPI id when currentUser changes
+  React.useEffect(() => {
+    if (currentUser?.upi_id) {
+      setUpiId(currentUser.upi_id);
+    }
+  }, [currentUser]);
 
   // Checklist arrays
   const popularGames = ['Valorant', 'CS2 / Counter-Strike', 'Dota 2', 'FC 25 (FIFA)', 'Call of Duty: Warzone', 'Minecraft Esports', 'Tekken 8', 'F1 2024 Grid'];
@@ -111,8 +116,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
             onClick={() => setActiveSegment('bank')}
             className={`px-4 py-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 transition cursor-pointer flex-1 md:flex-initial ${activeSegment === 'bank' ? 'bg-[#7C3AED]/20 text-white border-l-2 border-brand-purple' : 'text-text-secondary hover:text-white'}`}
           >
-            <Building className="h-4 w-4" />
-            <span>Payout Bank details</span>
+            <Settings className="h-4 w-4" />
+            <span>UPI Payout ID</span>
           </button>
 
           <button
@@ -272,56 +277,42 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
 
           {activeSegment === 'bank' && (
             <div className="space-y-5">
-              <h5 className="font-bold text-white text-base font-display">Payout accounts settlement details</h5>
+              <h5 className="font-bold text-white text-base font-display">UPI Configuration</h5>
               <p className="text-xs text-text-secondary">
-                Securely store bank account fields so that online/token transactions net of the GARF 10% auto-deduction can be wire-transferred.
+                Configure your business UPI VPA address to receive direct customer payments instantly.
               </p>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-bold uppercase text-text-secondary mb-1">Holder name on book log</label>
+                  <label className="block text-[10px] sm:text-xs font-bold uppercase text-text-secondary mb-1">Business UPI ID (VPA)</label>
                   <input
                     type="text"
+                    placeholder="e.g. owner@okhdfcbank"
                     className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-2.5 text-sm outline-none text-white font-mono"
-                    value={holderName}
-                    onChange={e => setHolderName(e.target.value)}
+                    value={upiId}
+                    onChange={e => setUpiId(e.target.value)}
                   />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] sm:text-xs font-bold uppercase text-[#a8a8cf] mb-1">Direct Vault account number</label>
-                    <input
-                      type="text"
-                      className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-2.5 text-sm outline-none text-white font-mono"
-                      value={bankNum}
-                      onChange={e => setBankNum(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] sm:text-xs font-bold uppercase text-[#a8a8cf] mb-1">IFSC transfer code symbol</label>
-                    <input
-                      type="text"
-                      className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-2.5 text-sm outline-none text-white font-mono"
-                      value={bankIfsc}
-                      onChange={e => setBankIfsc(e.target.value)}
-                    />
-                  </div>
                 </div>
               </div>
 
               <div className="p-4 bg-[#12121A] rounded-xl border border-border-dark flex items-start gap-2 text-text-secondary leading-normal">
                 <BellRing className="h-4 w-4 mt-0.5 text-[#06B6D4] flex-shrink-0" />
-                <span>We encrypt and isolate account parameters safely inside isolated GCP Cloud Storage hashes. Payout processing coordinates clear normally within 48 business hours upon cycle closure days.</span>
+                <span>Instant direct routing: Booking payments made by customers are sent directly to this address. Ensure your VPA is correct to avoid payment settlement delays.</span>
               </div>
 
               <button
                 onClick={() => {
-                  toast.success('Secure billing credentials updated successfully!');
+                  if (upiId.trim() && !upiId.includes('@')) {
+                    toast.error('Please enter a valid UPI ID (e.g. owner@okhdfcbank)');
+                    return;
+                  }
+                  updateProfile({ upi_id: upiId.trim() });
+                  toast.success('UPI payout configuration updated successfully!');
                 }}
-                className="px-5 py-2 bg-emerald-400 text-black font-bold uppercase rounded-lg text-xs cursor-pointer active:scale-95 transition"
+                className="px-5 py-2.5 bg-emerald-400 text-black font-bold uppercase rounded-lg text-xs cursor-pointer active:scale-95 transition flex items-center gap-2"
               >
-                🔒 Validate secure bank vault specs
+                <Save className="h-4 w-4" />
+                <span>Save UPI Payout ID</span>
               </button>
             </div>
           )}

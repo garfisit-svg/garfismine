@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 
 export const ExplorePage: React.FC = () => {
   const navigate = useNavigate();
-  const { venues, currentUser, detectedCity } = useApp();
+  const { venues, resources, currentUser, detectedCity } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Filters State
@@ -112,10 +112,18 @@ export const ExplorePage: React.FC = () => {
       return false;
     }
 
-    // Type Filter
+    // Exclude turf venues completely
+    if (v.type === 'turf') {
+      return false;
+    }
+
+    // Type Filter (By Station Preference: pc, ps5, vr, etc.)
     if (selectedType !== 'All') {
-      if (selectedType === 'gaming_cafe' && v.type === 'turf') return false;
-      if (selectedType === 'turf' && v.type === 'gaming_cafe') return false;
+      const venueResources = resources?.filter(r => r.venue_id === v.id && r.is_active) || [];
+      const hasMatchingResource = venueResources.some(r => r.type === selectedType || (selectedType === 'ps5' && r.type === 'xbox'));
+      if (!hasMatchingResource) {
+        return false;
+      }
     }
 
     // Maximum Hourly Price Filter
@@ -210,20 +218,25 @@ export const ExplorePage: React.FC = () => {
             </button>
           </div>
 
-          {/* Type radio */}
+          {/* Station Type radio */}
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold uppercase tracking-wider text-text-secondary font-mono">Category</h4>
+            <h4 className="text-sm font-semibold uppercase tracking-wider text-text-secondary font-mono">Station Type</h4>
             <div className="space-y-2 text-sm text-text-secondary">
-              {['All', 'gaming_cafe', 'turf'].map(type => (
-                <label key={type} className="flex items-center gap-2.5 cursor-pointer hover:text-white transition">
+              {[
+                { label: 'All Stations', value: 'All' },
+                { label: '🖥️ Esports PC Rig', value: 'pc' },
+                { label: '🎮 Console (PS5/Xbox)', value: 'ps5' },
+                { label: '🽏 VR Station', value: 'vr' }
+              ].map(cat => (
+                <label key={cat.value} className="flex items-center gap-2.5 cursor-pointer hover:text-white transition">
                   <input
                     type="radio"
                     name="category_filter"
                     className="text-brand-purple bg-[#161622] border-[#2a2a3e]"
-                    checked={selectedType === type}
-                    onChange={() => setSelectedType(type)}
+                    checked={selectedType === cat.value}
+                    onChange={() => setSelectedType(cat.value)}
                   />
-                  <span>{type === 'All' ? 'All categories' : formatKeyName(type)}</span>
+                  <span>{cat.label}</span>
                 </label>
               ))}
             </div>
@@ -366,11 +379,12 @@ export const ExplorePage: React.FC = () => {
 
             {/* Quick Type Selection Pills */}
             <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-text-secondary font-mono mr-1">QUICK CATEGORY:</span>
+              <span className="text-text-secondary font-mono mr-1">QUICK STATION FILTER:</span>
               {[
-                { label: 'All Arenas 🌟', value: 'All' },
-                { label: 'Gaming Cafes 🎮', value: 'gaming_cafe' },
-                { label: 'Turf Fields ⚽', value: 'turf' }
+                { label: 'All Stations 🌟', value: 'All' },
+                { label: 'Esports PCs 🖥️', value: 'pc' },
+                { label: 'Consoles (PS5/Xbox) 🎮', value: 'ps5' },
+                { label: 'VR Hubs 🽏', value: 'vr' }
               ].map(cat => (
                 <button
                   key={cat.value}
@@ -735,6 +749,9 @@ export const ExplorePage: React.FC = () => {
 // Simple label formatter
 function FormatTypeLabel(type: string) {
   if (type === 'gaming_cafe') return '🎮 Gaming Cafe';
-  if (type === 'turf') return '⚽ Sports Turf';
+  if (type === 'pc') return '🖥️ Esports PC';
+  if (type === 'ps5') return '🎮 PS5 Console';
+  if (type === 'xbox') return '🎮 Xbox Console';
+  if (type === 'vr') return '🽏 VR Hub';
   return type;
 }

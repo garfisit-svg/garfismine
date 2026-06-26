@@ -404,14 +404,13 @@ export const OwnerRegisterPage: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Acre / Genre Space</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Arena Type</label>
                       <select
-                        className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none focus:border-brand-purple"
+                        className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none focus:border-brand-purple cursor-not-allowed"
                         value={venueType}
-                        onChange={e => setVenueType(e.target.value as any)}
+                        disabled
                       >
                         <option value="gaming_cafe">🖥️ PC Lounge / Console Gaming Café</option>
-                        <option value="turf">🏟️ Athletic Football/Cricket Turf Pitch</option>
                       </select>
                     </div>
                   </div>
@@ -715,7 +714,7 @@ export const OwnerRegisterPage: React.FC = () => {
                                 setResourceSpecs(copy);
                               }}
                               className="w-full bg-[#1C1C2D] border border-border-dark rounded-lg p-2 text-xs outline-none"
-                              placeholder="e.g. RTX 4060, PS5 Slim, Grass turf court measurements"
+                              placeholder="e.g. RTX 4060, Intel i7, 16GB RAM, or PS5 Slim"
                               required
                             />
                           </div>

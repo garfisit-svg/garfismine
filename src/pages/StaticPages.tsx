@@ -14,7 +14,7 @@ export const AboutPage: React.FC = () => {
           The Story of <span className="text-gradient">GARF</span>
         </h1>
         <p className="text-lg text-text-secondary">
-          We are built for India's GenZ gaming generation. From casual couch co-op campaigns to hyper-competitive elite esports setups and massive turf tournaments, GARF unites matches in 60 seconds.
+          We are built for India's GenZ gaming generation. From casual couch co-op campaigns to hyper-competitive elite esports setups, GARF unites matches in 60 seconds.
         </p>
       </div>
 
@@ -23,10 +23,10 @@ export const AboutPage: React.FC = () => {
           <div>
             <h2 className="text-3xl font-display font-bold mb-6">Built by Gamers, For Gamers</h2>
             <p className="text-text-secondary mb-4">
-              Our founder envisioned a unified gaming infrastructure in India where finding a high-performance system or football pitch shouldn't require dozen phone calls, unreliable waitlists, or cash struggles. 
+              Our founder envisioned a unified gaming infrastructure in India where finding a high-performance system shouldn't require dozen phone calls, unreliable waitlists, or cash struggles. 
             </p>
             <p className="text-text-secondary mb-6">
-              With real-time slot bookings, exclusive loyalty rewards via <strong>GARF Coins</strong>, and a robust platform covering every gaming cafe and active sports turf, we are here to maximize your play time.
+              With real-time slot bookings, exclusive loyalty rewards via <strong>GARF Coins</strong>, and a robust platform covering every premium gaming cafe, we are here to maximize your play time.
             </p>
             <div className="flex items-center gap-2 text-brand-cyan font-semibold">
               <span>Find your local arena now</span>
@@ -173,7 +173,7 @@ export const FAQPage: React.FC = () => {
   const faqs = [
     {
       q: 'How do I cancel a booking?',
-      a: 'Head to "My Bookings" in your profile, find the session in your "Upcoming" tab, and click "Cancel Booking". Paid bookings are instantly refunded to your profile balance in full.'
+      a: 'Head to "My Bookings" in your profile, find the session in your "Upcoming" tab, and click "Cancel Booking" to release your slot back to the cafe pool.'
     },
     {
       q: 'Can I change my booking time?',
@@ -181,11 +181,7 @@ export const FAQPage: React.FC = () => {
     },
     {
       q: 'What payment methods are accepted?',
-      a: 'We accept credit cards, debit cards, UPI, net banking, and Pay-at-Venue holding. Rest assured, for Pay-at-Venue, zero balance is charged on failure or hold expiration!'
-    },
-    {
-      q: 'When will I receive my refund?',
-      a: 'Refunds are triggered instantly. For UPI/wallet methods, refunds reflect in 30 minutes. Card settlements take 2-3 bank days.'
+      a: 'We accept standard UPI transfer codes, cash payments directly at the counter, and Pay-at-Venue holding. Rest assured, for Pay-at-Venue, zero balance is charged on failure or hold expiration!'
     },
     {
       q: 'How does Pay at Venue work and what happens if the timer expires?',
@@ -205,7 +201,7 @@ export const FAQPage: React.FC = () => {
     },
     {
       q: 'What is the platform fee or commission rate?',
-      a: 'For owners, we take a standard 10% commission on online customer bookings. For customers, a humble platform fee of ₹5 is applied to secure secure bookings and live hold engines.'
+      a: 'For owners, we take a standard 10% commission on online customer bookings. For customers, a humble platform fee of ₹5 is applied to secure bookings and live hold engines.'
     }
   ];
 
@@ -214,7 +210,7 @@ export const FAQPage: React.FC = () => {
       <div className="text-center mb-16">
         <HelpCircle className="h-12 w-12 text-brand-purple mx-auto mb-4" />
         <h1 className="text-4xl font-display font-bold">Frequently Asked <span className="text-gradient">Questions</span></h1>
-        <p className="text-text-secondary mt-2">Get swift answers regarding bookings, coins, holds, refunds, and venue rules.</p>
+        <p className="text-text-secondary mt-2">Get swift answers regarding bookings, coins, holds, and venue rules.</p>
       </div>
 
       <div className="space-y-4">
@@ -259,7 +255,7 @@ export const PrivacyPage: React.FC = () => {
 
       <h2 className="text-xl font-bold mt-8 mb-4">2. Cookies and Geocoding</h2>
       <p className="text-text-secondary mb-4">
-        We utilize coordinates purely to align nearest sports turfs and gaming cafes around your current Indian city (Mumbai, Hyderabad, Delhi, Bangalore, etc). Longterm tracking cookies are strictly omitted.
+        We utilize coordinates purely to align nearest gaming cafes around your current Indian city (Mumbai, Hyderabad, Delhi, Bangalore, etc). Longterm tracking cookies are strictly omitted.
       </p>
     </div>
   );
@@ -293,26 +289,27 @@ export const RefundPolicyPage: React.FC = () => {
         <FileText className="h-10 w-10 text-brand-cyan" />
         <h1 className="text-3xl font-display font-bold">Cancellation & Refund Policy</h1>
       </div>
-      <p className="text-text-secondary mb-8">We believe in full transparency and flexibility for online gamers and sports turf participants.</p>
+      <p className="text-text-secondary mb-8">We believe in full transparency and flexibility for online gamers and registered cafe players.</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
         <div className="glass-card p-6 border-l-4 border-brand-green">
           <CheckCircle className="h-8 w-8 text-brand-green mb-3" />
-          <h3 className="font-bold mb-1">Easy Cancellations</h3>
-          <p className="text-xs text-text-secondary">Cancel your booking anytime from "My Bookings" with no questions asked.</p>
+          <h3 className="font-bold mb-1">Cancellations Allowed</h3>
+          <p className="text-xs text-text-secondary">You can cancel your booking anytime from "My Bookings" to free up the slot for others.</p>
         </div>
-        <div className="glass-card p-6 border-l-4 border-brand-cyan">
-          <CheckCircle className="h-8 w-8 text-brand-cyan mb-3" />
-          <h3 className="font-bold mb-1">Full Refund ✅</h3>
-          <p className="text-xs text-text-secondary">Online payments are fully refunded (100% money back) to your profile balance instantly.</p>
+        <div className="glass-card p-6 border-l-4 border-red-500">
+          <CheckCircle className="h-8 w-8 text-red-500 mb-3" />
+          <h3 className="font-bold mb-1">No Refunds ⚠️</h3>
+          <p className="text-xs text-text-secondary">Please note that once a slot is booked and paid online, cancellations do NOT qualify for any refund.</p>
         </div>
       </div>
 
       <div className="glass-card p-6 space-y-4">
         <h3 className="font-bold text-lg">Notable Rules:</h3>
         <ul className="list-disc pl-5 space-y-3 text-sm text-text-secondary">
-          <li><strong>Pay-at-Venue Bookings:</strong> No pre-charges are ever applied. Failing to check-in within 15 mins of start simply releases the slot.</li>
-          <li><strong>Loyalty Coins:</strong> If a cancel triggers, spent coins are restored to your wallet instantly and earned cashback coins are safely reverted.</li>
+          <li><strong>Paid Online Bookings:</strong> No refunds are issued for cancellations. The slot is freed up, but the paid amount is non-refundable.</li>
+          <li><strong>Pay-at-Venue Bookings:</strong> No pre-charges are ever applied. You can cancel with no charge, or failing to check-in within 15 mins of start simply releases the slot.</li>
+          <li><strong>Loyalty Coins:</strong> Any spent coins used for discount are not refunded on cancellation.</li>
         </ul>
       </div>
     </div>

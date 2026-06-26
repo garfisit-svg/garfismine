@@ -73,7 +73,7 @@ export const LandingPage: React.FC = () => {
           </h1>
           
           <p className="max-w-2xl mx-auto text-text-secondary text-base sm:text-xl mb-12">
-            Discover premier high-end gaming cafes and sports turfs near you. Secure your station, pick your hours, and book in 60 seconds.
+            Discover premier high-end gaming cafes and esports arenas near you. Secure your station, pick your hours, and book in 60 seconds.
           </p>
 
           {/* 3-Part Search Bar Widget */}
@@ -103,17 +103,18 @@ export const LandingPage: React.FC = () => {
 
             <div className="hidden md:block h-10 w-px bg-border-dark"></div>
 
-            {/* Part 2: Category Dropdown */}
+            {/* Part 2: Station Dropdown */}
             <div className="w-full md:w-1/3 flex flex-col items-start gap-1 px-2">
-              <span className="text-xs text-text-secondary font-mono">ARENA TYPE</span>
+              <span className="text-xs text-text-secondary font-mono">STATION CATEGORY</span>
               <select
                 className="w-full bg-transparent text-white font-semibold py-1 focus:outline-none cursor-pointer text-sm sm:text-base border-b border-border-dark py-2 md:border-none"
                 value={searchCategory}
                 onChange={e => setSearchCategory(e.target.value)}
               >
-                <option value="All" className="bg-card-dark">All Categories</option>
-                <option value="gaming_cafe" className="bg-card-dark">🎮 Gaming Cafe</option>
-                <option value="turf" className="bg-card-dark">⚽ Sports Turf</option>
+                <option value="All" className="bg-card-dark">All Stations</option>
+                <option value="pc" className="bg-card-dark">🖥️ Esports PC Rigs</option>
+                <option value="ps5" className="bg-card-dark">🎮 Console (PS5/Xbox)</option>
+                <option value="vr" className="bg-card-dark">🽏 VR Station</option>
               </select>
             </div>
 
@@ -180,50 +181,34 @@ export const LandingPage: React.FC = () => {
           <h2 className="text-3xl sm:text-4xl font-display font-bold tracking-tight">
             What Are You <span className="text-gradient">Looking For?</span>
           </h2>
-          <p className="text-text-secondary mt-3">Choose your domain and access specialized reservation queues</p>
+          <p className="text-text-secondary mt-3">Access India's ultimate high-end gaming cafe hubs and reserved stations</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="max-w-4xl mx-auto">
           <Link 
-            to="/explore?type=gaming_cafe"
-            className="group relative rounded-2xl overflow-hidden aspect-[4/3] sm:aspect-video border border-border-dark flex items-end p-8"
+            to="/explore"
+            className="group relative rounded-2xl overflow-hidden aspect-[16/10] md:aspect-[21/9] border border-border-dark flex items-end p-8 sm:p-12 block"
           >
-            <div className="absolute inset-0 bg-gradient-to-t from-bg-dark via-bg-dark/40 to-transparent z-10"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-bg-dark via-bg-dark/50 to-transparent z-10"></div>
             <img 
-              src="https://images.unsplash.com/photo-1542751371-adc38448a05e?w=800" 
-              alt="Gaming Cafe" 
+              src="https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1200" 
+              alt="Premium Gaming Cafes" 
               className="absolute inset-0 w-full h-full object-cover transition duration-500 group-hover:scale-105"
               referrerPolicy="no-referrer"
             />
-            <div className="relative z-20 space-y-2">
-              <span className="text-xs text-brand-purple font-mono uppercase tracking-wider bg-brand-purple/10 border border-brand-purple/20 px-3 py-1 rounded-full">GAMING CATEGORY</span>
-              <h3 className="text-2xl sm:text-3xl font-display font-bold">Gaming Cafe</h3>
-              <p className="text-text-secondary text-sm">Elite RTX 4080 towers, PS5 and VR zones. Over 300 platforms live.</p>
-              <div className="inline-flex items-center gap-1 text-brand-purple font-semibold pt-2 text-sm">
-                <span>Browse Cafe Platforms</span>
-                <ChevronRight className="h-4 w-4" />
-              </div>
-            </div>
-          </Link>
-
-          <Link 
-            to="/explore?type=turf"
-            className="group relative rounded-2xl overflow-hidden aspect-[4/3] sm:aspect-video border border-border-dark flex items-end p-8"
-          >
-            <div className="absolute inset-0 bg-gradient-to-t from-bg-dark via-bg-dark/40 to-transparent z-10"></div>
-            <img 
-              src="https://images.unsplash.com/photo-1459865264687-595d652de67e?w=800" 
-              alt="Sports Turf" 
-              className="absolute inset-0 w-full h-full object-cover transition duration-500 group-hover:scale-105"
-              referrerPolicy="no-referrer"
-            />
-            <div className="relative z-20 space-y-2">
-              <span className="text-xs text-brand-cyan font-mono uppercase tracking-wider bg-brand-cyan/10 border border-brand-cyan/20 px-3 py-1 rounded-full">RECREATIONAL OUTDOOR</span>
-              <h3 className="text-2xl sm:text-3xl font-display font-bold">Sports Turf</h3>
-              <p className="text-text-secondary text-sm">Football, box cricket nets, backlit courts. Over 200 turfs live.</p>
-              <div className="inline-flex items-center gap-1 text-brand-cyan font-semibold pt-2 text-sm">
-                <span>Browse Turf Grounds</span>
-                <ChevronRight className="h-4 w-4" />
+            <div className="relative z-20 space-y-4 max-w-xl">
+              <span className="text-xs text-brand-purple font-mono uppercase tracking-wider bg-brand-purple/10 border border-brand-purple/20 px-3 py-1 rounded-full w-fit inline-block">
+                GENZ ESPORTS MATRIX
+              </span>
+              <h3 className="text-3xl sm:text-4xl font-display font-bold tracking-tight text-white">
+                Premium Gaming Cafés
+              </h3>
+              <p className="text-text-secondary text-sm sm:text-base leading-relaxed">
+                Elite RTX 4080 towers, 240Hz esports displays, co-op PlayStation 5 setups, and high-fidelity VR zones in cities near you.
+              </p>
+              <div className="inline-flex items-center gap-2 text-brand-purple font-semibold pt-2 text-sm sm:text-base">
+                <span>Browse All Active Gaming Cafes</span>
+                <ChevronRight className="h-5 w-5 group-hover:translate-x-1 transition" />
               </div>
             </div>
           </Link>
@@ -246,7 +231,7 @@ export const LandingPage: React.FC = () => {
             { icon: <Trophy className="h-6 w-6 text-brand-green" />, title: 'Earn GARF Coins', desc: 'Get 10% back on play bookings. Complete streaks and reviews.' },
             { icon: <Smartphone className="h-6 w-6 text-purple-400" />, title: '60 Second Booking', desc: 'One-click consecutive slot checking, zero registration waitls.' },
             { icon: <CheckCircle className="h-6 w-6 text-cyan-400" />, title: 'Verified Arenas', desc: 'Physical verification on Aadhar/PAN guidelines ensures top gaming specs.' },
-            { icon: <Star className="h-6 w-6 text-yellow-500" />, title: 'Best Prices', desc: 'Exclusive weekday rates, weekend turf promos, and zero mystery fees.' }
+            { icon: <Star className="h-6 w-6 text-yellow-500" />, title: 'Best Prices', desc: 'Exclusive weekday rates, weekend lounge promos, and zero mystery fees.' }
           ].map((feat, idx) => (
             <div key={idx} className="glass-card p-6 flex gap-4 items-start">
               <div className="p-3 bg-[#161622] border border-[#2a2a3e] rounded-xl flex-shrink-0">

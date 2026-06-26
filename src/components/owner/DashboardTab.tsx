@@ -352,46 +352,6 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
 
       </div>
 
-      {/* SOFT HOLDS LIST PANEL (⚠️ CRITICAL) */}
-      <div className="bg-yellow-500/5 p-6 rounded-2xl border border-yellow-500/20 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 pb-2 border-b border-yellow-500/10">
-          <div>
-            <h4 className="font-bold text-base text-yellow-500 font-display flex items-center gap-1.5">
-              <ShieldAlert className="h-5 w-5 text-yellow-500 animate-pulse" />
-              <span>⚠️ Soft Holds - Pay at Venue Live Countdown</span>
-            </h4>
-            <p className="text-xs text-text-secondary leading-normal max-w-xl">
-              Clients selected Pay-at-Venue. Countdown begins at slot start times with a strict 15 minute grace window. If clients do not check-in ahead of timeout, recycling triggers release instantly.
-            </p>
-          </div>
-          <div className="text-[10px] font-mono text-yellow-500/70 uppercase">
-            Auto updates: 30s rate
-          </div>
-        </div>
-
-        {activeSoftHolds.length === 0 ? (
-          <div className="bg-emerald-500/5 p-5 border border-emerald-500/15 rounded-xl text-center flex flex-col items-center justify-center space-y-1">
-            <span className="text-xl">🏆</span>
-            <p className="text-xs font-bold text-emerald-400">All clear! No pending soft holds currently active.</p>
-            <p className="text-[10px] text-text-secondary font-mono">Your stations are fully locked or fully free.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {activeSoftHolds.map(b => (
-              <SoftHoldCard 
-                key={b.id} 
-                booking={b} 
-                currentTime={currentTime}
-                resourceName={currentVenueResources.find(r => r.id === b.resource_id)?.name || 'PC Gaming Rig'}
-                onCheckIn={() => setCheckInConfirmBooking(b)}
-                onExtend={() => setExtendConfirmBooking(b)}
-                onRelease={() => setReleaseConfirmBooking(b)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* VISUAL HOURLY BLOCK TIMELINE */}
       <div className="bg-[#1A1A2E] border border-border-dark p-6 rounded-2xl space-y-4">
         <div className="flex justify-between items-center pb-2 border-b border-border-dark">
@@ -401,7 +361,6 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
           </div>
           <div className="flex gap-4 text-[10px] text-text-secondary font-mono">
             <span className="flex items-center gap-1"><span className="h-2 w-2 bg-emerald-400 rounded-full"></span> Available</span>
-            <span className="flex items-center gap-1"><span className="h-2 w-2 bg-yellow-500 rounded-full"></span> Soft Hold</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 bg-[#7C3AED] rounded-full"></span> Confirmed</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 bg-red-500 rounded-full"></span> Checked In</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 bg-gray-600 rounded-full"></span> Blocked</span>
