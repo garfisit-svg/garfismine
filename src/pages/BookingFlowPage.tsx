@@ -496,19 +496,17 @@ export const BookingFlowPage: React.FC = () => {
               <p className="text-text-secondary text-xs sm:text-sm mt-1">Select checkout gateways to secure your turf or cafe play slot</p>
             </div>
 
-            {/* B. DUAL GATEWAY CHOICE */}
+            {/* B. GATEWAY INFO */}
             <div className="space-y-4">
-              <span className="text-xs uppercase font-mono text-text-secondary font-bold tracking-widest block">PAYMENT MODE ROADMAP</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <span className="text-xs uppercase font-mono text-text-secondary font-bold tracking-widest block">PAYMENT MODE</span>
+              <div className="grid grid-cols-1 gap-4">
                 
                 {/* Method 1: Pay Online */}
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('online')}
-                  className={`text-left p-6 bg-[#12121A] rounded-2xl border transition relative flex flex-col gap-4 font-sans ${paymentMethod === 'online' ? 'border-brand-purple glow-purple bg-brand-purple/5' : 'border-[#2a2a3e] hover:border-[#383856]'}`}
+                <div
+                  className="text-left p-6 bg-[#12121A] rounded-2xl border border-brand-purple/30 glow-purple bg-brand-purple/5 relative flex flex-col gap-4 font-sans"
                 >
                   <span className="absolute top-3 right-3 bg-brand-green/10 border border-brand-green/30 text-brand-green text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    RECOMMENDED
+                    SECURED
                   </span>
 
                   <div className="space-y-2">
@@ -518,203 +516,115 @@ export const BookingFlowPage: React.FC = () => {
                     </div>
                     <ul className="text-xs text-text-secondary space-y-1.5 leading-relaxed">
                       <li>• Instant slot lock-id (zero hold wait)</li>
-                      <li>• Full refund cancel coverage guarantees</li>
                       <li>• UPI, card, and digital networks secure</li>
                     </ul>
                   </div>
-                </button>
-
-                {/* Method 3: Pay at Venue */}
-                <button
-                  type="button"
-                  disabled={!isPayAtVenueAvailable || isBlockedFromSoftHold}
-                  onClick={() => setPaymentMethod('pay_at_venue')}
-                  className={`text-left p-6 bg-[#12121A] rounded-2xl border transition relative flex flex-col gap-4 font-sans ${
-                    paymentMethod === 'pay_at_venue' 
-                      ? 'border-brand-purple glow-purple bg-brand-purple/5' 
-                      : (!isPayAtVenueAvailable || isBlockedFromSoftHold 
-                        ? 'opacity-40 cursor-not-allowed border-red-500/10' 
-                        : 'border-[#2a2a3e] hover:border-[#383856]')
-                  }`}
-                >
-                  <div className="space-y-2">
-                    <div className="flex gap-2 items-center text-yellow-500">
-                      <Clock className="h-5 w-5" />
-                      <h4 className="font-bold text-base text-white font-display">Pay at Venue (Hold)</h4>
-                    </div>
-                    {isBlockedFromSoftHold ? (
-                      <p className="text-xs text-red-400 font-bold leading-normal">
-                        🚨 Blocked: Soft Hold permanently restricted due to 3+ no-shows.
-                      </p>
-                    ) : !isPayAtVenueAvailable ? (
-                      <p className="text-xs text-yellow-500 bg-yellow-500/5 p-2 rounded border border-yellow-500/10 leading-normal font-mono">
-                        ⏳ Available only same-day within 2 hours of slot time.
-                      </p>
-                    ) : (
-                      <ul className="text-xs text-text-secondary space-y-1.5 leading-relaxed">
-                        <li>• Held temporarily for 15 mins grace extension</li>
-                        <li>• Recycled on failure checkout timeout</li>
-                        <li>• Verify with checkbox to confirm</li>
-                      </ul>
-                    )}
-                  </div>
-                </button>
+                </div>
 
               </div>
             </div>
 
-            {/* Direct Split UPI Payment (Direct to Owner and Direct to Admin) */}
+            {/* Direct Unified UPI Payment (Single destination: Owner) */}
             {paymentMethod === 'online' && (
-              <div className="bg-[#12121A] border border-brand-purple/20 rounded-2xl p-6 space-y-6 animate-fade-in relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-2 h-full bg-brand-purple" />
+              <div className="bg-[#12121A] border border-brand-cyan/20 rounded-2xl p-6 space-y-6 animate-fade-in relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-2 h-full bg-brand-cyan" />
                 
                 <div className="flex gap-3 items-start">
-                  <div className="p-2.5 bg-brand-purple/10 border border-brand-purple/20 text-brand-purple rounded-xl">
+                  <div className="p-2.5 bg-brand-cyan/10 border border-brand-cyan/20 text-brand-cyan rounded-xl">
                     <QrCode className="h-6 w-6" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg text-white font-display">Direct Split UPI Payment</h3>
+                    <h3 className="font-bold text-lg text-white font-display">Direct UPI Payment</h3>
                     <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
-                      To secure your slot, please complete the two UPI transfers below. The arena booking fee goes directly to the owner's bank account, and the ₹5 platform fee goes directly to the administrator.
+                      To secure your slot, please make a single UPI payment of the total booking amount. The entire amount (including the ₹5 platform fee) will go directly to the arena owner's UPI address.
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                  
-                  {/* TRANSFER 1: VENUE OWNER SHARE */}
-                  <div className="bg-[#161622] border border-[#2a2a3e] rounded-xl p-5 flex flex-col justify-between space-y-4">
-                    <div className="space-y-2 font-sans">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold font-mono tracking-wider uppercase text-brand-cyan">1. VENUE SHARE</span>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-brand-cyan/10 border border-brand-cyan/20 text-brand-cyan font-bold font-mono">
-                          Direct to Owner
-                        </span>
+                <div className="max-w-md mx-auto bg-[#161622] border border-[#2a2a3e] rounded-xl p-5 space-y-4">
+                  <div className="space-y-3 font-sans">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold font-mono tracking-wider uppercase text-brand-cyan">RECIPIENT & SETTLEMENT</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold font-mono">
+                        Direct Arena Settlement
+                      </span>
+                    </div>
+                    
+                    <div className="pt-1 flex justify-between items-end">
+                      <div>
+                        <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Total Amount</p>
+                        <p className="text-2xl font-black text-white font-mono">₹{finalCheckoutAmount}</p>
                       </div>
-                      
-                      <div className="pt-1">
-                        <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Amount to pay</p>
-                        <p className="text-2xl font-black text-white font-mono">₹{Math.max(0, finalCheckoutAmount - 5)}</p>
-                      </div>
-
-                      <div className="pt-1">
-                        <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Recipient UPI ID</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <code className="text-xs text-white font-mono bg-black/40 px-2 py-1 rounded border border-[#2a2a3e] truncate max-w-[170px]">
-                            {ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '')}@okaxis`}
-                          </code>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '')}@okaxis`);
-                              toast.success('Owner UPI ID copied! 📋');
-                            }}
-                            className="p-1.5 bg-[#202030] hover:bg-brand-purple/20 hover:text-white text-text-secondary rounded-lg transition"
-                            title="Copy UPI ID"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </button>
-                        </div>
-                        {!ownerProfile?.upi_id && (
-                          <p className="text-[9px] text-yellow-500 mt-1">
-                            ⚠️ Simulated default (owner has not set UPI ID yet)
-                          </p>
-                        )}
+                      <div className="text-right text-[11px] text-text-secondary font-sans leading-tight">
+                        <p>Slot Charge: <strong>₹{Math.max(0, finalCheckoutAmount - 5)}</strong></p>
+                        <p>Platform Fee: <strong>₹5</strong></p>
                       </div>
                     </div>
 
-                    {/* QR Code and Checkbox */}
-                    <div className="pt-2 border-t border-border-dark/60 space-y-3 font-sans">
-                      <div className="flex items-center gap-3">
-                        <div className="p-1.5 bg-white rounded-lg border border-border-dark">
-                          <QrCode className="h-14 w-14 text-black" />
-                        </div>
-                        <p className="text-[10px] text-text-secondary leading-relaxed">
-                          Scan to pay the owner directly. Use <strong>Garf Booking</strong> as transaction reference note.
-                        </p>
+                    <div className="pt-1">
+                      <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Recipient Owner UPI ID</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <code className="text-xs text-white font-mono bg-black/40 px-2 py-1 rounded border border-[#2a2a3e] truncate">
+                          {ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '') || 'venue'}@okaxis`}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '') || 'venue'}@okaxis`);
+                            toast.success('Owner UPI ID copied! 📋');
+                          }}
+                          className="p-1.5 bg-[#202030] hover:bg-brand-cyan/20 hover:text-white text-text-secondary rounded-lg transition"
+                          title="Copy UPI ID"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
                       </div>
-
-                      <label className="flex items-center gap-2 p-2.5 rounded-lg bg-[#11111A] border border-[#232338] hover:border-brand-cyan/30 cursor-pointer transition">
-                        <input
-                          type="checkbox"
-                          checked={paidOwner}
-                          onChange={(e) => setPaidOwner(e.target.checked)}
-                          className="rounded text-brand-cyan bg-[#1A1A2E] border-[#2a2a3e] focus:ring-brand-cyan focus:ring-offset-0 h-4 w-4 cursor-pointer"
-                        />
-                        <span className="text-xs font-bold text-[#b4b4d8] select-none">
-                          I have paid ₹{Math.max(0, finalCheckoutAmount - 5)} to Owner
-                        </span>
-                      </label>
+                      {!ownerProfile?.upi_id && (
+                        <p className="text-[9px] text-yellow-500 mt-1">
+                          ⚠️ Owner has not configured their custom UPI; using name fallback.
+                        </p>
+                      )}
                     </div>
                   </div>
 
-                  {/* TRANSFER 2: PLATFORM FEE */}
-                  <div className="bg-[#161622] border border-[#2a2a3e] rounded-xl p-5 flex flex-col justify-between space-y-4">
-                    <div className="space-y-2 font-sans">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-bold font-mono tracking-wider uppercase text-brand-purple">2. PLATFORM FEE</span>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-brand-purple/10 border border-brand-purple/20 text-brand-purple font-bold font-mono">
-                          To Platform
-                        </span>
+                  {/* Unified QR Code */}
+                  <div className="pt-2 border-t border-[#2a2a3e] space-y-3 font-sans">
+                    <div className="flex items-center gap-3 bg-black/20 p-3 rounded-lg">
+                      <div className="p-1.5 bg-white rounded-lg border border-border-dark flex-shrink-0">
+                        <QrCode className="h-16 w-16 text-black" />
                       </div>
-                      
-                      <div className="pt-1">
-                        <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Amount to pay</p>
-                        <p className="text-2xl font-black text-white font-mono">₹{Math.min(5, finalCheckoutAmount)}</p>
-                      </div>
-
-                      <div className="pt-1">
-                        <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Recipient UPI ID</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <code className="text-xs text-white font-mono bg-black/40 px-2 py-1 rounded border border-[#2a2a3e] truncate">
-                            9076055212@fam
-                          </code>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText('9076055212@fam');
-                              toast.success('Platform UPI ID copied! 📋');
-                            }}
-                            className="p-1.5 bg-[#202030] hover:bg-brand-purple/20 hover:text-white text-text-secondary rounded-lg transition"
-                            title="Copy UPI ID"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* QR Code and Checkbox */}
-                    <div className="pt-2 border-t border-border-dark/60 space-y-3 font-sans">
-                      <div className="flex items-center gap-3">
-                        <div className="p-1.5 bg-white rounded-lg border border-border-dark">
-                          <QrCode className="h-14 w-14 text-black" />
-                        </div>
-                        <p className="text-[10px] text-text-secondary leading-relaxed">
-                          Scan to pay the platform administrator. Use <strong>Platform Fee</strong> as transaction note.
+                      <div className="space-y-1">
+                        <p className="text-[11px] text-white leading-tight font-semibold">
+                          Scan single QR to pay
+                        </p>
+                        <p className="text-[10px] text-text-secondary leading-normal">
+                          Funds go directly to the owner's bank account (<strong className="text-brand-cyan">{ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '') || 'venue'}@okaxis`}</strong>).
                         </p>
                       </div>
-
-                      <label className="flex items-center gap-2 p-2.5 rounded-lg bg-[#11111A] border border-[#232338] hover:border-brand-purple/30 cursor-pointer transition">
-                        <input
-                          type="checkbox"
-                          checked={paidPlatform}
-                          onChange={(e) => setPaidPlatform(e.target.checked)}
-                          className="rounded text-brand-purple bg-[#1A1A2E] border-[#2a2a3e] focus:ring-brand-purple focus:ring-offset-0 h-4 w-4 cursor-pointer"
-                        />
-                        <span className="text-xs font-bold text-[#b4b4d8] select-none">
-                          I have paid ₹{Math.min(5, finalCheckoutAmount)} to Platform
-                        </span>
-                      </label>
                     </div>
-                  </div>
 
+                    <label className="flex items-center gap-2.5 p-3 rounded-lg bg-[#11111A] border border-brand-cyan/20 hover:border-brand-cyan/40 cursor-pointer transition">
+                      <input
+                        type="checkbox"
+                        checked={paidOwner && paidPlatform}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setPaidOwner(checked);
+                          setPaidPlatform(checked);
+                        }}
+                        className="rounded text-brand-cyan bg-[#1A1A2E] border-[#2a2a3e] focus:ring-brand-cyan focus:ring-offset-0 h-4.5 w-4.5 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-white select-none leading-tight">
+                        I have paid ₹{finalCheckoutAmount} directly to Owner
+                      </span>
+                    </label>
+                  </div>
                 </div>
 
                 {(!paidOwner || !paidPlatform) && (
-                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex items-center gap-2.5 text-yellow-500 text-xs leading-normal font-sans">
+                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex items-center gap-2.5 text-yellow-500 text-xs leading-normal font-sans justify-center">
                     <AlertTriangle className="h-4.5 w-4.5 shrink-0" />
-                    <span>Please complete both direct UPI transfers and check the confirmation boxes to activate the final booking trigger.</span>
+                    <span>Please complete the UPI transfer and check the confirmation box to activate the booking.</span>
                   </div>
                 )}
               </div>

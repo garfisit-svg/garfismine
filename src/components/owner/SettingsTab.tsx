@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Venue } from '../../types';
-import { Settings, Save, MapPin, Sparkles, Building, Key, BellRing } from 'lucide-react';
+import { Settings, Save, MapPin, Sparkles, Building, Key, BellRing, Trash2, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface SettingsTabProps {
@@ -9,9 +9,9 @@ interface SettingsTabProps {
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
-  const { updateVenueSettings } = useApp();
+  const { updateVenue, deleteVenue } = useApp();
 
-  const [activeSegment, setActiveSegment] = useState<'profile' | 'hours' | 'bank'>('profile');
+  const [activeSegment, setActiveSegment] = useState<'profile' | 'hours' | 'bank' | 'danger'>('profile');
 
   // Input states (initialized from venue info if exists)
   const [venueName, setVenueName] = useState(venue?.name || '');
@@ -21,8 +21,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
   const [pricePerHour, setPricePerHour] = useState(venue?.price_per_hour || 150);
   const [venueType, setVenueType] = useState(venue?.type || 'arena');
 
-  const [operationFrom, setOperationFrom] = useState('09:00');
-  const [operationTo, setOperationTo] = useState('23:00');
+  const [operationFrom, setOperationFrom] = useState(venue?.operating_hours_start || '09:00');
+  const [operationTo, setOperationTo] = useState(venue?.operating_hours_end || '23:00');
 
   // Vault Bank Details (simulated placeholders)
   const [bankNum, setBankNum] = useState('6500 2410 9314 0021');
@@ -38,6 +38,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
       setVenueAmenities(venue.amenities);
       setPricePerHour(venue.price_per_hour);
       setVenueType(venue.type);
+      setOperationFrom(venue.operating_hours_start || '09:00');
+      setOperationTo(venue.operating_hours_end || '23:00');
     }
   }, [venue]);
 
@@ -61,13 +63,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
     e.preventDefault();
     if (!venue) return;
 
-    updateVenueSettings(venue.id, {
+    updateVenue(venue.id, {
       name: venueName,
       address: venueAddress,
       games_available: venueGames,
       amenities: venueAmenities,
       price_per_hour: pricePerHour,
-      type: venueType
+      type: venueType as 'gaming_cafe' | 'turf' | 'both'
     });
 
     toast.success('Venue configuration settings updated successfully!');
@@ -111,6 +113,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
           >
             <Building className="h-4 w-4" />
             <span>Payout Bank details</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSegment('danger')}
+            className={`px-4 py-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 transition cursor-pointer flex-1 md:flex-initial ${activeSegment === 'danger' ? 'bg-red-500/10 text-red-400 border-l-2 border-red-500' : 'text-red-400/70 hover:text-red-400'}`}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Danger Zone (Delete)</span>
           </button>
 
         </div>
@@ -245,11 +255,17 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
 
               <button
                 onClick={() => {
-                  toast.success('Successfully refreshed calendar boundaries!');
+                  if (!venue) return;
+                  updateVenue(venue.id, {
+                    operating_hours_start: operationFrom,
+                    operating_hours_end: operationTo
+                  });
+                  toast.success('Successfully updated operating hours boundaries! 🕒');
                 }}
-                className="px-5 py-2 bg-brand-purple text-white rounded-lg text-xs font-bold uppercase cursor-pointer transition hover:opacity-90"
+                className="px-5 py-2.5 bg-brand-purple text-white rounded-lg text-xs font-bold uppercase cursor-pointer transition hover:opacity-90 flex items-center gap-2"
               >
-                Validate and refresh boundaries
+                <Save className="h-4 w-4" />
+                <span>Save and refresh boundaries</span>
               </button>
             </div>
           )}
@@ -307,6 +323,54 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
               >
                 🔒 Validate secure bank vault specs
               </button>
+            </div>
+          )}
+
+          {activeSegment === 'danger' && (
+            <div className="space-y-6">
+              <h5 className="font-bold text-red-500 text-base font-display flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+                <span>Danger Zone: Deletion & Teardown</span>
+              </h5>
+              
+              {!venue ? (
+                <p className="text-text-secondary">No active venue found to delete.</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl space-y-2 leading-relaxed">
+                    <p className="font-bold">⚠️ Warning: Permanent Action!</p>
+                    <p>
+                      You are about to permanently delete the arena <strong>"{venue.name}"</strong>. This will instantly remove:
+                    </p>
+                    <ul className="list-disc pl-5 space-y-1 text-xs">
+                      <li>The venue listing from player browse and explore pages.</li>
+                      <li>All associated gaming resources, turfs, and equipment slots.</li>
+                      <li>Any active coupon codes or offers linked to this arena.</li>
+                    </ul>
+                    <p className="font-semibold text-[11px] uppercase tracking-wider mt-2">
+                      This action cannot be undone. All active player holds will be canceled.
+                    </p>
+                  </div>
+
+                  <div className="pt-2 flex justify-start">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Are you absolutely sure you want to delete "${venue.name}"? This action is permanent and irreversible!`)) {
+                          deleteVenue(venue.id);
+                          toast.success('Venue and all slots successfully deleted! 🗑️');
+                          // Redirect/reset tab or force refresh
+                          setActiveSegment('profile');
+                        }
+                      }}
+                      className="px-5 py-3 bg-red-600 hover:bg-red-500 text-white font-bold uppercase rounded-lg text-xs cursor-pointer transition flex items-center gap-1.5 shadow-lg shadow-red-600/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Permanently Delete "{venue.name}"</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

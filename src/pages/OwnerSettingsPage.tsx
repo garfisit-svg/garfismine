@@ -303,7 +303,7 @@ export const OwnerSettingsPage: React.FC = () => {
                     />
                   </div>
                   <p className="text-[11px] text-[#8e8ea8] mt-2 leading-relaxed">
-                    💡 <strong>Direct routing active:</strong> When customers book online, the venue's portion (total booking amount minus ₹5 platform fee) will go directly to this UPI address, while the remaining ₹5 platform fee will go directly to the platform admin (<strong className="text-cyan-400">9076055212@fam</strong>).
+                    💡 <strong>Direct routing active:</strong> When customers book online, the entire booking amount (including the ₹5 platform fee) goes directly to this UPI address. The ₹5 platform fee is mentioned in their bill breakdown but is received entirely by you.
                   </p>
                 </div>
 

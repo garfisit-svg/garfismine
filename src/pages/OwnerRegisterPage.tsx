@@ -34,6 +34,8 @@ export const OwnerRegisterPage: React.FC = () => {
     }
   }, [detectedCity]);
   const [basePrice, setBasePrice] = useState(150);
+  const [operatingHoursStart, setOperatingHoursStart] = useState('09:00');
+  const [operatingHoursEnd, setOperatingHoursEnd] = useState('23:00');
   
   // Resources initial list
   const [resourceNames, setResourceNames] = useState<string[]>(['Station 1', 'Station 2']);
@@ -151,15 +153,17 @@ export const OwnerRegisterPage: React.FC = () => {
         games_available: venueType === 'gaming_cafe' ? ['valorant', 'csgo', 'gta5'] : ['football', 'cricket'],
         amenities: selectedAmenities,
         state: 'Maharashtra',
-        operating_hours_start: '09:00',
-        operating_hours_end: '23:00',
+        operating_hours_start: operatingHoursStart,
+        operating_hours_end: operatingHoursEnd,
         operating_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
         gallery_images: []
       };
 
       const resourcesData = resourceNames.map((name, i) => ({
         name,
-        type: venueType === 'gaming_cafe' ? ('pc' as const) : ('pitch' as const),
+        type: venueType === 'gaming_cafe' ? ('pc' as const) : ('turf' as const),
+        price_per_hour: Number(basePrice) || 150,
+        is_active: true,
         specifications: resourceSpecs[i] || 'High performance rig details'
       }));
 
@@ -453,7 +457,7 @@ export const OwnerRegisterPage: React.FC = () => {
                   <div className="bg-[#12121A] border border-cyan-500/25 p-5 rounded-xl space-y-3">
                     <div className="flex items-center gap-2 text-cyan-400 font-sans">
                       <span className="font-mono text-base font-black">₹</span>
-                      <label className="block text-xs font-bold uppercase tracking-wider">Business UPI ID (for Direct Split Settlement)</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider">Business UPI ID (for Direct Customer Payments)</label>
                     </div>
                     <input
                       type="text"
@@ -464,7 +468,7 @@ export const OwnerRegisterPage: React.FC = () => {
                       required
                     />
                     <p className="text-[11px] text-[#8e8ea8] leading-relaxed font-sans">
-                      💡 <strong>Instant direct routing:</strong> Booking revenues are sent directly to this address, minus the ₹5 platform fee which is routed directly to the administrator (<strong className="text-cyan-400">9076055212@fam</strong>).
+                      💡 <strong>Instant direct routing:</strong> Booking payments (including the ₹5 platform fee) are sent directly to this address.
                     </p>
                   </div>
 
@@ -539,6 +543,30 @@ export const OwnerRegisterPage: React.FC = () => {
                           onChange={e => setBasePrice(Number(e.target.value))}
                         />
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Operating Hours */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Operating Hours Start (Open)</label>
+                      <input
+                        type="time"
+                        className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none focus:border-brand-purple font-mono"
+                        value={operatingHoursStart}
+                        onChange={e => setOperatingHoursStart(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Operating Hours End (Close)</label>
+                      <input
+                        type="time"
+                        className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none focus:border-brand-purple font-mono"
+                        value={operatingHoursEnd}
+                        onChange={e => setOperatingHoursEnd(e.target.value)}
+                        required
+                      />
                     </div>
                   </div>
 

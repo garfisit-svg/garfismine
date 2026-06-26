@@ -55,11 +55,13 @@ export default function App() {
       const role = currentUser.role;
 
       if (role === 'customer') {
-        const isOwnerOrAdminPath = location.pathname.startsWith('/owner') || 
-                                   location.pathname === '/owner-dashboard' || 
-                                   location.pathname === '/garf-hq-2025' || 
-                                   location.pathname === '/admin-dashboard';
-        if (isOwnerOrAdminPath) {
+        const allowedOwnerPaths = ['/owner/login', '/owner/signup', '/owner/forgot-password', '/owner/register'];
+        const isForbiddenOwnerOrAdminPath = 
+          (location.pathname.startsWith('/owner') && !allowedOwnerPaths.includes(location.pathname)) || 
+          location.pathname === '/owner-dashboard' || 
+          location.pathname === '/garf-hq-2025' || 
+          location.pathname === '/admin-dashboard';
+        if (isForbiddenOwnerOrAdminPath) {
           navigate('/');
         }
       } else if (role === 'owner' || role === 'owner_pending') {

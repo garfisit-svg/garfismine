@@ -125,7 +125,7 @@ export const OwnerLoginPage: React.FC = () => {
                       User Login →
                     </Link>
                     <Link
-                      to="/owner/signup"
+                      to="/owner/register"
                       className="text-center py-2 bg-cyan-950 border border-cyan-500/30 text-cyan-400 text-xs font-bold rounded-lg hover:bg-cyan-900/30 block"
                     >
                       Register My Venue →

@@ -56,13 +56,16 @@ export const SlotsTab: React.FC<SlotsTabProps> = ({ venue }) => {
     return dates;
   }, [weekOffset]);
 
-  // Time slots 9 AM to 9 PM
+  // Dynamic operating hours
   const hourlyTimings = useMemo(() => {
-    return Array.from({ length: 13 }, (_, i) => {
-      const hour = i + 9;
+    const sHour = venue ? parseInt((venue.operating_hours_start || '09:00').split(':')[0]) || 9 : 9;
+    const eHour = venue ? parseInt((venue.operating_hours_end || '23:00').split(':')[0]) || 23 : 23;
+    const length = Math.max(1, eHour - sHour);
+    return Array.from({ length }, (_, i) => {
+      const hour = i + sHour;
       return `${hour < 10 ? '0' : ''}${hour}:00`;
     });
-  }, []);
+  }, [venue]);
 
   // Bulk parameters
   const [bulkDate, setBulkDate] = useState(new Date().toISOString().split('T')[0]);

@@ -54,6 +54,7 @@ interface AppContextType {
     turfs: Array<Omit<TurfDetails, 'id' | 'venue_id' | 'created_at' | 'updated_at'>>
   ) => Promise<string>;
   updateVenue: (venueId: string, venueData: Partial<Venue>) => void;
+  deleteVenue: (venueId: string) => void;
   addResource: (venueId: string, resource: Omit<VenueResource, 'id' | 'venue_id' | 'created_at'>) => void;
   updateResource: (resourceId: string, resourceData: Partial<VenueResource>) => void;
   deleteResource: (resourceId: string) => void;
@@ -1000,7 +1001,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const newRes: VenueResource[] = resourcesData.map((res, i) => ({
+      price_per_hour: Number(venueData.price_per_hour) || 150,
+      is_active: true,
       ...res,
+      type: ((res.type as string) === 'pitch') ? ('turf' as const) : res.type,
       id: `res-${vId}-${i}`,
       venue_id: vId,
       sort_order: i + 1,
@@ -1129,6 +1133,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateVenue = (venueId: string, venueData: Partial<Venue>) => {
     setVenues(prev => prev.map(v => v.id === venueId ? { ...v, ...venueData } : v));
+  };
+
+  const deleteVenue = (venueId: string) => {
+    setVenues(prev => prev.filter(v => v.id !== venueId));
+    setResources(prev => prev.filter(r => r.venue_id !== venueId));
+    setSlots(prev => prev.filter(s => s.venue_id !== venueId));
   };
 
   const addResource = (venueIdOrObj: any, resource?: Omit<VenueResource, 'id' | 'venue_id' | 'created_at'>) => {
@@ -3061,7 +3071,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider value={{
       profiles, venues, resources, slots, bookings, reviews, coinTransactions, offers, notifications, adminLogs, currentUser,
       signUp, logIn, logOut, logoutUser: logOut, updateProfile, deleteAccount,
-      registerVenue, registerDetailedVenue, updateVenue, addResource, updateResource, deleteResource, createOffer, deactivateOffer, replyToReview,
+      registerVenue, registerDetailedVenue, updateVenue, deleteVenue, addResource, updateResource, deleteResource, createOffer, deactivateOffer, replyToReview,
       verifyVenue, rejectVenue, toggleFeatureVenue, suspendVenue, reactivateVenue, changeUserRole, suspendUser, reactivateUser, adjustUserCoins, updatePlatformSettings,
       createBookingHold, confirmOnlineBooking, cancelBooking,
       ownerCheckIn, ownerExtendHold, ownerReleaseSlot, addWalkInBooking, ownerNoShow, ownerCompleteBooking, bulkBlockSlots, bulkUnblockSlots, generateSlotsForNext7Days,

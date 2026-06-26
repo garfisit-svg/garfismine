@@ -73,8 +73,8 @@ export const VenueDetailPage: React.FC = () => {
     const currentHr = now.getHours();
     const currentMin = now.getMinutes();
 
-    const [startHr, startMin] = venue.operating_hours_start.split(':').map(Number);
-    const [endHr, endMin] = venue.operating_hours_end.split(':').map(Number);
+    const [startHr, startMin] = (venue.operating_hours_start || '09:00').split(':').map(Number);
+    const [endHr, endMin] = (venue.operating_hours_end || '23:00').split(':').map(Number);
 
     const startVal = startHr * 60 + startMin;
     const endVal = endHr * 60 + endMin;
