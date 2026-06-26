@@ -197,7 +197,7 @@ export const OwnerRegisterPage: React.FC = () => {
             List Your Arena & <span className="text-gradient">Maximize Occupancy</span>
           </h1>
           <p className="text-text-secondary mt-3 sm:text-lg max-w-2xl mx-auto">
-            Bring high-density customer flows to your gaming cafe, VR hub, esports lounge, or sports turf.
+            Bring high-density customer flows to your gaming cafe, VR hub, esports lounge, or console arcade.
           </p>
         </div>
 
@@ -396,7 +396,7 @@ export const OwnerRegisterPage: React.FC = () => {
                       <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Venue Name</label>
                       <input
                         type="text"
-                        placeholder="e.g. Havoc Elite Gaming Café, Kickoff Astro Turf"
+                        placeholder="e.g. Havoc Elite Gaming Café, Hyperion Esports"
                         className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none focus:border-brand-purple"
                         value={venueName}
                         onChange={e => setVenueName(e.target.value)}
@@ -419,7 +419,7 @@ export const OwnerRegisterPage: React.FC = () => {
                     <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Arena Bio / Catchy Description</label>
                     <textarea
                       rows={3}
-                      placeholder="Explain features, specs, game collection or pitches dimension stats. Displayed transparently to players booking."
+                      placeholder="Explain features, specs, game collection or hardware specs. Displayed transparently to players booking."
                       className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none focus:border-brand-purple"
                       value={description}
                       onChange={e => setDescription(e.target.value)}
@@ -443,7 +443,7 @@ export const OwnerRegisterPage: React.FC = () => {
                       <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Help Desk Email</label>
                       <input
                         type="email"
-                        placeholder="e.g. contact@kickoffturf.com"
+                        placeholder="e.g. contact@havocgaming.com"
                         className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none focus:border-brand-purple"
                         value={venueEmail}
                         onChange={e => setVenueEmail(e.target.value)}
@@ -628,7 +628,7 @@ export const OwnerRegisterPage: React.FC = () => {
                       Configure Initial Station Layout Slots
                     </h4>
                     <p className="text-xs text-text-secondary leading-relaxed">
-                      Register bookable stations now. You can customize them or add unlimited more from the Resources tab later! For example: PC-01 Core System, Turf A Turf Pitch, Arcade Booth 1.
+                      Register bookable stations now. You can customize them or add unlimited more from the Resources tab later! For example: PC-01 Core System, PS5 Console Station 1, Arcade Booth 1.
                     </p>
                   </div>
 

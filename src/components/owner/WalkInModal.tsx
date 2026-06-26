@@ -262,7 +262,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, prese
                 </div>
               ) : (
                 <div className="text-center py-6 text-xs text-text-secondary bg-[#12121A] rounded-xl border border-dashed border-[#2a2a3e]">
-                  💡 select a computer rig or turf above to load day-specific available slots
+                  💡 select a computer rig or console station above to load day-specific available slots
                 </div>
               )}
 

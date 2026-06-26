@@ -40,7 +40,7 @@ export const ExplorePage: React.FC = () => {
     const typeParam = searchParams.get('type');
     const cityParam = searchParams.get('city');
     if (typeParam) {
-      setSelectedType(typeParam === 'gaming_cafe' ? 'gaming_cafe' : (typeParam === 'turf' ? 'turf' : 'All'));
+      setSelectedType(['pc', 'ps5', 'vr'].includes(typeParam) ? typeParam : 'All');
     }
     if (cityParam) {
       setSelectedCity(cityParam);
@@ -52,8 +52,7 @@ export const ExplorePage: React.FC = () => {
   // Options Definitions
   const citiesList = ['Mumbai', 'Delhi', 'Bangalore', 'Hyderabad', 'Pune', 'Chennai', 'Kolkata', 'Jaipur'];
   const gamesOptions = [
-    'valorant', 'csgo', 'bgmi', 'gta5', 'fifa', 'fortnite', 'minecraft', 'warzone',
-    'cricket', 'football', 'badminton', 'basketball'
+    'valorant', 'csgo', 'bgmi', 'gta5', 'fifa', 'fortnite', 'minecraft', 'warzone'
   ];
   const amenitiesOptions = ['wifi', 'ac', 'parking', 'food_counter', 'washroom', 'lockers', 'cctv', 'power_backup'];
 
@@ -191,7 +190,7 @@ export const ExplorePage: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
         <div>
           <h1 className="text-3xl sm:text-4xl font-display font-extrabold text-white">Find Your Next <span className="text-gradient">Battlefield</span></h1>
-          <p className="text-text-secondary text-sm sm:text-base mt-2">Discover verified computing cafes or cricket/football spots near you</p>
+          <p className="text-text-secondary text-sm sm:text-base mt-2">Discover verified computing cafes or high-spec esports lounges near you</p>
         </div>
 
         {/* Mobile quick toggles */}
@@ -362,7 +361,7 @@ export const ExplorePage: React.FC = () => {
               </span>
               <input
                 type="text"
-                placeholder="Search by arena name, address, game (e.g. valorant, cricket), city..."
+                placeholder="Search by arena name, address, game (e.g. valorant, bgmi), city..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full bg-[#161622] border border-[#2a2a3e] focus:border-brand-purple focus:outline-none rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder-text-secondary/60 transition font-sans"
@@ -640,15 +639,20 @@ export const ExplorePage: React.FC = () => {
 
             {/* Type Option */}
             <div className="space-y-3">
-              <h4 className="text-xs uppercase font-bold text-brand-cyan tracking-wider font-mono">Category</h4>
+              <h4 className="text-xs uppercase font-bold text-brand-cyan tracking-wider font-mono">Station Type</h4>
               <div className="flex flex-wrap gap-2">
-                {['All', 'gaming_cafe', 'turf'].map(type => (
+                {[
+                  { label: 'All', value: 'All' },
+                  { label: 'Esports PC', value: 'pc' },
+                  { label: 'Console', value: 'ps5' },
+                  { label: 'VR Station', value: 'vr' }
+                ].map(type => (
                   <button
-                    key={type}
-                    onClick={() => setSelectedType(type)}
-                    className={`px-4 py-2 border rounded-full text-xs font-semibold ${selectedType === type ? 'border-brand-purple bg-brand-purple/10 text-white' : 'border-[#2a2a3e] bg-[#161622] text-text-secondary'}`}
+                    key={type.value}
+                    onClick={() => setSelectedType(type.value)}
+                    className={`px-4 py-2 border rounded-full text-xs font-semibold ${selectedType === type.value ? 'border-brand-purple bg-brand-purple/10 text-white' : 'border-[#2a2a3e] bg-[#161622] text-text-secondary'}`}
                   >
-                    {type === 'All' ? 'All' : formatKeyName(type)}
+                    {type.label}
                   </button>
                 ))}
               </div>

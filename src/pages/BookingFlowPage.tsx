@@ -214,7 +214,7 @@ export const BookingFlowPage: React.FC = () => {
   // Advance to Step 2
   const handleProceedStep2 = () => {
     if (!selectedResource || selectedTimes.length === 0) {
-      toast.error('Select your PC/Turf station and at least 1 slot');
+      toast.error('Select your gaming station and at least 1 slot');
       return;
     }
     setStep(2);
@@ -305,7 +305,7 @@ export const BookingFlowPage: React.FC = () => {
             {/* Header Titles */}
             <div>
               <h1 className="text-3xl font-display font-extrabold tracking-tight">Configure Your <span className="text-gradient">Session</span></h1>
-              <p className="text-text-secondary text-xs sm:text-sm mt-1">Pick date, select PC or turf station, and secure consecutive slots</p>
+              <p className="text-text-secondary text-xs sm:text-sm mt-1">Pick date, select gaming station, and secure consecutive slots</p>
             </div>
 
             {/* A. DATE HORIZ PILLS */}
@@ -366,7 +366,7 @@ export const BookingFlowPage: React.FC = () => {
               
               {!selectedResource ? (
                 <div className="p-8 bg-[#12121A]/40 border border-dashed border-[#2a2a3e] rounded-xl text-center text-text-secondary text-sm">
-                  Please pick your target PC/Turf station card above to load active slot matrices.
+                  Please pick your target gaming station card above to load active slot matrices.
                 </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
@@ -494,7 +494,7 @@ export const BookingFlowPage: React.FC = () => {
                 <span>Change Selections</span>
               </button>
               <h1 className="text-3xl font-display font-extrabold tracking-tight text-white">Review & <span className="text-gradient">Secure Booking</span></h1>
-              <p className="text-text-secondary text-xs sm:text-sm mt-1">Select checkout gateways to secure your turf or cafe play slot</p>
+              <p className="text-text-secondary text-xs sm:text-sm mt-1">Select checkout gateways to secure your cafe play slot</p>
             </div>
 
             {/* B. GATEWAY INFO */}
@@ -743,7 +743,7 @@ export const BookingFlowPage: React.FC = () => {
                 <ShieldCheck className="h-10 w-10 text-brand-green" />
               </div>
               <h1 className="text-4xl font-display font-black text-white">Booking Confirmed! 🎉</h1>
-              <p className="text-text-secondary text-sm sm:text-base">Your computing rig/turf hours matches are permanently locked now.</p>
+              <p className="text-text-secondary text-sm sm:text-base">Your gaming station hours matches are permanently locked now.</p>
             </div>
           ) : (
             <div className="text-center space-y-4">

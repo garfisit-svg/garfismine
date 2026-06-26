@@ -50,7 +50,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
 
   // Checklist arrays
   const popularGames = ['Valorant', 'CS2 / Counter-Strike', 'Dota 2', 'FC 25 (FIFA)', 'Call of Duty: Warzone', 'Minecraft Esports', 'Tekken 8', 'F1 2024 Grid'];
-  const baseAmenities = ['RGB Gaming Chairs', 'RTX High-FPS PCs', 'Steam Esports Library', 'Astro Turf pitch shoe renting', 'Fully Air Conditioned Cooled Zone', 'Snack Bar / Soft drinks vending', 'High-Speed fiber Dedicated Link', 'Free High-speed Wi-Fi Zone', 'Shower Rooms & Locker vaults'];
+  const baseAmenities = ['RGB Gaming Chairs', 'RTX High-FPS PCs', 'Steam Esports Library', 'Console controller renting', 'Fully Air Conditioned Cooled Zone', 'Snack Bar / Soft drinks vending', 'High-Speed fiber Dedicated Link', 'Free High-speed Wi-Fi Zone', 'Shower Rooms & Locker vaults'];
 
   const toggleGame = (game: string) => {
     setVenueGames(prev =>
@@ -335,7 +335,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
                     </p>
                     <ul className="list-disc pl-5 space-y-1 text-xs">
                       <li>The venue listing from player browse and explore pages.</li>
-                      <li>All associated gaming resources, turfs, and equipment slots.</li>
+                      <li>All associated gaming resources, consoles, and equipment slots.</li>
                       <li>Any active coupon codes or offers linked to this arena.</li>
                     </ul>
                     <p className="font-semibold text-[11px] uppercase tracking-wider mt-2">

@@ -16,7 +16,7 @@ export const ResourcesTab: React.FC<ResourcesTabProps> = ({ venue }) => {
 
   // Form states
   const [resName, setResName] = useState('');
-  const [resType, setResType] = useState<'pc' | 'ps5' | 'xbox' | 'vr' | 'turf'>('pc');
+  const [resType, setResType] = useState<'pc' | 'ps5' | 'xbox' | 'vr'>('pc');
   const [resSpecs, setResSpecs] = useState('');
   const [resPrice, setResPrice] = useState('150');
 

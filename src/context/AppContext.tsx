@@ -1642,7 +1642,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Notify venue owner
     const matchedV = venues.find(v => v.id === finalB.venue_id);
     if (matchedV) {
-      addNotificationSilently(matchedV.owner_id, 'New Booking Confirmed 🎮', `Booking ref ${finalB.booking_ref} created for PC/Turf. Check details!`, 'booking');
+      addNotificationSilently(matchedV.owner_id, 'New Booking Confirmed 🎮', `Booking ref ${finalB.booking_ref} created for PC/Console. Check details!`, 'booking');
     }
 
     return finalB;

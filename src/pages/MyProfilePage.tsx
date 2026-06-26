@@ -92,7 +92,7 @@ export const MyProfilePage: React.FC = () => {
   };
 
   const getWhatsAppShareUrl = () => {
-    const text = `Hey! Book high-spec gaming cafes and elite sports turfs on GARF! Use my code ${currentUser.referral_code} when signing up and get 50 free coins! playgarf.com`;
+    const text = `Hey! Book high-spec gaming cafes on GARF! Use my code ${currentUser.referral_code} when signing up and get 50 free coins! playgarf.com`;
     return `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
   };
 

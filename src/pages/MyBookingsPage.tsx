@@ -154,7 +154,7 @@ export const MyBookingsPage: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-6 border-b border-[#2a2a3e]">
         <div>
           <h1 className="text-3xl font-display font-extrabold tracking-tight">My Profile <span className="text-gradient">Bookings</span></h1>
-          <p className="text-text-secondary text-xs sm:text-sm mt-1"> securing coordinates for computing chairs and athletic turfs</p>
+          <p className="text-text-secondary text-xs sm:text-sm mt-1"> securing coordinates for computing chairs and console seats</p>
         </div>
 
         {/* 3 mini stats cards */}
