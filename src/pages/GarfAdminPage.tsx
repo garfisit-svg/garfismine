@@ -25,7 +25,6 @@ export const GarfAdminPage: React.FC = () => {
   // Route security checks
   const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
   const [supabaseLoading, setSupabaseLoading] = useState<boolean>(true);
-  const [supabaseUser, setSupabaseUser] = useState<any>(null);
 
   // Verification dialog states
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -39,9 +38,8 @@ export const GarfAdminPage: React.FC = () => {
   const [confirmDeleteType, setConfirmDeleteType] = useState<'venue' | 'booking' | 'user' | null>(null);
   const [cancelReasonInput, setCancelReasonInput] = useState('Administrative resolution');
 
-  // Emulator authentication fields for garfisit@gmail.com
-  const [loginEmail, setLoginEmail] = useState('garfisit@gmail.com');
-  const [loginPassword, setLoginPassword] = useState('');
+  // Root Administrator login password
+  const [adminPassword, setAdminPassword] = useState('');
 
   // Active dashboard tab state
   const [activeTab, setActiveTab] = useState<'overview' | 'approvals' | 'approved' | 'users' | 'bookings' | 'supabase'>('overview');
@@ -70,11 +68,8 @@ export const GarfAdminPage: React.FC = () => {
       if (isSupabaseConfigured && supabase) {
         try {
           const { data: { user }, error } = await supabase.auth.getUser();
-          if (!error && user) {
-            setSupabaseUser(user);
-            if (user.email === 'garfisit@gmail.com') {
-              setIsAuthorized(true);
-            }
+          if (!error && user && user.email === 'garfisit@gmail.com') {
+            setIsAuthorized(true);
           }
         } catch (err) {
           console.error('Supabase Auth Check error:', err);
@@ -89,57 +84,25 @@ export const GarfAdminPage: React.FC = () => {
   useEffect(() => {
     if (currentUser && currentUser.email?.toLowerCase().trim() === 'garfisit@gmail.com') {
       setIsAuthorized(true);
-    } else if (!isSupabaseConfigured) {
+    } else {
       setIsAuthorized(false);
     }
   }, [currentUser]);
 
-  // Handle local emulator login as garfisit@gmail.com
-  const handleLocalLogin = async (e: React.FormEvent) => {
+  // Handle local root password login
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loginEmail.trim().toLowerCase() !== 'garfisit@gmail.com') {
-      toast.error('Only the email address "garfisit@gmail.com" is authorized for administrator dashboard access.');
+    if (adminPassword !== 'Garfismine@1234') {
+      toast.error('Incorrect Administrator Access Key. Access Denied.');
       return;
     }
+    const load = toast.loading('Authenticating Root Console...');
     try {
-      await logIn(loginEmail.trim());
+      await logIn('garfisit@gmail.com');
       setIsAuthorized(true);
-      toast.success('Successfully authenticated as root administrator (Emulator Mode).');
+      toast.success('Access Granted. Welcome back, Administrator.', { id: load });
     } catch (err) {
-      toast.error('Authentication failed. Check your local state.');
-    }
-  };
-
-  // Handle Supabase Auth Sign In (if configured)
-  const handleSupabaseLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isSupabaseConfigured || !supabase) {
-      toast.error('Supabase credentials are not configured.');
-      return;
-    }
-    if (loginEmail.trim().toLowerCase() !== 'garfisit@gmail.com') {
-      toast.error('Only the email address "garfisit@gmail.com" is authorized for administrator dashboard access.');
-      return;
-    }
-    const load = toast.loading('Authenticating via Supabase Security...');
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password: loginPassword,
-      });
-      if (error) throw error;
-      if (data.user) {
-        setSupabaseUser(data.user);
-        if (data.user.email === 'garfisit@gmail.com') {
-          setIsAuthorized(true);
-          await logIn('garfisit@gmail.com'); // Synchronize AppContext state too
-          toast.success('Successfully authenticated via secure Supabase channel!', { id: load });
-        } else {
-          toast.error('Authenticated user email matches an unauthorized profile. Access Denied.', { id: load });
-        }
-      }
-    } catch (err: any) {
-      toast.error(`Supabase Auth failed: ${err.message || 'Check password and try again.'}`, { id: load });
+      toast.error('Authentication synchronization failed.', { id: load });
     }
   };
 
@@ -164,57 +127,41 @@ export const GarfAdminPage: React.FC = () => {
         
         <div className="space-y-2">
           <h1 className="text-3xl font-display font-black tracking-tight text-white uppercase">GARF <span className="text-red-500">ROOT SECURE</span></h1>
-          <p className="text-text-secondary text-sm">This channel is strictly gated. Only the email <span className="text-brand-cyan font-mono font-bold">garfisit@gmail.com</span> has administrator access.</p>
+          <p className="text-text-secondary text-sm">This channel is strictly gated. Enter the console access key to unlock the system.</p>
         </div>
 
         {/* SECURITY SIGN IN PANEL */}
         <div className="bg-[#12121A] border border-[#232338] p-6 sm:p-8 rounded-2xl text-left space-y-6 shadow-2xl">
           <div className="border-b border-[#2a2a3e] pb-3 flex justify-between items-center">
-            <span className="text-xs font-mono text-text-secondary uppercase tracking-wider font-semibold">GATEWAY AUTHENTICATION</span>
-            <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${isSupabaseConfigured ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
-              {isSupabaseConfigured ? 'Supabase Secure' : 'Sandbox Emulator'}
+            <span className="text-xs font-mono text-text-secondary uppercase tracking-wider font-semibold">CONSOLE GATEWAY ACCESS</span>
+            <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-brand-purple/10 text-brand-purple border border-brand-purple/20">
+              Root Authority Gated
             </span>
           </div>
 
-          <form onSubmit={isSupabaseConfigured ? handleSupabaseLogin : handleLocalLogin} className="space-y-4">
+          <form onSubmit={handleAdminLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary">Authorized Email Address</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary">Administrator Access Key (Password)</label>
               <input
-                type="email"
+                type="password"
                 required
-                className="w-full bg-[#161622] border border-[#2a2a3e] rounded-xl p-3 text-sm text-white outline-none focus:border-brand-purple"
-                placeholder="garfisit@gmail.com"
-                value={loginEmail}
-                onChange={e => setLoginEmail(e.target.value)}
+                className="w-full bg-[#161622] border border-[#2a2a3e] rounded-xl p-3 text-sm text-white outline-none focus:border-brand-purple font-mono"
+                placeholder="••••••••••••"
+                value={adminPassword}
+                onChange={e => setAdminPassword(e.target.value)}
               />
             </div>
 
-            {isSupabaseConfigured && (
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary">Supabase Account Password</label>
-                <input
-                  type="password"
-                  required
-                  className="w-full bg-[#161622] border border-[#2a2a3e] rounded-xl p-3 text-sm text-white outline-none focus:border-brand-purple font-mono"
-                  placeholder="••••••••••••"
-                  value={loginPassword}
-                  onChange={e => setLoginPassword(e.target.value)}
-                />
-              </div>
-            )}
-
-            {!isSupabaseConfigured && (
-              <div className="p-3.5 bg-amber-500/5 border border-amber-500/10 rounded-xl text-xs text-amber-400/90 leading-relaxed font-sans flex gap-2">
-                <Info className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                <span>Supabase configurations are missing. Using sandbox login mode. Simply submit the authorized email to simulate full admin panel capabilities.</span>
-              </div>
-            )}
+            <div className="p-3.5 bg-brand-purple/5 border border-brand-purple/10 rounded-xl text-xs text-[#a3a3c2] leading-relaxed font-sans flex gap-2">
+              <Info className="h-4 w-4 text-brand-purple flex-shrink-0 mt-0.5" />
+              <span>No email input is required. Submit the secure admin passkey to assume root credentials and manage the gaming infrastructure.</span>
+            </div>
 
             <button
               type="submit"
               className="w-full py-3.5 bg-gradient-to-r from-brand-purple to-brand-pink text-white rounded-xl font-bold font-sans text-xs uppercase tracking-wider hover:brightness-110 shadow-lg cursor-pointer transition active:scale-98"
             >
-              Request Root Gateway Entry
+              Verify Access Key & Enter Console
             </button>
           </form>
         </div>
