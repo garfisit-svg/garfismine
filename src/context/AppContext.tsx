@@ -803,7 +803,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       email: data.email,
       phone: data.phone,
       avatar_url: data.avatar_url || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(data.full_name)}`,
-      role: data.role || 'customer',
+      role: data.email?.toLowerCase().trim() === 'garfisit@gmail.com' ? 'admin' : (data.role || 'customer'),
       garf_coins: 10, // welcome bonus
       referral_code: myRefCode,
       referred_by: null,
@@ -903,7 +903,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         email: cleanEmail,
         phone: '1234567890',
         avatar_url: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${username}`,
-        role: cleanEmail.includes('admin') ? 'admin' : (cleanEmail.includes('owner') ? 'owner' : 'customer'),
+        role: cleanEmail === 'garfisit@gmail.com' || cleanEmail.includes('admin') ? 'admin' : (cleanEmail.includes('owner') ? 'owner' : 'customer'),
         garf_coins: 150,
         referral_code: myRefCode,
         referred_by: null,

@@ -14,7 +14,7 @@ import { MyBookingsPage } from './pages/MyBookingsPage';
 import { MyProfilePage } from './pages/MyProfilePage';
 import { OwnerDashboardPage } from './pages/OwnerDashboardPage';
 import { OwnerRegisterPage } from './pages/OwnerRegisterPage';
-import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { GarfAdminPage } from './pages/GarfAdminPage';
 import { GarfSquadPage } from './pages/GarfSquadPage';
 import { 
   AboutPage, ContactPage, FAQPage, PrivacyPage, TermsPage, RefundPolicyPage 
@@ -60,7 +60,8 @@ export default function App() {
           (location.pathname.startsWith('/owner') && !allowedOwnerPaths.includes(location.pathname)) || 
           location.pathname === '/owner-dashboard' || 
           location.pathname === '/garf-hq-2025' || 
-          location.pathname === '/admin-dashboard';
+          location.pathname === '/admin-dashboard' ||
+          location.pathname === '/garfadmin';
         if (isForbiddenOwnerOrAdminPath) {
           navigate('/');
         }
@@ -72,7 +73,7 @@ export default function App() {
         }
 
         const forbiddenForOwner = [
-          '/', '/explore', '/booking', '/my-bookings', '/my-profile', '/squad', '/login', '/signup'
+          '/', '/explore', '/booking', '/my-bookings', '/my-profile', '/squad', '/login', '/signup', '/garfadmin'
         ];
         
         const isForbidden = forbiddenForOwner.some(path => 
@@ -361,8 +362,7 @@ export default function App() {
           {/* Dashboard portals */}
           <Route path="/owner/register" element={<OwnerRegisterPage />} />
           <Route path="/owner-dashboard" element={<OwnerDashboardPage />} />
-          <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
-          <Route path="/garf-hq-2025" element={<AdminDashboardPage />} />
+          <Route path="/garfadmin" element={<GarfAdminPage />} />
           <Route path="/squad" element={<GarfSquadPage />} />
 
           {/* Static Pages Info */}
