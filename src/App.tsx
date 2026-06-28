@@ -42,6 +42,10 @@ export default function App() {
 
   // 🛡️ ROLE INSULATION REDIRECTS CONTROLLER (Rule 1 & Rule 2)
   useEffect(() => {
+    if (location.pathname === '/garfadmin') {
+      return;
+    }
+
     if (!currentUser) {
       const publicPaths = [
         '/', '/login', '/signup', '/explore', '/about', '/contact', '/faq', '/privacy', '/terms', '/refund',
