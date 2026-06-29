@@ -19,7 +19,7 @@ export const GarfAdminPage: React.FC = () => {
     currentUser, profiles, venues, bookings, platformFee, setPlatformFee, 
     welcomeBonusCoins, setWelcomeBonusCoins, birthdayBonusCoins, setBirthdayBonusCoins,
     updateUserRole, toggleUserSuspension, toggleVenueVerification, toggleVenueActiveState,
-    rejectVenue, deleteVenue, updateVenue, cancelBooking, logIn, logOut
+    rejectVenue, deleteVenue, updateVenue, cancelBooking, logIn, logOut, adminLogs
   } = useApp();
 
   // Route security checks
@@ -219,28 +219,42 @@ export const GarfAdminPage: React.FC = () => {
     return textSearch && statusMatch && venueMatch;
   });
 
-  // Graph Data Seeds
-  const registrationChartData = [
-    { name: 'Mon', Users: Math.max(1, Math.round(totalUsersCount * 0.1)), Bookings: Math.max(1, Math.round(totalBookingsCount * 0.15)) },
-    { name: 'Tue', Users: Math.max(2, Math.round(totalUsersCount * 0.2)), Bookings: Math.max(1, Math.round(totalBookingsCount * 0.2)) },
-    { name: 'Wed', Users: Math.max(3, Math.round(totalUsersCount * 0.35)), Bookings: Math.max(3, Math.round(totalBookingsCount * 0.32)) },
-    { name: 'Thu', Users: Math.max(4, Math.round(totalUsersCount * 0.5)), Bookings: Math.max(4, Math.round(totalBookingsCount * 0.45)) },
-    { name: 'Fri', Users: Math.max(5, Math.round(totalUsersCount * 0.65)), Bookings: Math.max(6, Math.round(totalBookingsCount * 0.6)) },
-    { name: 'Sat', Users: Math.max(7, Math.round(totalUsersCount * 0.85)), Bookings: Math.max(8, Math.round(totalBookingsCount * 0.85)) },
-    { name: 'Sun', Users: totalUsersCount, Bookings: totalBookingsCount }
-  ];
+  // Real-time Dynamic Graph Calculations
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    return d;
+  }).reverse();
 
-  const venueStatsData = approvedVenuesCount > 0 
-    ? venues.filter(v => v.is_verified).map(v => ({
-        name: v.name.length > 15 ? v.name.substring(0,12) + '...' : v.name,
-        Bookings: bookings.filter(b => b.venue_id === v.id).length,
-        Revenue: bookings.filter(b => b.venue_id === v.id).reduce((sum, b) => sum + b.final_amount, 0)
-      })).sort((a,b) => b.Bookings - a.Bookings).slice(0, 5)
-    : [
-        { name: 'Havoc Cafe', Bookings: 12, Revenue: 2400 },
-        { name: 'Neon Lounge', Bookings: 9, Revenue: 1800 },
-        { name: 'Hyperion Esports', Bookings: 7, Revenue: 1400 }
-      ];
+  const registrationChartData = last7Days.map(date => {
+    const dayLabel = date.toLocaleDateString('en-US', { weekday: 'short' });
+    const dateStr = date.toISOString().split('T')[0]; // "YYYY-MM-DD"
+
+    // Count actual users created on this day
+    const dailyUsers = profiles.filter(p => {
+      if (!p.created_at) return false;
+      return p.created_at.startsWith(dateStr);
+    }).length;
+
+    // Count actual bookings booked on this day
+    const dailyBookings = bookings.filter(b => {
+      if (b.booking_date === dateStr) return true;
+      if (b.created_at && b.created_at.startsWith(dateStr)) return true;
+      return false;
+    }).length;
+
+    return {
+      name: dayLabel,
+      Users: dailyUsers,
+      Bookings: dailyBookings
+    };
+  });
+
+  const venueStatsData = venues.filter(v => v.is_verified).map(v => ({
+    name: v.name.length > 15 ? v.name.substring(0,12) + '...' : v.name,
+    Bookings: bookings.filter(b => b.venue_id === v.id).length,
+    Revenue: bookings.filter(b => b.venue_id === v.id).reduce((sum, b) => sum + b.final_amount, 0)
+  })).sort((a,b) => b.Bookings - a.Bookings).filter(v => v.Bookings > 0 || v.Revenue > 0).slice(0, 5);
 
   // Actions execution helpers
   const handleApproveVenue = (venueId: string) => {
@@ -471,33 +485,41 @@ export const GarfAdminPage: React.FC = () => {
                 <p className="text-xs text-text-secondary">Ranked by volume of checked-in bookings</p>
               </div>
 
-              <div className="h-64 sm:h-80 flex flex-col justify-between">
-                <div className="flex-1 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={venueStatsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid stroke="#1f1f2f" strokeDasharray="3 3" />
-                      <XAxis dataKey="name" stroke="#5d5d7e" fontSize={9} fontStyle="mono" />
-                      <YAxis stroke="#5d5d7e" fontSize={9} fontStyle="mono" />
-                      <Tooltip contentStyle={{ backgroundColor: '#12121A', borderColor: '#2a2a3e', color: '#fff', fontSize: '11px', fontFamily: 'monospace' }} />
-                      <Bar dataKey="Bookings" fill="#7C3AED" radius={[4, 4, 0, 0]}>
-                        {venueStatsData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={index === 0 ? '#EC4899' : '#7C3AED'} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+              {venueStatsData.length > 0 ? (
+                <div className="h-64 sm:h-80 flex flex-col justify-between">
+                  <div className="flex-1 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={venueStatsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid stroke="#1f1f2f" strokeDasharray="3 3" />
+                        <XAxis dataKey="name" stroke="#5d5d7e" fontSize={9} fontStyle="mono" />
+                        <YAxis stroke="#5d5d7e" fontSize={9} fontStyle="mono" />
+                        <Tooltip contentStyle={{ backgroundColor: '#12121A', borderColor: '#2a2a3e', color: '#fff', fontSize: '11px', fontFamily: 'monospace' }} />
+                        <Bar dataKey="Bookings" fill="#7C3AED" radius={[4, 4, 0, 0]}>
+                          {venueStatsData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={index === 0 ? '#EC4899' : '#7C3AED'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
 
-                <div className="space-y-2 mt-4 pt-4 border-t border-[#1a1a2e]">
-                  <span className="text-[10px] font-mono text-text-secondary uppercase tracking-widest block font-bold">Revenue Leaders</span>
-                  {venueStatsData.map((v, i) => (
-                    <div key={i} className="flex justify-between items-center text-xs">
-                      <span className="text-text-secondary truncate max-w-[150px] font-medium">{i+1}. {v.name}</span>
-                      <span className="font-mono text-white font-bold">₹{v.Revenue}</span>
-                    </div>
-                  ))}
+                  <div className="space-y-2 mt-4 pt-4 border-t border-[#1a1a2e]">
+                    <span className="text-[10px] font-mono text-text-secondary uppercase tracking-widest block font-bold">Revenue Leaders</span>
+                    {venueStatsData.map((v, i) => (
+                      <div key={i} className="flex justify-between items-center text-xs">
+                        <span className="text-text-secondary truncate max-w-[150px] font-medium">{i+1}. {v.name}</span>
+                        <span className="font-mono text-white font-bold">₹{v.Revenue}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="h-64 sm:h-80 flex flex-col items-center justify-center text-center p-6 bg-[#12121A]/30 border border-dashed border-[#232338] rounded-2xl text-text-secondary">
+                  <Building className="h-8 w-8 text-brand-purple/40 mb-2 animate-pulse" />
+                  <p className="text-xs font-bold text-white uppercase tracking-wider">No Active Arenas Tracked</p>
+                  <p className="text-[10px] text-text-secondary max-w-[200px] leading-relaxed mt-1 mx-auto">Verified partner lounges will stream their performance coordinates here live upon receiving player bookings.</p>
+                </div>
+              )}
             </div>
 
           </div>
@@ -513,20 +535,30 @@ export const GarfAdminPage: React.FC = () => {
               </h4>
               
               <div className="space-y-3.5 max-h-[220px] overflow-y-auto pr-1">
-                {[
-                  { user: 'Root System', action: 'Approved Havoc Gaming Cafe verification details', date: 'Just now' },
-                  { user: 'Root System', action: 'Modified welcome coin onboarding incentive from 10 to 150', date: '10 mins ago' },
-                  { user: 'Platform Sync', action: 'Cleared expired booking holds matrix', date: '30 mins ago' },
-                  { user: 'Database Monitor', action: 'Synchronized Supabase sync channel', date: '1 hour ago' }
-                ].map((log, i) => (
-                  <div key={i} className="flex justify-between items-start gap-3 text-xs leading-relaxed border-b border-[#1d1d2d]/60 pb-2.5 last:border-0 last:pb-0">
-                    <div>
-                      <span className="text-brand-cyan font-mono font-bold block">{log.user}</span>
-                      <p className="text-[#c0c0d8]">{log.action}</p>
-                    </div>
-                    <span className="text-[10px] text-text-secondary/50 font-mono flex-shrink-0 whitespace-nowrap">{log.date}</span>
+                {adminLogs && adminLogs.length > 0 ? (
+                  adminLogs.slice(0, 20).map((log) => {
+                    const dateObj = new Date(log.created_at);
+                    const formattedDate = isNaN(dateObj.getTime()) 
+                      ? 'Just now' 
+                      : dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    
+                    return (
+                      <div key={log.id} className="flex justify-between items-start gap-3 text-xs leading-relaxed border-b border-[#1d1d2d]/60 pb-2.5 last:border-0 last:pb-0">
+                        <div>
+                          <span className="text-brand-cyan font-mono font-bold block">Administrator</span>
+                          <p className="text-[#c0c0d8] font-sans">{log.action}{log.details ? `: ${log.details}` : ''}</p>
+                        </div>
+                        <span className="text-[10px] text-text-secondary/50 font-mono flex-shrink-0 whitespace-nowrap">{formattedDate}</span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-10 text-text-secondary text-xs flex flex-col items-center justify-center gap-1">
+                    <Sliders className="h-6 w-6 text-[#2d2d3d] mb-1" />
+                    <p className="font-mono uppercase text-[10px] tracking-wider text-[#a3a3c2]">No System Entries</p>
+                    <p className="text-[10px] text-text-secondary/70">Administrator actions will propagate here instantly.</p>
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
