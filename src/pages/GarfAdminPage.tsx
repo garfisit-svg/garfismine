@@ -569,44 +569,16 @@ export const GarfAdminPage: React.FC = () => {
                 <span>Adjust Global Dynamic Parameters</span>
               </h4>
               
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-black/20 p-3 rounded-xl border border-[#232338]">
-                  <span className="text-[9px] text-text-secondary uppercase tracking-wider block font-bold">PLATFORM FEE</span>
-                  <div className="flex items-center gap-1 mt-1 text-white">
-                    <span className="text-sm font-bold font-mono">₹</span>
-                    <input
-                      type="number"
-                      value={platformFee}
-                      onChange={e => setPlatformFee(Number(e.target.value))}
-                      className="w-full bg-transparent focus:outline-none focus:border-b focus:border-brand-purple font-mono font-bold text-lg"
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-black/20 p-3 rounded-xl border border-[#232338]">
-                  <span className="text-[9px] text-text-secondary uppercase tracking-wider block font-bold">WELCOME BONUS</span>
-                  <div className="flex items-center gap-1 mt-1 text-white">
-                    <span className="text-sm font-mono text-brand-purple">🪙</span>
-                    <input
-                      type="number"
-                      value={welcomeBonusCoins}
-                      onChange={e => setWelcomeBonusCoins(Number(e.target.value))}
-                      className="w-full bg-transparent focus:outline-none focus:border-b focus:border-brand-purple font-mono font-bold text-lg"
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-black/20 p-3 rounded-xl border border-[#232338]">
-                  <span className="text-[9px] text-text-secondary uppercase tracking-wider block font-bold">BIRTHDAY BONUS</span>
-                  <div className="flex items-center gap-1 mt-1 text-white">
-                    <span className="text-sm font-mono text-brand-pink">🪙</span>
-                    <input
-                      type="number"
-                      value={birthdayBonusCoins}
-                      onChange={e => setBirthdayBonusCoins(Number(e.target.value))}
-                      className="w-full bg-transparent focus:outline-none focus:border-b focus:border-brand-purple font-mono font-bold text-lg"
-                    />
-                  </div>
+              <div className="max-w-xs bg-black/20 p-3 rounded-xl border border-[#232338]">
+                <span className="text-[9px] text-text-secondary uppercase tracking-wider block font-bold">PLATFORM FEE</span>
+                <div className="flex items-center gap-1 mt-1 text-white">
+                  <span className="text-sm font-bold font-mono">₹</span>
+                  <input
+                    type="number"
+                    value={platformFee}
+                    onChange={e => setPlatformFee(Number(e.target.value))}
+                    className="w-full bg-transparent focus:outline-none focus:border-b focus:border-brand-purple font-mono font-bold text-lg"
+                  />
                 </div>
               </div>
               <p className="text-[10px] text-text-secondary/50 leading-normal">
@@ -885,7 +857,7 @@ export const GarfAdminPage: React.FC = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#2a2a3e] pb-4">
             <div>
               <h3 className="text-xl font-bold font-display tracking-tight text-white">Registered Player & Owner Directory</h3>
-              <p className="text-xs text-text-secondary">Alter operational privileges roles, check coin balances, or lock accounts</p>
+              <p className="text-xs text-text-secondary">Alter operational privilege roles or lock user accounts</p>
             </div>
             
             <div className="relative w-64 flex-shrink-0">
@@ -909,7 +881,6 @@ export const GarfAdminPage: React.FC = () => {
                   <th className="py-3 px-4">USER NAME / IDENTIFIER</th>
                   <th className="py-3 px-4">EMAIL ADDRESS</th>
                   <th className="py-3 px-4">SECURE PHONE</th>
-                  <th className="py-3 px-4 font-mono text-center">WALLET COINS</th>
                   <th className="py-3 px-4">OPERATIONAL ROLE</th>
                   <th className="py-3 px-4 text-right">ACCOUNT STATUS</th>
                 </tr>
@@ -940,10 +911,6 @@ export const GarfAdminPage: React.FC = () => {
 
                       <td className="py-4 px-4 font-mono">
                         {u.phone || 'N/A'}
-                      </td>
-
-                      <td className="py-4 px-4 text-center font-mono font-bold text-brand-cyan">
-                        🪙 {u.garf_coins || 0}
                       </td>
 
                       <td className="py-4 px-4">
@@ -1291,7 +1258,7 @@ export const GarfAdminPage: React.FC = () => {
                     value={cancelReasonInput}
                     onChange={e => setCancelReasonInput(e.target.value)}
                   />
-                  <p className="text-[9px] text-text-secondary/50">Restores player coins and dispatches alerts instantly.</p>
+                  <p className="text-[9px] text-text-secondary/50">Dispatches cancellation alerts instantly.</p>
                 </div>
               )}
             </div>

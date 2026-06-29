@@ -310,7 +310,7 @@ export const MyBookingsPage: React.FC = () => {
                       {reviews.some(r => r.booking_id === b.id) ? (
                         <div className="flex items-center gap-1 text-brand-green font-bold text-xs">
                           <ShieldCheck className="h-4.5 w-4.5" />
-                          <span>Review submitted! (+10 coins)</span>
+                          <span>Review submitted!</span>
                         </div>
                       ) : (
                         <button
@@ -463,7 +463,7 @@ export const MyBookingsPage: React.FC = () => {
                   value={reviewComment}
                   onChange={e => setReviewComment(e.target.value)}
                 ></textarea>
-                <p className="text-[10px] text-brand-green/80 mt-1 font-mono">🌟 Reward payout +10 GARF Coins dispatches immediately on submission!</p>
+                <p className="text-[10px] text-brand-green/80 mt-1 font-mono">🌟 Thank you for sharing your feedback with our community!</p>
               </div>
 
               <button

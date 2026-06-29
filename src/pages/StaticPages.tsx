@@ -26,7 +26,7 @@ export const AboutPage: React.FC = () => {
               Our founder envisioned a unified gaming infrastructure in India where finding a high-performance system shouldn't require dozen phone calls, unreliable waitlists, or cash struggles. 
             </p>
             <p className="text-text-secondary mb-6">
-              With real-time slot bookings, exclusive loyalty rewards via <strong>GARF Coins</strong>, and a robust platform covering every premium gaming cafe, we are here to maximize your play time.
+              With real-time slot bookings, exclusive partner lounge offers, and a robust platform covering every premium gaming cafe, we are here to maximize your play time.
             </p>
             <div className="flex items-center gap-2 text-brand-cyan font-semibold">
               <span>Find your local arena now</span>
@@ -192,10 +192,6 @@ export const FAQPage: React.FC = () => {
       a: 'Yes! Owners have an "Extend Hold" command on their dashboards. This grants an extra 15 minutes max, but can only be triggered once per reservation!'
     },
     {
-      q: 'How do I earn and use GARF Coins?',
-      a: 'We keep our network extremely simple and budget-friendly. Upon signup, you get 10 GARF Coins free (worth ₹10) automatically in your wallet. You can redeem these coins at checkout on your very first booking to slash your game cost instantly. Simple as that — no complex tasks or high investments needed!'
-    },
-    {
       q: 'How long does owner venue verification take?',
       a: 'GARF headquarters monitors queue 24/7. Standard verification of Aadhar/PAN and facility coordinates concludes in under 24 hours.'
     },
@@ -210,7 +206,7 @@ export const FAQPage: React.FC = () => {
       <div className="text-center mb-16">
         <HelpCircle className="h-12 w-12 text-brand-purple mx-auto mb-4" />
         <h1 className="text-4xl font-display font-bold">Frequently Asked <span className="text-gradient">Questions</span></h1>
-        <p className="text-text-secondary mt-2">Get swift answers regarding bookings, coins, holds, and venue rules.</p>
+        <p className="text-text-secondary mt-2">Get swift answers regarding bookings, holds, and venue rules.</p>
       </div>
 
       <div className="space-y-4">
@@ -309,7 +305,6 @@ export const RefundPolicyPage: React.FC = () => {
         <ul className="list-disc pl-5 space-y-3 text-sm text-text-secondary">
           <li><strong>Paid Online Bookings:</strong> No refunds are issued for cancellations. The slot is freed up, but the paid amount is non-refundable.</li>
           <li><strong>Pay-at-Venue Bookings:</strong> No pre-charges are ever applied. You can cancel with no charge, or failing to check-in within 15 mins of start simply releases the slot.</li>
-          <li><strong>Loyalty Coins:</strong> Any spent coins used for discount are not refunded on cancellation.</li>
         </ul>
       </div>
     </div>

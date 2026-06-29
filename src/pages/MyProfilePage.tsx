@@ -92,7 +92,7 @@ export const MyProfilePage: React.FC = () => {
   };
 
   const getWhatsAppShareUrl = () => {
-    const text = `Hey! Book high-spec gaming cafes on GARF! Use my code ${currentUser.referral_code} when signing up and get 50 free coins! playgarf.com`;
+    const text = `Hey! Book high-spec gaming cafes on GARF! Use my referral code ${currentUser.referral_code} when signing up! playgarf.com`;
     return `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
   };
 
@@ -315,7 +315,7 @@ export const MyProfilePage: React.FC = () => {
                   value={dob}
                   onChange={e => setDob(e.target.value)}
                 />
-                <p className="text-[10px] text-brand-green mt-1 font-mono">🎁 Auto credits +50 GARF Coins rewards on date match birthdays!</p>
+                <p className="text-[10px] text-[#8e8ea6] mt-1 font-mono">Receive exclusive promotions and early booking invites!</p>
               </div>
             </div>
 
@@ -336,7 +336,7 @@ export const MyProfilePage: React.FC = () => {
             </div>
             
             <p className="text-xs text-text-secondary leading-relaxed">
-              Share your invite link with friends! When they register, they will instantly get their 10 welcome coins (worth ₹10) applied directly to their account to spend on their first game.
+              Invite your friends to explore and register on GARF to start building squads and booking high-fidelity esport lounges together!
             </p>
 
             <div className="bg-[#161622] p-4 rounded-xl border border-dashed border-[#2a2a3e] flex items-center justify-between">
@@ -404,7 +404,7 @@ export const MyProfilePage: React.FC = () => {
           <div className="bg-red-500/5 border border-red-500/20 p-6 rounded-2xl shadow-md space-y-4">
             <h4 className="font-bold text-red-500 text-base">Danger Zone 🛑</h4>
             <p className="text-xs text-text-secondary leading-relaxed">
-              Delete account permanently. This deletes wallet coins ledger histories, pending hold entries, and profile sheets instantly.
+              Delete account permanently. This deletes pending hold entries and profile data sheets instantly.
             </p>
 
             <div className="space-y-2">

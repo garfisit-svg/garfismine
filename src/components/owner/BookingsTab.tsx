@@ -528,7 +528,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({ venue, onOpenWalkIn })
             <div>
               <h4 className="font-bold font-display text-white text-lg">Settle and Complete Session?</h4>
               <p className="text-xs text-text-secondary mt-1">
-                This marks {completeTargetBooking.booking_ref} as completed and recycles state. Customers will receive coins alerts inviting them to review.
+                This marks {completeTargetBooking.booking_ref} as completed and recycles state. Customers will receive alerts inviting them to review.
               </p>
             </div>
             <div className="flex gap-4">

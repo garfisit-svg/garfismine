@@ -13,7 +13,6 @@ import toast from 'react-hot-toast';
 export function GarfSquadPage() {
   const { 
     currentUser, 
-    welcomeBonusCoins,
     // SQUAD States
     squadProfiles, squads, squadMembers, messages, polls, pollVotes, 
     playerNeededPosts, playerNeededResponses, nearbyCheckins, squadInvites, squadEvents, profiles, venues,
@@ -162,7 +161,7 @@ export function GarfSquadPage() {
           favorite_sports: selectedSports,
           preferred_city: pPreferredCity || 'Bangalore'
         });
-        toast.success(`Welcome to GARF Squads! 🪙 +${welcomeBonusCoins} bonus coins credited!`);
+        toast.success(`Welcome to GARF Squads! Your player profile has been created successfully.`);
       } catch (err: any) {
         toast.error(err.message || 'Error creating profile');
       }
@@ -195,7 +194,7 @@ export function GarfSquadPage() {
               Spawn Your Social Avatar
             </h1>
             <p className="text-sm text-text-secondary max-w-lg mx-auto">
-              Activating your high-fidelity GARF Squad profile awards you <span className="text-yellow-400 font-bold">🪙 {welcomeBonusCoins} bonus coins</span>! Match up with venue lobbies in Bangalore, Mumbai, and Delhi.
+              Activate your high-fidelity GARF Squad profile to match up and play with venue lobbies in Bangalore, Mumbai, and Delhi.
             </p>
           </div>
 
@@ -304,7 +303,7 @@ export function GarfSquadPage() {
               className="w-full py-4 text-sm font-bold uppercase tracking-widest btn-gradient text-white rounded-xl shadow-lg shadow-brand-purple/10 transition hover:scale-101 cursor-pointer flex items-center justify-center gap-2"
             >
               <Activity className="h-4 w-4 animate-pulse text-brand-cyan" />
-              <span>Spawn Avatar & Claim 🪙 {welcomeBonusCoins} Coins</span>
+              <span>Spawn Avatar & Enter Squad Lobbies</span>
             </button>
           </form>
         </motion.div>

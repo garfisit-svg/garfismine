@@ -228,7 +228,7 @@ export const LandingPage: React.FC = () => {
           {[
             { icon: <Zap className="h-6 w-6 text-brand-purple" />, title: 'Real-time Availability', desc: 'Strict database locks prevent double booking battles instantly.' },
             { icon: <Shield className="h-6 w-6 text-brand-cyan" />, title: 'Secure Payments', desc: 'Secure UPI gateways paired with full cashback safety audits.' },
-            { icon: <Trophy className="h-6 w-6 text-brand-green" />, title: 'Earn GARF Coins', desc: 'Get 10% back on play bookings. Complete streaks and reviews.' },
+            { icon: <Trophy className="h-6 w-6 text-brand-green" />, title: 'Leaderboards & Lobbies', desc: 'Find squad teammates, join venue lobbies, and spawn your player avatar.' },
             { icon: <Smartphone className="h-6 w-6 text-purple-400" />, title: '60 Second Booking', desc: 'One-click consecutive slot checking, zero registration waitls.' },
             { icon: <CheckCircle className="h-6 w-6 text-cyan-400" />, title: 'Verified Arenas', desc: 'Physical verification on Aadhar/PAN guidelines ensures top gaming specs.' },
             { icon: <Star className="h-6 w-6 text-yellow-500" />, title: 'Best Prices', desc: 'Exclusive weekday rates, weekend lounge promos, and zero mystery fees.' }
@@ -243,53 +243,6 @@ export const LandingPage: React.FC = () => {
               </div>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* SECTION 5: COINS PROMO */}
-      <section className="py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-b border-border-dark">
-        <div className="glass-card bg-gradient-to-r from-brand-purple/20 via-[#12121A] to-brand-cyan/20 p-8 sm:p-12 rounded-3xl relative overflow-hidden grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-          
-          <div className="space-y-6">
-            <span className="text-xs text-brand-green bg-brand-green/10 border border-brand-green/20 px-3 py-1 rounded-full font-mono uppercase tracking-wider inline-block">
-              🪙 LOYALTY PROTOCOL
-            </span>
-            <h2 className="text-3xl sm:text-5xl font-display font-black tracking-tight leading-tight">
-              Earn While <span className="text-gradient">You Play</span>
-            </h2>
-            <p className="text-text-secondary leading-relaxed">
-              We keep the network extremely simple and budget-friendly with no high investment or complicated tasks. Enjoy instant savings with your welcome bonus on your first game!
-            </p>
-
-            <ul className="space-y-3.5 text-sm sm:text-base">
-              {[
-                'Get 10 Welcome Coins free instantly upon registration',
-                '1 GARF Coin = 1 Rupee discount',
-                'Redeem easily at checkout on your very first play slot',
-                'Zero complex systems, zero hidden investments required'
-              ].map((item, idx) => (
-                <li key={idx} className="flex gap-2 items-center">
-                  <Gift className="h-4 w-4 text-brand-cyan" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-
-            <Link
-              to={currentUser ? '/explore' : '/signup'}
-              className="inline-flex items-center gap-2 btn-gradient px-8 py-3.5 font-bold shadow-lg hover:opacity-95"
-            >
-              <span>{currentUser ? 'Explore Venues' : 'Register Profile'}</span>
-              <ChevronRight className="h-5 w-5" />
-            </Link>
-          </div>
-
-          <div className="flex justify-center relative">
-            {/* Glowing Coin Artwork */}
-            <div className="relative w-64 h-64 sm:w-80 sm:h-80 flex items-center justify-center bg-card-dark rounded-full border-2 border-brand-cyan/20 shadow-2xl glow-cyan animate-pulse">
-              <span className="text-8xl select-none filter drop-shadow-[0_0_20px_rgba(6,182,212,0.6)]">🪙</span>
-            </div>
-          </div>
         </div>
       </section>
 

@@ -78,7 +78,7 @@ export const SignupPage: React.FC = () => {
           avatar_url: selectedAvatar
         });
 
-      toast.success('Onboarding complete! Welcome bonus +10 coins credited! 🪙');
+      toast.success('Onboarding complete! Welcome to the GARF family! 🎉');
       navigate('/explore');
     } catch (err: any) {
       setError(err.message || 'Registration failed');
