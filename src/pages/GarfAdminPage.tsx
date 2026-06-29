@@ -42,7 +42,7 @@ export const GarfAdminPage: React.FC = () => {
   const [adminPassword, setAdminPassword] = useState('');
 
   // Active dashboard tab state
-  const [activeTab, setActiveTab] = useState<'overview' | 'approvals' | 'approved' | 'users' | 'bookings' | 'supabase'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'approvals' | 'approved' | 'users' | 'bookings'>('overview');
 
   // Interactive filter & search states
   const [userSearchText, setUserSearchText] = useState('');
@@ -365,8 +365,7 @@ export const GarfAdminPage: React.FC = () => {
           { key: 'approvals', label: `Pending Approvals (${pendingApprovalsCount})`, icon: Award, highlight: pendingApprovalsCount > 0 },
           { key: 'approved', label: 'Approved Arenas', icon: Building },
           { key: 'users', label: 'Player Directory', icon: Users },
-          { key: 'bookings', label: 'Session Bookings', icon: Calendar },
-          { key: 'supabase', label: 'Supabase & RLS Guide', icon: Database }
+          { key: 'bookings', label: 'Session Bookings', icon: Calendar }
         ].map(tb => (
           <button
             key={tb.key}
@@ -1081,138 +1080,6 @@ export const GarfAdminPage: React.FC = () => {
               </table>
             </div>
           )}
-        </div>
-      )}
-
-      {/* TAB 6: SUPABASE AND RLS GUIDE */}
-      {activeTab === 'supabase' && (
-        <div className="space-y-6 animate-fade-in-quick max-w-4xl">
-          <div className="border-b border-[#2a2a3e] pb-4">
-            <h3 className="text-xl font-bold font-display tracking-tight text-white flex items-center gap-2">
-              <Database className="h-5 w-5 text-emerald-400" />
-              <span>Production Supabase Integration & RLS Gating Blueprint</span>
-            </h3>
-            <p className="text-xs text-text-secondary">Copy and execute these SQL guidelines directly in your Supabase SQL Editor to secure row levels</p>
-          </div>
-
-          {/* Setup steps */}
-          <div className="bg-[#12121A] border border-[#232338] p-5 rounded-2xl space-y-4 text-xs sm:text-sm leading-relaxed text-[#c0c0d8]">
-            <h4 className="font-bold text-white flex items-center gap-1.5 uppercase font-mono text-xs">
-              <span className="h-2 w-2 rounded-full bg-emerald-400"></span> 
-              <span>Deployment checklist steps:</span>
-            </h4>
-            <ul className="list-decimal pl-5 space-y-2">
-              <li>Log in to your <strong className="text-white">Supabase Dashboard</strong> and create a fresh database project named <strong className="text-brand-cyan">garf_db</strong>.</li>
-              <li>Open the <strong className="text-white">SQL Editor</strong> panel in Supabase.</li>
-              <li>Paste and run the database definition ruleset query specified below to bootstrap the secure structure.</li>
-              <li>Go to <strong className="text-white">Project Settings &gt; API</strong> and copy your project's <code className="text-brand-purple">SUPABASE_URL</code> and <code className="text-brand-purple">ANON_KEY</code>.</li>
-              <li>Open the <strong className="text-white">Secrets panel in AI Studio Build</strong>, declare <code className="text-white">VITE_SUPABASE_URL</code> and <code className="text-white">VITE_SUPABASE_ANON_KEY</code>, then input their values. The application will instantly synchronize with full secure Row Level Security (RLS) policies!</li>
-            </ul>
-          </div>
-
-          {/* SQL Blueprint */}
-          <div className="bg-[#0c0c14] border border-[#1f1f2f] rounded-2xl p-5 space-y-4">
-            <div className="flex justify-between items-center border-b border-[#1f1f2f] pb-3 text-xs font-mono">
-              <span className="text-text-secondary">SECURE_RLS_STRUCTURE.SQL</span>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(`-- 1. Create secure profiles table linked to Supabase Auth
-create table public.profiles (
-  id uuid references auth.users not null primary key,
-  full_name text not null,
-  email text,
-  phone text,
-  role text default 'customer'::text,
-  garf_coins integer default 150,
-  is_suspended boolean default false,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
--- 2. Create physical cafes / venues table
-create table public.venues (
-  id uuid default gen_random_uuid() primary key,
-  owner_id uuid references public.profiles(id) on delete cascade,
-  name text not null,
-  city text not null,
-  address text not null,
-  price_per_hour integer not null,
-  is_verified boolean default false,
-  is_active boolean default false,
-  rejection_reason text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
--- 3. Enable secure Row Level Security (RLS)
-alter table public.profiles enable row level security;
-alter table public.venues enable row level security;
-
--- 4. Create Security Gating rules for Admin GARF email (garfisit@gmail.com)
-create policy "Allow root administrator to query everything"
-  on public.profiles for all
-  using (auth.jwt()->>'email' = 'garfisit@gmail.com');
-
-create policy "Allow root administrator to verify registrations"
-  on public.venues for all
-  using (auth.jwt()->>'email' = 'garfisit@gmail.com');
-
--- 5. Create general public visibility policy rules
-create policy "Allow public to browse approved verified venues"
-  on public.venues for select
-  using (is_verified = true and is_active = true);`);
-                  toast.success('SQL blueprint copied to clipboard!');
-                }}
-                className="text-brand-cyan hover:text-white transition uppercase font-bold text-[10px] cursor-pointer"
-              >
-                Copy SQL Script
-              </button>
-            </div>
-
-            <pre className="text-xs font-mono text-[#7d7da5] bg-[#050508] p-4 rounded-xl overflow-x-auto max-h-[350px] leading-relaxed select-text">
-{`-- 1. Create secure profiles table linked to Supabase Auth
-create table public.profiles (
-  id uuid references auth.users not null primary key,
-  full_name text not null,
-  email text,
-  phone text,
-  role text default 'customer'::text,
-  garf_coins integer default 150,
-  is_suspended boolean default false,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
--- 2. Create physical cafes / venues table
-create table public.venues (
-  id uuid default gen_random_uuid() primary key,
-  owner_id uuid references public.profiles(id) on delete cascade,
-  name text not null,
-  city text not null,
-  address text not null,
-  price_per_hour integer not null,
-  is_verified boolean default false,
-  is_active boolean default false,
-  rejection_reason text,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null
-);
-
--- 3. Enable secure Row Level Security (RLS)
-alter table public.profiles enable row level security;
-alter table public.venues enable row level security;
-
--- 4. Create Security Gating rules for Admin GARF email (garfisit@gmail.com)
-create policy "Allow root administrator to query everything"
-  on public.profiles for all
-  using (auth.jwt()->>'email' = 'garfisit@gmail.com');
-
-create policy "Allow root administrator to verify registrations"
-  on public.venues for all
-  using (auth.jwt()->>'email' = 'garfisit@gmail.com');
-
--- 5. Create general public visibility policy rules
-create policy "Allow public to browse approved verified venues"
-  on public.venues for select
-  using (is_verified = true and is_active = true);`}
-            </pre>
-          </div>
         </div>
       )}
 
