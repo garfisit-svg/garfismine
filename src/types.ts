@@ -26,6 +26,7 @@ export interface Profile {
   verificationTokenExpires?: string;
   resetToken?: string;
   resetTokenExpires?: string;
+  password?: string;
 }
 
 export interface Venue {

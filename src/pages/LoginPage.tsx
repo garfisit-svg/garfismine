@@ -5,7 +5,7 @@ import { Lock, Mail, AlertCircle, Gamepad2, ArrowRight, ArrowLeft, CheckCircle2 
 import toast from 'react-hot-toast';
 
 export const LoginPage: React.FC = () => {
-  const { logIn, profiles, resendVerificationEmail, sendPasswordResetEmail } = useApp();
+  const { logIn, profiles, sendPasswordResetEmail, resetPasswordWithToken } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState((location.state as any)?.prefilledEmail || '');
@@ -29,41 +29,11 @@ export const LoginPage: React.FC = () => {
     }
   }, [location.search]);
   
-  // Login Steps: 'email', 'password', or 'unverified'
-  const [step, setStep] = useState<'email' | 'password' | 'unverified'>(() => {
-    const prefilled = (location.state as any)?.prefilledEmail;
-    return prefilled ? 'unverified' : 'email';
-  });
+  // Login Steps: 'email' or 'password'
+  const [step, setStep] = useState<'email' | 'password'>('email');
 
   // Take redirect origin state if any (e.g., if redirected from /booking/:id)
   const from = (location.state as any)?.from || null;
-
-  // Prefilled email trigger
-  useEffect(() => {
-    const prefilled = (location.state as any)?.prefilledEmail;
-    if (prefilled) {
-      const cleanEmail = prefilled.trim().toLowerCase();
-      const matchedProfile = profiles?.find(p => p.email?.trim().toLowerCase() === cleanEmail);
-      if (matchedProfile && matchedProfile.emailVerified === false) {
-        setStep('unverified');
-        // Auto-trigger verification email dispatch
-        resendVerificationEmail(matchedProfile.email!).catch(() => {});
-      }
-    }
-  }, [location.state, profiles]);
-
-  // Auto-transition to password step once the user completes email verification
-  useEffect(() => {
-    if (email && step === 'unverified') {
-      const cleanEmail = email.trim().toLowerCase();
-      const matchedProfile = profiles?.find(p => p.email?.trim().toLowerCase() === cleanEmail);
-      if (matchedProfile && matchedProfile.emailVerified) {
-        setStep('password');
-        setError(null);
-        toast.success('Email verified successfully! Please enter your password to sign in.', { id: 'login-auto-unlock' });
-      }
-    }
-  }, [profiles, email, step]);
 
   const handleEmailSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,20 +53,7 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
-    if (matchedProfile.emailVerified === false) {
-      setStep('unverified');
-      // Auto-trigger verification email dispatch
-      resendVerificationEmail(matchedProfile.email!)
-        .then((res: any) => {
-          toast.success(res.message || 'Verification email has been dispatched to your address!', { id: 'auto-verify-send' });
-        })
-        .catch((err: any) => {
-          toast.error(err.message || 'Verification dispatch failed');
-        });
-      return;
-    }
-
-    // Email is verified, proceed to password step
+    // Email exists, proceed directly to password step (no verification check)
     setStep('password');
   };
 
@@ -147,14 +104,21 @@ export const LoginPage: React.FC = () => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const matchedProfile = profiles?.find(p => p.email?.trim().toLowerCase() === cleanEmail);
-    if (!matchedProfile) {
-      toast.error('No account registered with this email address.');
-      return;
+    
+    // Read directly from localStorage first to be absolutely sure we have all signed-up users!
+    const saved = localStorage.getItem('garf_profiles');
+    let currentProfiles = profiles || [];
+    if (saved) {
+      try {
+        currentProfiles = JSON.parse(saved);
+      } catch (err) {
+        console.error('Error parsing profiles from localStorage:', err);
+      }
     }
 
-    if (matchedProfile.emailVerified === false) {
-      toast.error('Your email is not verified. Please verify your email first before requesting a password reset.', { duration: 6000 });
+    const matchedProfile = currentProfiles.find(p => p.email?.trim().toLowerCase() === cleanEmail);
+    if (!matchedProfile) {
+      toast.error('No account registered with this email address. Please sign up to register first!');
       return;
     }
 
@@ -166,7 +130,7 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handlePasswordResetSubmit = (e: React.FormEvent) => {
+  const handlePasswordResetSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPassword || newPassword.length < 6) {
       toast.error('Password must be at least 6 characters long.');
@@ -177,45 +141,18 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
-    // Find the profile with the matched token
-    const matchedProfile = profiles?.find(p => p.resetToken === resetToken);
-    if (!matchedProfile) {
-      toast.error('Invalid or expired password reset token.');
+    if (!resetToken) {
+      toast.error('No reset token provided.');
       return;
     }
 
-    // Ensure it hasn't expired
-    if (matchedProfile.resetTokenExpires && new Date(matchedProfile.resetTokenExpires) < new Date()) {
-      toast.error('Your password reset link has expired. Please request a new one.');
-      return;
-    }
-
-    const updatedProfiles = profiles.map(p => {
-      if (p.id === matchedProfile.id) {
-        return {
-          ...p,
-          resetToken: undefined,
-          resetTokenExpires: undefined,
-          updated_at: new Date().toISOString()
-        };
-      }
-      return p;
-    });
-    
-    localStorage.setItem('garf_profiles', JSON.stringify(updatedProfiles));
-    
-    toast.success('Your password has been reset successfully! You can now log in.');
-    setResetSuccess(true);
-    setResetToken(null);
-  };
-
-  const handleResend = async () => {
-    if (!email) return;
     try {
-      const res = await resendVerificationEmail(email);
-      toast.success(res.message, { duration: 5000 });
+      const res = await resetPasswordWithToken(resetToken, newPassword);
+      toast.success(res.message);
+      setResetSuccess(true);
+      setResetToken(null);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to resend link');
+      toast.error(err.message || 'Failed to reset password.');
     }
   };
 
@@ -366,46 +303,6 @@ export const LoginPage: React.FC = () => {
                   Continue <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
-            )}
-
-            {/* 2. EMAIL IS UNVERIFIED BLOCK */}
-            {step === 'unverified' && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="p-5 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl space-y-3.5 text-center">
-                  <div className="inline-flex p-2.5 bg-amber-500/15 rounded-full mb-1">
-                    <AlertCircle className="h-6 w-6 text-amber-500 animate-pulse" />
-                  </div>
-                  <h3 className="font-bold text-sm text-white font-mono uppercase tracking-wider">Email Verification Required</h3>
-                  <p className="text-xs text-text-secondary leading-relaxed">
-                    An account is registered for <strong className="text-white font-mono">{email}</strong>, but your email has not been verified yet. Verification is strictly necessary to log in.
-                  </p>
-                  
-                  <div className="bg-black/30 p-3 rounded-lg border border-[#2a2a3e] text-[11px] text-[#c1c1d6] font-sans">
-                    💡 Please check your email inbox for the secure verification link. (Developers: configure EmailJS keys in the AI Studio Settings to send real automated emails).
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={handleResend}
-                      className="w-full text-center py-2.5 bg-amber-500 text-black hover:bg-amber-400 font-bold text-xs rounded-xl transition font-mono uppercase tracking-wider"
-                    >
-                      Resend Verification Email
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep('email');
-                    setError(null);
-                  }}
-                  className="w-full py-3 bg-[#1e1e2d] border border-[#2d2d3f] text-text-secondary hover:text-white rounded-lg text-xs font-semibold flex justify-center items-center gap-2 transition"
-                >
-                  <ArrowLeft className="w-4 h-4" /> Change Email Address
-                </button>
-              </div>
             )}
 
             {/* 3. ENTER PASSWORD STEP */}

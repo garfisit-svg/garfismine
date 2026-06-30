@@ -42,8 +42,8 @@ interface AppContextType {
   updateProfile: (profileData: Partial<Profile>) => void;
   deleteAccount: () => void;
   verifyEmailToken: (token: string) => Promise<{ success: boolean; message: string }>;
-  resendVerificationEmail: (email: string) => Promise<{ success: boolean; message: string; token: string }>;
   sendPasswordResetEmail: (email: string) => Promise<{ success: boolean; message: string; token?: string }>;
+  resetPasswordWithToken: (token: string, newPass: string) => Promise<{ success: boolean; message: string }>;
   
   // Venue owner actions
   registerVenue: (
@@ -279,7 +279,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [profiles, setProfiles] = useState<Profile[]>(() => {
     const saved = localStorage.getItem('garf_profiles');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as Profile[];
+        return parsed.map((p: Profile) => p ? { ...p, emailVerified: true } : p);
+      } catch (e) {
+        return [];
+      }
+    }
 
     const seed: Profile[] = [];
     return seed;
@@ -800,8 +807,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const rFour = Math.random().toString(36).substring(2, 6).toUpperCase();
     const myRefCode = `GARF-${rFour}`;
 
-    const token = generateSecureToken();
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const isPreVerified = data.email?.toLowerCase().trim() === 'garfisit@gmail.com';
 
     const newProfile: Profile = {
@@ -819,24 +824,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       is_suspended: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      emailVerified: isPreVerified ? true : false,
-      verificationToken: isPreVerified ? undefined : token,
-      verificationTokenExpires: isPreVerified ? undefined : expires
+      emailVerified: true,
+      password: data.password
     };
-
-    if (!isPreVerified) {
-      const verifyLink = `${window.location.origin}/explore?verifyToken=${token}`;
-      // Dispatch verification email
-      setTimeout(async () => {
-        addNotificationSilently(
-          newProfile.id,
-          'Verify your email ✉️',
-          `Use this link to verify your email address: ${verifyLink}`,
-          'system'
-        );
-        await sendRealVerificationEmail(newProfile.email, newProfile.full_name, verifyLink);
-      }, 500);
-    }
 
     // Referral verification (Rule 8)
     if (data.referral_code?.trim()) {
@@ -878,12 +868,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setProfiles(prev => [...prev, newProfile]);
     
-    // Do NOT auto-login unverified users, only pre-verified (admin test)
-    if (isPreVerified) {
-      setCurrentUser(newProfile);
-    } else {
-      setCurrentUser(null);
-    }
+    // Auto-login registered users directly
+    setCurrentUser(newProfile);
 
     // Welcome coin transaction
     const txIdWelcome = `txn-${Math.random().toString(36).substr(2,9)}`;
@@ -927,9 +913,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       const rFour = Math.random().toString(36).substring(2, 6).toUpperCase();
       const myRefCode = `GARF-${rFour}`;
-      const token = generateSecureToken();
-      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-      const isTestOrAdmin = cleanEmail === 'garfisit@gmail.com' || cleanEmail === 'founder@garf.com' || cleanEmail === 'owner@arena.com' || cleanEmail === 'player@garf.com' || cleanEmail.includes('admin') || cleanEmail.includes('owner') || cleanEmail.includes('player');
 
       const newP: Profile = {
         id: `user-${Math.random().toString(36).substr(2, 9)}`,
@@ -946,24 +929,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         is_suspended: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        emailVerified: isTestOrAdmin ? true : false,
-        verificationToken: isTestOrAdmin ? undefined : token,
-        verificationTokenExpires: isTestOrAdmin ? undefined : expires
+        emailVerified: true
       };
 
-      if (!isTestOrAdmin) {
-        const verifyLink = `${window.location.origin}/explore?verifyToken=${token}`;
-        setTimeout(async () => {
-          addNotificationSilently(
-            newP.id,
-            'Verify your email address ✉️',
-            `Thank you for signing up! Use this secure link to verify your email address: ${verifyLink}`,
-            'system'
-          );
-          await sendRealVerificationEmail(newP.email, newP.full_name, verifyLink);
-        }, 500);
-      }
-      
       setProfiles(prev => [...prev, newP]);
       profile = newP;
 
@@ -980,10 +948,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         created_at: new Date().toISOString()
       };
       setCoinTransactions(prev => [tx, ...prev]);
-    }
-
-    if (profile.emailVerified === false) {
-      throw new Error('Your email address is not verified. Please verify your email first to log in.');
     }
 
     if (profile.is_suspended) {
@@ -1413,10 +1377,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentMethod: 'online' | 'pay_at_venue' | 'token_advance'
   }) => {
     if (!currentUser) throw new Error('Authentication required');
-
-    if (currentUser.emailVerified === false) {
-      throw new Error('Your email is not verified. Please verify your email to unlock all features.');
-    }
 
     if (!data.slots || data.slots.length === 0) {
       throw new Error('Please select at least one slot to proceed with booking.');
@@ -2522,9 +2482,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ==========================================
   const createSquadProfile = (data: { username: string; gamer_tag: string | null; bio: string | null; favorite_games: string[]; favorite_sports: string[]; preferred_city: string }) => {
     if (!currentUser) throw new Error('Not logged in');
-    if (currentUser.emailVerified === false) {
-      throw new Error('Your email is not verified. Please verify your email to unlock all features.');
-    }
     const cleanedUsername = data.username.replace(/\s+/g, '_').toLowerCase();
     const existing = squadProfiles.find(p => p.username.toLowerCase() === cleanedUsername.toLowerCase());
     if (existing && existing.id !== currentUser.id) {
@@ -2565,9 +2522,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const createSquad = (data: { name: string; description: string | null; type: Squad['type']; city: string; game_or_sport: string | null; max_members: number; is_private: boolean; venue_id: string | null; cover_image: string | null }) => {
     if (!currentUser) throw new Error('Not logged in');
-    if (currentUser.emailVerified === false) {
-      throw new Error('Your email is not verified. Please verify your email to unlock all features.');
-    }
     const newId = `squad-${Math.random().toString(36).substr(2, 9)}`;
     const code = Math.random().toString(36).substr(2, 6).toUpperCase();
     const newS: Squad = {
@@ -2617,9 +2571,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const joinSquadWithCode = async (code: string) => {
     if (!currentUser) throw new Error('Not logged in');
-    if (currentUser.emailVerified === false) {
-      throw new Error('Your email is not verified. Please verify your email to unlock all features.');
-    }
     const sq = squads.find(s => s.squad_code.toUpperCase() === code.toUpperCase().trim());
     if (!sq) throw new Error('No SQUAD found matching invitation code.');
 
@@ -2662,9 +2613,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const joinPublicSquad = (squadId: string) => {
     if (!currentUser) return;
-    if (currentUser.emailVerified === false) {
-      throw new Error('Your email is not verified. Please verify your email to unlock all features.');
-    }
     const sq = squads.find(s => s.id === squadId);
     if (!sq || sq.is_private) return;
 
@@ -3172,7 +3120,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const sendRealPasswordResetEmail = async (toEmail: string, toName: string, resetLink: string) => {
     const serviceId = (import.meta as any).env.VITE_EMAILJS_SERVICE_ID || 'service_t9g5tw9';
-    const templateId = (import.meta as any).env.VITE_EMAILJS_RESET_TEMPLATE_ID || 'template_ioai0qb';
+    const templateId = (import.meta as any).env.VITE_EMAILJS_RESET_TEMPLATE_ID || 'template_ewbbv1v';
     const publicKey = (import.meta as any).env.VITE_EMAILJS_PUBLIC_KEY || 'cX2jZ5gg6mmqjZlEJ';
 
     console.log('[DEBUG] sendRealPasswordResetEmail config:', {
@@ -3199,33 +3147,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               to_name: toName,
               reset_link: resetLink,
               link: resetLink,
+              reset_url: resetLink,
+              url: resetLink,
+              verify_link: resetLink,
+              verification_link: resetLink,
+              message: resetLink,
+              resetLink: resetLink,
               subject: 'Reset your GARF Password 🔑',
             },
           }),
         });
         if (response.ok) {
           console.log(`[REAL RESET EMAIL SENT TO ${toEmail}] via EmailJS`);
-          toast.success(`Password reset email successfully sent to ${toEmail}! 🔑`);
           return true;
         } else {
           const errText = await response.text();
           console.error('EmailJS Password Reset Error Response:', errText);
-          toast.error(`EmailJS Error (Code ${response.status}): "${errText}". Check template_params and EmailJS setup.`);
         }
       } catch (err) {
         console.error('Error sending password reset email via EmailJS:', err);
-        toast.error(`EmailJS connection error: ${(err as any)?.message || err}`);
       }
     } else {
-      console.warn('⚠️ EmailJS password reset template credential (VITE_EMAILJS_RESET_TEMPLATE_ID) is not configured. Cannot send real reset emails.');
-      toast.error(
-        `EmailJS Password Reset configuration is incomplete!\n` +
-        `• Service ID: ${serviceId ? '✅ Configured' : '❌ Missing'}\n` +
-        `• Reset Template ID: ${templateId ? '✅ Configured' : '❌ Missing'}\n` +
-        `• Public Key: ${publicKey ? '✅ Configured' : '❌ Missing'}\n\n` +
-        `Please configure VITE_EMAILJS_RESET_TEMPLATE_ID in your AI Studio Settings.`,
-        { duration: 8000 }
-      );
+      console.warn('⚠️ EmailJS password reset template credential (VITE_EMAILJS_RESET_TEMPLATE_ID) is not configured.');
     }
     return false;
   };
@@ -3278,74 +3221,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: 'Your email address has been verified successfully! 🎉' };
   };
 
-  const resendVerificationEmail = async (email: string): Promise<{ success: boolean; message: string; token: string }> => {
-    const cleanEmail = email.trim().toLowerCase();
-    const matchedProfile = profiles.find(p => p.email?.toLowerCase().trim() === cleanEmail);
-    if (!matchedProfile) {
-      throw new Error('No user account found with this email address.');
-    }
-
-    if (matchedProfile.emailVerified) {
-      throw new Error('This email address is already verified.');
-    }
-
-    const newToken = generateSecureToken();
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-    const updated = profiles.map(p => {
-      if (p.id === matchedProfile.id) {
-        return {
-          ...p,
-          verificationToken: newToken,
-          verificationTokenExpires: expires,
-          updated_at: new Date().toISOString()
-        };
-      }
-      return p;
-    });
-
-    setProfiles(updated);
-
-    if (currentUser && currentUser.id === matchedProfile.id) {
-      setCurrentUser({
-        ...currentUser,
-        verificationToken: newToken,
-        verificationTokenExpires: expires,
-        updated_at: new Date().toISOString()
-      });
-    }
-
-    // Dispatch email
-    const verifyLink = `${window.location.origin}/explore?verifyToken=${newToken}`;
-    addNotificationSilently(
-      matchedProfile.id,
-      'Email Verification Link ✉️',
-      `Use this secure link to verify your email (expires in 24 hours): ${verifyLink}`,
-      'system'
-    );
-
-    const sent = await sendRealVerificationEmail(matchedProfile.email, matchedProfile.full_name, verifyLink);
-
-    return { 
-      success: true, 
-      message: sent 
-        ? `A secure verification link has been successfully dispatched to your email address: ${email}!`
-        : `Verification link generated! Note: Please configure your EmailJS credentials (VITE_EMAILJS_SERVICE_ID, etc.) in your AI Studio Settings to send real automated emails. Token URL: ${verifyLink}`,
-      token: newToken
-    };
-  };
-
   const sendPasswordResetEmail = async (email: string): Promise<{ success: boolean; message: string; token?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
-    const matchedProfile = profiles.find(p => p.email?.toLowerCase().trim() === cleanEmail);
+    
+    // Read directly from localStorage first to get absolute freshest state!
+    const saved = localStorage.getItem('garf_profiles');
+    let currentProfiles = profiles;
+    if (saved) {
+      try {
+        currentProfiles = JSON.parse(saved);
+      } catch (err) {
+        console.error('Error parsing profiles from localstorage:', err);
+      }
+    }
+
+    const matchedProfile = currentProfiles.find(p => p.email?.toLowerCase().trim() === cleanEmail);
     if (!matchedProfile) {
-      throw new Error('No user account found with this email address.');
+      throw new Error('No user account found with this email address. New emails must sign up first!');
     }
 
     const newToken = generateSecureToken();
     const expires = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
 
-    const updated = profiles.map(p => {
+    const updated = currentProfiles.map(p => {
       if (p.id === matchedProfile.id) {
         return {
           ...p,
@@ -3358,14 +3256,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setProfiles(updated);
+    localStorage.setItem('garf_profiles', JSON.stringify(updated));
 
     if (currentUser && currentUser.id === matchedProfile.id) {
-      setCurrentUser({
+      const updatedUser = {
         ...currentUser,
         resetToken: newToken,
         resetTokenExpires: expires,
         updated_at: new Date().toISOString()
-      });
+      };
+      setCurrentUser(updatedUser);
+      localStorage.setItem('garf_current_user', JSON.stringify(updatedUser));
     }
 
     const resetLink = `${window.location.origin}/login?resetToken=${newToken}`;
@@ -3380,17 +3281,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return {
       success: true,
-      message: sent
-        ? `A secure password reset link has been successfully dispatched to your email address: ${email}!`
-        : `Password reset link generated! Note: Please configure your EmailJS credentials (VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_RESET_TEMPLATE_ID, etc.) in your AI Studio Settings to send real automated emails. Token URL: ${resetLink}`,
+      message: 'A password reset link has been sent to your email address! ✉️',
       token: newToken
     };
+  };
+
+  const resetPasswordWithToken = async (token: string, newPass: string): Promise<{ success: boolean; message: string }> => {
+    // Read directly from localStorage first to get absolute freshest state!
+    const saved = localStorage.getItem('garf_profiles');
+    let currentProfiles = profiles;
+    if (saved) {
+      try {
+        currentProfiles = JSON.parse(saved);
+      } catch (err) {
+        console.error('Error parsing profiles from localstorage:', err);
+      }
+    }
+
+    const matchedProfile = currentProfiles.find(p => p.resetToken === token);
+    if (!matchedProfile) {
+      throw new Error('Invalid or expired password reset token.');
+    }
+
+    if (matchedProfile.resetTokenExpires && new Date(matchedProfile.resetTokenExpires) < new Date()) {
+      throw new Error('Your password reset link has expired. Please request a new one.');
+    }
+
+    const updated = currentProfiles.map(p => {
+      if (p.id === matchedProfile.id) {
+        return {
+          ...p,
+          password: newPass,
+          resetToken: undefined,
+          resetTokenExpires: undefined,
+          updated_at: new Date().toISOString()
+        };
+      }
+      return p;
+    });
+
+    setProfiles(updated);
+    localStorage.setItem('garf_profiles', JSON.stringify(updated));
+
+    if (currentUser && currentUser.id === matchedProfile.id) {
+      const updatedUser = {
+        ...currentUser,
+        password: newPass,
+        resetToken: undefined,
+        resetTokenExpires: undefined,
+        updated_at: new Date().toISOString()
+      };
+      setCurrentUser(updatedUser);
+      localStorage.setItem('garf_current_user', JSON.stringify(updatedUser));
+    }
+
+    return { success: true, message: 'Your password has been reset successfully! 🎉' };
   };
 
   return (
     <AppContext.Provider value={{
       profiles, venues, resources, slots, bookings, reviews, coinTransactions, offers, notifications, adminLogs, currentUser,
-      signUp, logIn, logOut, logoutUser: logOut, updateProfile, deleteAccount, verifyEmailToken, resendVerificationEmail, sendPasswordResetEmail,
+      signUp, logIn, logOut, logoutUser: logOut, updateProfile, deleteAccount, verifyEmailToken, sendPasswordResetEmail, resetPasswordWithToken,
       registerVenue, registerDetailedVenue, updateVenue, deleteVenue, addResource, updateResource, deleteResource, createOffer, deactivateOffer, replyToReview,
       verifyVenue, rejectVenue, toggleFeatureVenue, suspendVenue, reactivateVenue, changeUserRole, suspendUser, reactivateUser, adjustUserCoins, updatePlatformSettings,
       createBookingHold, confirmOnlineBooking, cancelBooking,

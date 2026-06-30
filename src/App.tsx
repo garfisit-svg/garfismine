@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const { currentUser, logoutUser, verifyEmailToken, resendVerificationEmail } = useApp();
+  const { currentUser, logoutUser, verifyEmailToken } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -351,28 +351,6 @@ export default function App() {
           </div>
         )}
       </header>
-
-      {/* Email Verification Sticky Banner */}
-      {currentUser && currentUser.emailVerified === false && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 text-center text-xs sm:text-sm text-amber-500 font-medium flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-          <span>Your email is not verified. Please verify your email to unlock all features.</span>
-          <button
-            onClick={async () => {
-              if (currentUser.email) {
-                try {
-                  const res = await resendVerificationEmail(currentUser.email);
-                  toast.success(res.message);
-                } catch (err: any) {
-                  toast.error(err.message || 'Failed to resend email');
-                }
-              }
-            }}
-            className="underline hover:text-amber-400 font-bold ml-1 text-xs cursor-pointer focus:outline-none uppercase tracking-wider bg-amber-500/10 px-2.5 py-0.5 rounded border border-amber-500/20 hover:bg-amber-500/20 transition"
-          >
-            Resend Verification Email
-          </button>
-        </div>
-      )}
 
       {/* 🔮 MAIN CANVAS ROUTE SPANS */}
       <main className="flex-grow">
