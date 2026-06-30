@@ -8,6 +8,14 @@ import {
   WalkInSession, TurfBooking
 } from '../types';
 
+interface SimulatedEmail {
+  to: string;
+  subject: string;
+  body: string;
+  link?: string;
+  timestamp: string;
+}
+
 interface AppContextType {
   profiles: Profile[];
   venues: Venue[];
@@ -20,6 +28,9 @@ interface AppContextType {
   notifications: Notification[];
   adminLogs: AdminLog[];
   currentUser: Profile | null;
+  
+  latestSimulatedEmail: SimulatedEmail | null;
+  setLatestSimulatedEmail: React.Dispatch<React.SetStateAction<SimulatedEmail | null>>;
   
   // Operational states
   gamingEquipments: GamingEquipment[];
@@ -268,6 +279,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     });
   };
+
+  const [latestSimulatedEmail, setLatestSimulatedEmail] = useState<SimulatedEmail | null>(null);
 
   useEffect(() => {
     if (!localStorage.getItem('garf_detected_city')) {
@@ -833,6 +846,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           `Use this link to verify your email address: ${verifyLink}`,
           'system'
         );
+        setLatestSimulatedEmail({
+          to: newProfile.email,
+          subject: 'Verify your GARF Account ✉️',
+          body: `Hi ${newProfile.full_name},\n\nWelcome to GARF! Please click the link below to verify your email address and unlock all features:\n\n${verifyLink}\n\nGame on!`,
+          link: verifyLink,
+          timestamp: new Date().toISOString()
+        });
         console.log(`[SIMULATED EMAIL SENT TO ${newProfile.email}] Verification link: ${verifyLink}`);
       }, 500);
     }
@@ -876,7 +896,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setProfiles(prev => [...prev, newProfile]);
-    setCurrentUser(newProfile);
+    
+    // Do NOT auto-login unverified users, only pre-verified (admin test)
+    if (isPreVerified) {
+      setCurrentUser(newProfile);
+    } else {
+      setCurrentUser(null);
+    }
 
     // Welcome coin transaction
     const txIdWelcome = `txn-${Math.random().toString(36).substr(2,9)}`;
@@ -953,6 +979,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             `Thank you for signing up! Use this secure link to verify your email address: ${verifyLink}`,
             'system'
           );
+          setLatestSimulatedEmail({
+            to: newP.email,
+            subject: 'Verify your GARF Account ✉️',
+            body: `Hi ${newP.full_name},\n\nThank you for signing up! Please verify your email address to log in and secure slots:\n\n${verifyLink}\n\nGame on!`,
+            link: verifyLink,
+            timestamp: new Date().toISOString()
+          });
           console.log(`[SIMULATED EMAIL SENT TO ${newP.email}] Verification link: ${verifyLink}`);
         }, 500);
       }
@@ -973,6 +1006,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         created_at: new Date().toISOString()
       };
       setCoinTransactions(prev => [tx, ...prev]);
+    }
+
+    if (profile.emailVerified === false) {
+      throw new Error('Your email address is not verified. Please verify your email first to log in.');
     }
 
     if (profile.is_suspended) {
@@ -3192,6 +3229,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'system'
     );
 
+    setLatestSimulatedEmail({
+      to: cleanEmail,
+      subject: 'Verify your GARF Account (Requested Link) ✉️',
+      body: `Hi ${matchedProfile.full_name},\n\nYou requested a verification link. Please click below to verify your email address:\n\n${verifyLink}\n\nGame on!`,
+      link: verifyLink,
+      timestamp: new Date().toISOString()
+    });
+
     console.log(`[SIMULATED EMAIL SENT TO ${cleanEmail}] Verification link: ${verifyLink}`);
 
     return { 
@@ -3204,6 +3249,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       profiles, venues, resources, slots, bookings, reviews, coinTransactions, offers, notifications, adminLogs, currentUser,
+      latestSimulatedEmail, setLatestSimulatedEmail,
       signUp, logIn, logOut, logoutUser: logOut, updateProfile, deleteAccount, verifyEmailToken, resendVerificationEmail,
       registerVenue, registerDetailedVenue, updateVenue, deleteVenue, addResource, updateResource, deleteResource, createOffer, deactivateOffer, replyToReview,
       verifyVenue, rejectVenue, toggleFeatureVenue, suspendVenue, reactivateVenue, changeUserRole, suspendUser, reactivateUser, adjustUserCoins, updatePlatformSettings,

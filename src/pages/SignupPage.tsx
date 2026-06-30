@@ -78,8 +78,8 @@ export const SignupPage: React.FC = () => {
           avatar_url: selectedAvatar
         });
 
-      toast.success('Onboarding complete! Welcome to the GARF family! 🎉');
-      navigate('/explore');
+      toast.success('Registration complete! Please verify your email to log in.', { duration: 6000 });
+      navigate('/login', { state: { prefilledEmail: email } });
     } catch (err: any) {
       setError(err.message || 'Registration failed');
       toast.error(err.message || 'Signup failed');
