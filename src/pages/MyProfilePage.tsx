@@ -7,7 +7,7 @@ import {
 import toast from 'react-hot-toast';
 
 export const MyProfilePage: React.FC = () => {
-  const { currentUser, profiles, bookings, reviews, coinTransactions, updateProfile, deleteAccount } = useApp();
+  const { currentUser, profiles, bookings, reviews, coinTransactions, updateProfile, deleteAccount, resendVerificationEmail } = useApp();
 
   const [fullName, setFullName] = useState(currentUser?.full_name || '');
   const [phoneNumber, setPhoneNumber] = useState(currentUser?.phone || '');
@@ -18,6 +18,19 @@ export const MyProfilePage: React.FC = () => {
   // Avatar Choice modal state
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
+
+  const handleResendProfile = async () => {
+    if (!currentUser?.email) {
+      toast.error("No email address associated with your profile.");
+      return;
+    }
+    try {
+      const res = await resendVerificationEmail(currentUser.email);
+      toast.success(res.message, { duration: 5000 });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to resend verification link.");
+    }
+  };
   const [isDragging, setIsDragging] = useState(false);
 
   const CARTOON_AVATARS = [
@@ -215,10 +228,36 @@ export const MyProfilePage: React.FC = () => {
         </div>
 
         <div className="text-center sm:text-left space-y-2">
-          <h1 className="text-3xl font-display font-extrabold text-white">{currentUser.full_name}</h1>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <h1 className="text-3xl font-display font-extrabold text-white">{currentUser.full_name}</h1>
+            <div className="flex items-center gap-2 justify-center sm:justify-start">
+              {currentUser.emailVerified ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                  Verified Email
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                  Email Not Verified
+                </span>
+              )}
+            </div>
+          </div>
           <p className="text-xs text-text-secondary font-mono">
             MEMBER SINCE {currentUser.created_at.substring(0, 10)} • role: <strong className="text-brand-cyan uppercase">{currentUser.role}</strong>
           </p>
+          {currentUser.emailVerified === false && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={handleResendProfile}
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20 transition cursor-pointer"
+              >
+                Resend Verification Email
+              </button>
+            </div>
+          )}
         </div>
 
       </div>

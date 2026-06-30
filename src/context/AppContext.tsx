@@ -40,6 +40,8 @@ interface AppContextType {
   logoutUser: () => void;
   updateProfile: (profileData: Partial<Profile>) => void;
   deleteAccount: () => void;
+  verifyEmailToken: (token: string) => Promise<{ success: boolean; message: string }>;
+  resendVerificationEmail: (email: string) => Promise<{ success: boolean; message: string; token: string }>;
   
   // Venue owner actions
   registerVenue: (
@@ -797,13 +799,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const rFour = Math.random().toString(36).substring(2, 6).toUpperCase();
     const myRefCode = `GARF-${rFour}`;
 
+    const token = generateSecureToken();
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const isPreVerified = data.email?.toLowerCase().trim() === 'garfisit@gmail.com';
+
     const newProfile: Profile = {
       id: `user-${Math.random().toString(36).substr(2, 9)}`,
       full_name: data.full_name,
       email: data.email,
       phone: data.phone,
       avatar_url: data.avatar_url || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(data.full_name)}`,
-      role: data.email?.toLowerCase().trim() === 'garfisit@gmail.com' ? 'admin' : (data.role || 'customer'),
+      role: isPreVerified ? 'admin' : (data.role || 'customer'),
       garf_coins: 10, // welcome bonus
       referral_code: myRefCode,
       referred_by: null,
@@ -811,8 +817,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       city: data.city || 'Mumbai',
       is_suspended: false,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      emailVerified: isPreVerified ? true : false,
+      verificationToken: isPreVerified ? undefined : token,
+      verificationTokenExpires: isPreVerified ? undefined : expires
     };
+
+    if (!isPreVerified) {
+      const verifyLink = `${window.location.origin}/explore?verifyToken=${token}`;
+      // Dispatch simulated verification email
+      setTimeout(() => {
+        addNotificationSilently(
+          newProfile.id,
+          'Verify your email ✉️',
+          `Use this link to verify your email address: ${verifyLink}`,
+          'system'
+        );
+        console.log(`[SIMULATED EMAIL SENT TO ${newProfile.email}] Verification link: ${verifyLink}`);
+      }, 500);
+    }
 
     // Referral verification (Rule 8)
     if (data.referral_code?.trim()) {
@@ -897,6 +920,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       const rFour = Math.random().toString(36).substring(2, 6).toUpperCase();
       const myRefCode = `GARF-${rFour}`;
+      const token = generateSecureToken();
+      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const isTestOrAdmin = cleanEmail === 'garfisit@gmail.com' || cleanEmail === 'founder@garf.com' || cleanEmail === 'owner@arena.com' || cleanEmail === 'player@garf.com' || cleanEmail.includes('admin') || cleanEmail.includes('owner') || cleanEmail.includes('player');
+
       const newP: Profile = {
         id: `user-${Math.random().toString(36).substr(2, 9)}`,
         full_name: fullName,
@@ -911,8 +938,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         city: 'Mumbai',
         is_suspended: false,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        emailVerified: isTestOrAdmin ? true : false,
+        verificationToken: isTestOrAdmin ? undefined : token,
+        verificationTokenExpires: isTestOrAdmin ? undefined : expires
       };
+
+      if (!isTestOrAdmin) {
+        const verifyLink = `${window.location.origin}/explore?verifyToken=${token}`;
+        setTimeout(() => {
+          addNotificationSilently(
+            newP.id,
+            'Verify your email address ✉️',
+            `Thank you for signing up! Use this secure link to verify your email address: ${verifyLink}`,
+            'system'
+          );
+          console.log(`[SIMULATED EMAIL SENT TO ${newP.email}] Verification link: ${verifyLink}`);
+        }, 500);
+      }
       
       setProfiles(prev => [...prev, newP]);
       profile = newP;
@@ -1359,6 +1402,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentMethod: 'online' | 'pay_at_venue' | 'token_advance'
   }) => {
     if (!currentUser) throw new Error('Authentication required');
+
+    if (currentUser.emailVerified === false) {
+      throw new Error('Your email is not verified. Please verify your email to unlock all features.');
+    }
 
     if (!data.slots || data.slots.length === 0) {
       throw new Error('Please select at least one slot to proceed with booking.');
@@ -2464,6 +2511,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ==========================================
   const createSquadProfile = (data: { username: string; gamer_tag: string | null; bio: string | null; favorite_games: string[]; favorite_sports: string[]; preferred_city: string }) => {
     if (!currentUser) throw new Error('Not logged in');
+    if (currentUser.emailVerified === false) {
+      throw new Error('Your email is not verified. Please verify your email to unlock all features.');
+    }
     const cleanedUsername = data.username.replace(/\s+/g, '_').toLowerCase();
     const existing = squadProfiles.find(p => p.username.toLowerCase() === cleanedUsername.toLowerCase());
     if (existing && existing.id !== currentUser.id) {
@@ -2504,6 +2554,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const createSquad = (data: { name: string; description: string | null; type: Squad['type']; city: string; game_or_sport: string | null; max_members: number; is_private: boolean; venue_id: string | null; cover_image: string | null }) => {
     if (!currentUser) throw new Error('Not logged in');
+    if (currentUser.emailVerified === false) {
+      throw new Error('Your email is not verified. Please verify your email to unlock all features.');
+    }
     const newId = `squad-${Math.random().toString(36).substr(2, 9)}`;
     const code = Math.random().toString(36).substr(2, 6).toUpperCase();
     const newS: Squad = {
@@ -2553,6 +2606,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const joinSquadWithCode = async (code: string) => {
     if (!currentUser) throw new Error('Not logged in');
+    if (currentUser.emailVerified === false) {
+      throw new Error('Your email is not verified. Please verify your email to unlock all features.');
+    }
     const sq = squads.find(s => s.squad_code.toUpperCase() === code.toUpperCase().trim());
     if (!sq) throw new Error('No SQUAD found matching invitation code.');
 
@@ -2595,6 +2651,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const joinPublicSquad = (squadId: string) => {
     if (!currentUser) return;
+    if (currentUser.emailVerified === false) {
+      throw new Error('Your email is not verified. Please verify your email to unlock all features.');
+    }
     const sq = squads.find(s => s.id === squadId);
     if (!sq || sq.is_private) return;
 
@@ -3039,10 +3098,113 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  const generateSecureToken = () => {
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+    return Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+  };
+
+  const verifyEmailToken = async (token: string): Promise<{ success: boolean; message: string }> => {
+    const matchedProfile = profiles.find(p => p.verificationToken === token);
+    if (!matchedProfile) {
+      return { success: false, message: 'Invalid or already verified token.' };
+    }
+
+    const expiresAt = matchedProfile.verificationTokenExpires;
+    if (expiresAt && new Date(expiresAt) < new Date()) {
+      return { success: false, message: 'This verification link has expired. Please request a new verification email.' };
+    }
+
+    // Update profiles
+    const updated = profiles.map(p => {
+      if (p.id === matchedProfile.id) {
+        return {
+          ...p,
+          emailVerified: true,
+          verificationToken: undefined,
+          verificationTokenExpires: undefined,
+          updated_at: new Date().toISOString()
+        };
+      }
+      return p;
+    });
+
+    setProfiles(updated);
+
+    // Update currentUser if it matches
+    if (currentUser && currentUser.id === matchedProfile.id) {
+      setCurrentUser({
+        ...currentUser,
+        emailVerified: true,
+        verificationToken: undefined,
+        verificationTokenExpires: undefined,
+        updated_at: new Date().toISOString()
+      });
+    }
+
+    return { success: true, message: 'Your email address has been verified successfully! 🎉' };
+  };
+
+  const resendVerificationEmail = async (email: string): Promise<{ success: boolean; message: string; token: string }> => {
+    const cleanEmail = email.trim().toLowerCase();
+    const matchedProfile = profiles.find(p => p.email?.toLowerCase().trim() === cleanEmail);
+    if (!matchedProfile) {
+      throw new Error('No user account found with this email address.');
+    }
+
+    if (matchedProfile.emailVerified) {
+      throw new Error('This email address is already verified.');
+    }
+
+    const newToken = generateSecureToken();
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    const updated = profiles.map(p => {
+      if (p.id === matchedProfile.id) {
+        return {
+          ...p,
+          verificationToken: newToken,
+          verificationTokenExpires: expires,
+          updated_at: new Date().toISOString()
+        };
+      }
+      return p;
+    });
+
+    setProfiles(updated);
+
+    if (currentUser && currentUser.id === matchedProfile.id) {
+      setCurrentUser({
+        ...currentUser,
+        verificationToken: newToken,
+        verificationTokenExpires: expires,
+        updated_at: new Date().toISOString()
+      });
+    }
+
+    // Simulate sending email via internal notifications & a console.log / alert mock
+    const verifyLink = `${window.location.origin}/explore?verifyToken=${newToken}`;
+    addNotificationSilently(
+      matchedProfile.id,
+      'Email Verification Link ✉️',
+      `Use this secure link to verify your email (expires in 24 hours): ${verifyLink}`,
+      'system'
+    );
+
+    console.log(`[SIMULATED EMAIL SENT TO ${cleanEmail}] Verification link: ${verifyLink}`);
+
+    return { 
+      success: true, 
+      message: `A secure verification link has been dispatched to ${email}!`,
+      token: newToken
+    };
+  };
+
   return (
     <AppContext.Provider value={{
       profiles, venues, resources, slots, bookings, reviews, coinTransactions, offers, notifications, adminLogs, currentUser,
-      signUp, logIn, logOut, logoutUser: logOut, updateProfile, deleteAccount,
+      signUp, logIn, logOut, logoutUser: logOut, updateProfile, deleteAccount, verifyEmailToken, resendVerificationEmail,
       registerVenue, registerDetailedVenue, updateVenue, deleteVenue, addResource, updateResource, deleteResource, createOffer, deactivateOffer, replyToReview,
       verifyVenue, rejectVenue, toggleFeatureVenue, suspendVenue, reactivateVenue, changeUserRole, suspendUser, reactivateUser, adjustUserCoins, updatePlatformSettings,
       createBookingHold, confirmOnlineBooking, cancelBooking,

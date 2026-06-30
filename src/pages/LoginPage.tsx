@@ -5,7 +5,7 @@ import { Lock, Mail, AlertCircle, Gamepad2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const LoginPage: React.FC = () => {
-  const { logIn } = useApp();
+  const { logIn, profiles, resendVerificationEmail } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState('');
@@ -17,6 +17,9 @@ export const LoginPage: React.FC = () => {
 
   // Take redirect origin state if any (e.g., if redirected from /booking/:id)
   const from = (location.state as any)?.from || null;
+
+  const typedProfile = email ? profiles?.find(p => p.email?.trim().toLowerCase() === email.trim().toLowerCase()) : null;
+  const isTypedUnverified = typedProfile && typedProfile.emailVerified === false;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,12 +42,12 @@ export const LoginPage: React.FC = () => {
 
       toast.success(`Welcome back, ${user.full_name}!`);
 
-      // 4. Redirect after login based on role & origin
+      // Redirect after login based on role & origin
       if (from) {
         navigate(from, { replace: true });
       } else {
         if (user.role === 'admin') {
-          navigate('/admin-dashboard');
+          navigate('/garfadmin');
         } else {
           navigate('/explore');
         }
@@ -55,6 +58,27 @@ export const LoginPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleForgotPassword = () => {
+    if (!email || !email.includes('@')) {
+      toast.error('Please enter a valid email address in the email field first.');
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const matchedProfile = profiles?.find(p => p.email?.trim().toLowerCase() === cleanEmail);
+    if (!matchedProfile) {
+      toast.error('No account registered with this email address.');
+      return;
+    }
+
+    if (matchedProfile.emailVerified === false) {
+      toast.error('Your email is not verified. Please verify your email first before requesting a password reset.', { duration: 6000 });
+      return;
+    }
+
+    toast.success('A secure password reset link has been dispatched to your email address!');
   };
 
   return (
@@ -87,6 +111,31 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
+        {isTypedUnverified && (
+          <div className="p-4 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl space-y-2">
+            <div className="flex items-start gap-2.5 text-xs sm:text-sm">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5 text-amber-500" />
+              <span>Your email is not verified. Please verify your email to unlock all features.</span>
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const res = await resendVerificationEmail(typedProfile.email!);
+                    toast.success(res.message, { duration: 5000 });
+                  } catch (err: any) {
+                    toast.error(err.message || 'Failed to resend');
+                  }
+                }}
+                className="w-full text-center py-2 bg-amber-500/20 hover:bg-amber-500/30 text-white text-xs font-bold rounded-lg transition font-mono uppercase tracking-wider text-[10px]"
+              >
+                Resend Verification Email
+              </button>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-medium mb-2">Email Address</label>
@@ -109,7 +158,7 @@ export const LoginPage: React.FC = () => {
               <label className="text-sm font-medium">Password</label>
               <button
                 type="button"
-                onClick={() => toast.success('Password reset link dispatched!')}
+                onClick={handleForgotPassword}
                 className="text-xs text-brand-cyan hover:underline"
               >
                 Forgot Password?

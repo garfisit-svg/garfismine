@@ -21,6 +21,9 @@ export interface Profile {
   no_show_count?: number;
   pay_at_venue_blocked?: boolean;
   upi_id?: string;
+  emailVerified?: boolean;
+  verificationToken?: string;
+  verificationTokenExpires?: string;
 }
 
 export interface Venue {

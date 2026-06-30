@@ -880,6 +880,7 @@ export const GarfAdminPage: React.FC = () => {
                 <tr className="text-xs border-b border-[#2a2a3e] bg-[#12121c] font-mono font-bold">
                   <th className="py-3 px-4">USER NAME / IDENTIFIER</th>
                   <th className="py-3 px-4">EMAIL ADDRESS</th>
+                  <th className="py-3 px-4 text-center">EMAIL VERIFIED</th>
                   <th className="py-3 px-4">SECURE PHONE</th>
                   <th className="py-3 px-4">OPERATIONAL ROLE</th>
                   <th className="py-3 px-4 text-right">ACCOUNT STATUS</th>
@@ -907,6 +908,20 @@ export const GarfAdminPage: React.FC = () => {
 
                       <td className="py-4 px-4 font-mono">
                         {u.email || 'N/A'}
+                      </td>
+
+                      <td className="py-4 px-4 text-center">
+                        {u.emailVerified ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                            Verified
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            Unverified
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-4 px-4 font-mono">

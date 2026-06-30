@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import { useApp } from './context/AppContext';
 
@@ -31,12 +31,30 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const { currentUser, logoutUser } = useApp();
+  const { currentUser, logoutUser, verifyEmailToken, resendVerificationEmail } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Mobile navbar togglor
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Verification token interception
+  useEffect(() => {
+    const token = searchParams.get('verifyToken');
+    if (token) {
+      verifyEmailToken(token).then((res) => {
+        if (res.success) {
+          toast.success(res.message, { id: 'email-verify-success', duration: 7000 });
+        } else {
+          toast.error(res.message, { id: 'email-verify-error', duration: 7000 });
+        }
+        // clean up URL query params
+        searchParams.delete('verifyToken');
+        setSearchParams(searchParams, { replace: true });
+      });
+    }
+  }, [searchParams, setSearchParams, verifyEmailToken]);
 
   const isOwner = currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending');
 
@@ -333,6 +351,28 @@ export default function App() {
           </div>
         )}
       </header>
+
+      {/* Email Verification Sticky Banner */}
+      {currentUser && currentUser.emailVerified === false && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 text-center text-xs sm:text-sm text-amber-500 font-medium flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+          <span>Your email is not verified. Please verify your email to unlock all features.</span>
+          <button
+            onClick={async () => {
+              if (currentUser.email) {
+                try {
+                  const res = await resendVerificationEmail(currentUser.email);
+                  toast.success(res.message);
+                } catch (err: any) {
+                  toast.error(err.message || 'Failed to resend email');
+                }
+              }
+            }}
+            className="underline hover:text-amber-400 font-bold ml-1 text-xs cursor-pointer focus:outline-none uppercase tracking-wider bg-amber-500/10 px-2.5 py-0.5 rounded border border-amber-500/20 hover:bg-amber-500/20 transition"
+          >
+            Resend Verification Email
+          </button>
+        </div>
+      )}
 
       {/* 🔮 MAIN CANVAS ROUTE SPANS */}
       <main className="flex-grow">
