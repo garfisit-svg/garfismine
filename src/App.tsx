@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const { currentUser, logoutUser, verifyEmailToken, resendVerificationEmail, latestSimulatedEmail, setLatestSimulatedEmail } = useApp();
+  const { currentUser, logoutUser, verifyEmailToken, resendVerificationEmail } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -479,48 +479,6 @@ export default function App() {
           <p>© {new Date().getFullYear()} GARF Platforms Inc. All gaming coordinates secured. Built for elite computing and athletic squads.</p>
         </div>
       </footer>
-
-      {/* Floating Simulated Email Outbox Modal */}
-      {latestSimulatedEmail && (
-        <div className="fixed bottom-6 right-6 z-[999] max-w-sm w-full bg-[#12121c] border border-brand-purple/50 rounded-2xl p-5 shadow-2xl shadow-brand-purple/20 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className="flex items-center justify-between mb-3 border-b border-[#2a2a3e] pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-brand-cyan flex items-center gap-1.5 font-mono">
-              <Mail className="w-4 h-4 text-brand-purple" /> Simulated Email Outbox
-            </span>
-            <button 
-              onClick={() => setLatestSimulatedEmail(null)} 
-              className="text-text-secondary hover:text-white text-xs bg-white/5 hover:bg-white/10 p-1.5 rounded-lg transition"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="space-y-2.5 text-xs">
-            <div className="flex justify-between">
-              <span className="text-text-secondary font-mono">To:</span> 
-              <strong className="text-white font-mono">{latestSimulatedEmail.to}</strong>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-text-secondary font-mono">Subject:</span> 
-              <strong className="text-brand-purple text-right">{latestSimulatedEmail.subject}</strong>
-            </div>
-            <div className="p-3 bg-black/50 rounded-xl text-[#c1c1d6] mt-2 font-sans whitespace-pre-wrap leading-relaxed border border-[#2a2a3e] text-[11px]">
-              {latestSimulatedEmail.body}
-            </div>
-            {latestSimulatedEmail.link && (
-              <a
-                href={latestSimulatedEmail.link}
-                onClick={() => {
-                  setLatestSimulatedEmail(null);
-                }}
-                className="block w-full text-center py-2.5 bg-gradient-to-r from-brand-purple to-brand-cyan text-white text-xs font-bold rounded-xl hover:opacity-95 transition mt-3 tracking-wider font-mono uppercase"
-              >
-                Click to Verify Email Address Now →
-              </a>
-            )}
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

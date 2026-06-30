@@ -24,6 +24,8 @@ export interface Profile {
   emailVerified?: boolean;
   verificationToken?: string;
   verificationTokenExpires?: string;
+  resetToken?: string;
+  resetTokenExpires?: string;
 }
 
 export interface Venue {

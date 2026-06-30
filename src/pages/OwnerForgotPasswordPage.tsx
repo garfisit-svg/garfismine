@@ -1,20 +1,41 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, CheckCircle, ArrowLeft } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 import toast from 'react-hot-toast';
 
 export const OwnerForgotPasswordPage: React.FC = () => {
+  const { sendPasswordResetEmail, profiles } = useApp();
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
       toast.error('Email is required!');
       return;
     }
-    setSubmitted(true);
-    toast.success('Successfully dispatched owner credential reset link!');
+
+    const cleanEmail = email.trim().toLowerCase();
+    const matchedProfile = profiles?.find(p => p.email?.trim().toLowerCase() === cleanEmail);
+    
+    if (!matchedProfile) {
+      toast.error('No account registered with this email address.');
+      return;
+    }
+
+    if (matchedProfile.role !== 'owner' && matchedProfile.role !== 'admin') {
+      toast.error('This email is not registered as an Owner or Admin.');
+      return;
+    }
+
+    try {
+      const res = await sendPasswordResetEmail(cleanEmail);
+      setSubmitted(true);
+      toast.success(res.message, { duration: 8000 });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to dispatch reset link');
+    }
   };
 
   return (

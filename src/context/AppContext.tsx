@@ -8,14 +8,6 @@ import {
   WalkInSession, TurfBooking
 } from '../types';
 
-interface SimulatedEmail {
-  to: string;
-  subject: string;
-  body: string;
-  link?: string;
-  timestamp: string;
-}
-
 interface AppContextType {
   profiles: Profile[];
   venues: Venue[];
@@ -28,9 +20,6 @@ interface AppContextType {
   notifications: Notification[];
   adminLogs: AdminLog[];
   currentUser: Profile | null;
-  
-  latestSimulatedEmail: SimulatedEmail | null;
-  setLatestSimulatedEmail: React.Dispatch<React.SetStateAction<SimulatedEmail | null>>;
   
   // Operational states
   gamingEquipments: GamingEquipment[];
@@ -53,6 +42,7 @@ interface AppContextType {
   deleteAccount: () => void;
   verifyEmailToken: (token: string) => Promise<{ success: boolean; message: string }>;
   resendVerificationEmail: (email: string) => Promise<{ success: boolean; message: string; token: string }>;
+  sendPasswordResetEmail: (email: string) => Promise<{ success: boolean; message: string; token?: string }>;
   
   // Venue owner actions
   registerVenue: (
@@ -280,15 +270,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const [latestSimulatedEmail, setLatestSimulatedEmail] = useState<SimulatedEmail | null>(null);
-
   useEffect(() => {
     if (!localStorage.getItem('garf_detected_city')) {
       detectUserCity();
     }
   }, []);
 
-  // Load state from localStorage or seed
   const [profiles, setProfiles] = useState<Profile[]>(() => {
     const saved = localStorage.getItem('garf_profiles');
     if (saved) return JSON.parse(saved);
@@ -838,22 +825,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (!isPreVerified) {
       const verifyLink = `${window.location.origin}/explore?verifyToken=${token}`;
-      // Dispatch simulated verification email
-      setTimeout(() => {
+      // Dispatch verification email
+      setTimeout(async () => {
         addNotificationSilently(
           newProfile.id,
           'Verify your email ✉️',
           `Use this link to verify your email address: ${verifyLink}`,
           'system'
         );
-        setLatestSimulatedEmail({
-          to: newProfile.email,
-          subject: 'Verify your GARF Account ✉️',
-          body: `Hi ${newProfile.full_name},\n\nWelcome to GARF! Please click the link below to verify your email address and unlock all features:\n\n${verifyLink}\n\nGame on!`,
-          link: verifyLink,
-          timestamp: new Date().toISOString()
-        });
-        console.log(`[SIMULATED EMAIL SENT TO ${newProfile.email}] Verification link: ${verifyLink}`);
+        await sendRealVerificationEmail(newProfile.email, newProfile.full_name, verifyLink);
       }, 500);
     }
 
@@ -972,21 +952,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (!isTestOrAdmin) {
         const verifyLink = `${window.location.origin}/explore?verifyToken=${token}`;
-        setTimeout(() => {
+        setTimeout(async () => {
           addNotificationSilently(
             newP.id,
             'Verify your email address ✉️',
             `Thank you for signing up! Use this secure link to verify your email address: ${verifyLink}`,
             'system'
           );
-          setLatestSimulatedEmail({
-            to: newP.email,
-            subject: 'Verify your GARF Account ✉️',
-            body: `Hi ${newP.full_name},\n\nThank you for signing up! Please verify your email address to log in and secure slots:\n\n${verifyLink}\n\nGame on!`,
-            link: verifyLink,
-            timestamp: new Date().toISOString()
-          });
-          console.log(`[SIMULATED EMAIL SENT TO ${newP.email}] Verification link: ${verifyLink}`);
+          await sendRealVerificationEmail(newP.email, newP.full_name, verifyLink);
         }, 500);
       }
       
@@ -3135,6 +3108,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  const sendRealVerificationEmail = async (toEmail: string, toName: string, verifyLink: string) => {
+    const serviceId = (import.meta as any).env.VITE_EMAILJS_SERVICE_ID || '';
+    const templateId = (import.meta as any).env.VITE_EMAILJS_TEMPLATE_ID || 'template_rzejxg8';
+    const publicKey = (import.meta as any).env.VITE_EMAILJS_PUBLIC_KEY || '';
+
+    if (serviceId && templateId && publicKey) {
+      try {
+        const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            service_id: serviceId,
+            template_id: templateId,
+            user_id: publicKey,
+            template_params: {
+              to_email: toEmail,
+              to_name: toName,
+              verification_link: verifyLink,
+              subject: 'Verify your GARF Account ✉️',
+            },
+          }),
+        });
+        if (response.ok) {
+          console.log(`[REAL EMAIL SENT TO ${toEmail}] via EmailJS`);
+          return true;
+        } else {
+          const errText = await response.text();
+          console.error('EmailJS Error Response:', errText);
+        }
+      } catch (err) {
+        console.error('Error sending email via EmailJS:', err);
+      }
+    } else {
+      console.warn('⚠️ EmailJS credentials (VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_TEMPLATE_ID, VITE_EMAILJS_PUBLIC_KEY) are not configured. Cannot send real emails.');
+    }
+    return false;
+  };
+
+  const sendRealPasswordResetEmail = async (toEmail: string, toName: string, resetLink: string) => {
+    const serviceId = (import.meta as any).env.VITE_EMAILJS_SERVICE_ID || '';
+    const templateId = (import.meta as any).env.VITE_EMAILJS_RESET_TEMPLATE_ID || 'template_ioai0qb';
+    const publicKey = (import.meta as any).env.VITE_EMAILJS_PUBLIC_KEY || '';
+
+    if (serviceId && templateId && publicKey) {
+      try {
+        const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            service_id: serviceId,
+            template_id: templateId,
+            user_id: publicKey,
+            template_params: {
+              to_email: toEmail,
+              to_name: toName,
+              reset_link: resetLink,
+              subject: 'Reset your GARF Password 🔑',
+            },
+          }),
+        });
+        if (response.ok) {
+          console.log(`[REAL RESET EMAIL SENT TO ${toEmail}] via EmailJS`);
+          return true;
+        } else {
+          const errText = await response.text();
+          console.error('EmailJS Password Reset Error Response:', errText);
+        }
+      } catch (err) {
+        console.error('Error sending password reset email via EmailJS:', err);
+      }
+    } else {
+      console.warn('⚠️ EmailJS password reset template credential (VITE_EMAILJS_RESET_TEMPLATE_ID) is not configured. Cannot send real reset emails.');
+    }
+    return false;
+  };
+
   const generateSecureToken = () => {
     if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
       return window.crypto.randomUUID();
@@ -3220,7 +3273,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    // Simulate sending email via internal notifications & a console.log / alert mock
+    // Dispatch email
     const verifyLink = `${window.location.origin}/explore?verifyToken=${newToken}`;
     addNotificationSilently(
       matchedProfile.id,
@@ -3229,19 +3282,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'system'
     );
 
-    setLatestSimulatedEmail({
-      to: cleanEmail,
-      subject: 'Verify your GARF Account (Requested Link) ✉️',
-      body: `Hi ${matchedProfile.full_name},\n\nYou requested a verification link. Please click below to verify your email address:\n\n${verifyLink}\n\nGame on!`,
-      link: verifyLink,
-      timestamp: new Date().toISOString()
-    });
-
-    console.log(`[SIMULATED EMAIL SENT TO ${cleanEmail}] Verification link: ${verifyLink}`);
+    const sent = await sendRealVerificationEmail(matchedProfile.email, matchedProfile.full_name, verifyLink);
 
     return { 
       success: true, 
-      message: `A secure verification link has been dispatched to ${email}!`,
+      message: sent 
+        ? `A secure verification link has been successfully dispatched to your email address: ${email}!`
+        : `Verification link generated! Note: Please configure your EmailJS credentials (VITE_EMAILJS_SERVICE_ID, etc.) in your AI Studio Settings to send real automated emails. Token URL: ${verifyLink}`,
+      token: newToken
+    };
+  };
+
+  const sendPasswordResetEmail = async (email: string): Promise<{ success: boolean; message: string; token?: string }> => {
+    const cleanEmail = email.trim().toLowerCase();
+    const matchedProfile = profiles.find(p => p.email?.toLowerCase().trim() === cleanEmail);
+    if (!matchedProfile) {
+      throw new Error('No user account found with this email address.');
+    }
+
+    const newToken = generateSecureToken();
+    const expires = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
+
+    const updated = profiles.map(p => {
+      if (p.id === matchedProfile.id) {
+        return {
+          ...p,
+          resetToken: newToken,
+          resetTokenExpires: expires,
+          updated_at: new Date().toISOString()
+        };
+      }
+      return p;
+    });
+
+    setProfiles(updated);
+
+    if (currentUser && currentUser.id === matchedProfile.id) {
+      setCurrentUser({
+        ...currentUser,
+        resetToken: newToken,
+        resetTokenExpires: expires,
+        updated_at: new Date().toISOString()
+      });
+    }
+
+    const resetLink = `${window.location.origin}/login?resetToken=${newToken}`;
+    addNotificationSilently(
+      matchedProfile.id,
+      'Password Reset Link 🔑',
+      `Use this secure link to reset your account password (expires in 1 hour): ${resetLink}`,
+      'system'
+    );
+
+    const sent = await sendRealPasswordResetEmail(matchedProfile.email || '', matchedProfile.full_name, resetLink);
+
+    return {
+      success: true,
+      message: sent
+        ? `A secure password reset link has been successfully dispatched to your email address: ${email}!`
+        : `Password reset link generated! Note: Please configure your EmailJS credentials (VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_RESET_TEMPLATE_ID, etc.) in your AI Studio Settings to send real automated emails. Token URL: ${resetLink}`,
       token: newToken
     };
   };
@@ -3249,8 +3348,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       profiles, venues, resources, slots, bookings, reviews, coinTransactions, offers, notifications, adminLogs, currentUser,
-      latestSimulatedEmail, setLatestSimulatedEmail,
-      signUp, logIn, logOut, logoutUser: logOut, updateProfile, deleteAccount, verifyEmailToken, resendVerificationEmail,
+      signUp, logIn, logOut, logoutUser: logOut, updateProfile, deleteAccount, verifyEmailToken, resendVerificationEmail, sendPasswordResetEmail,
       registerVenue, registerDetailedVenue, updateVenue, deleteVenue, addResource, updateResource, deleteResource, createOffer, deactivateOffer, replyToReview,
       verifyVenue, rejectVenue, toggleFeatureVenue, suspendVenue, reactivateVenue, changeUserRole, suspendUser, reactivateUser, adjustUserCoins, updatePlatformSettings,
       createBookingHold, confirmOnlineBooking, cancelBooking,
