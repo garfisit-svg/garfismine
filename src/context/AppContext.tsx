@@ -3110,14 +3110,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const sendRealVerificationEmail = async (toEmail: string, toName: string, verifyLink: string) => {
-    const serviceId = (import.meta as any).env.VITE_EMAILJS_SERVICE_ID || '';
+    const serviceId = (import.meta as any).env.VITE_EMAILJS_SERVICE_ID || 'service_t9g5tw9';
     const templateId = (import.meta as any).env.VITE_EMAILJS_TEMPLATE_ID || 'template_rzejxg8';
-    const publicKey = (import.meta as any).env.VITE_EMAILJS_PUBLIC_KEY || '';
+    const publicKey = (import.meta as any).env.VITE_EMAILJS_PUBLIC_KEY || 'cX2jZ5gg6mmqjZlEJ';
 
     console.log('[DEBUG] sendRealVerificationEmail config:', {
-      has_serviceId: !!serviceId,
-      has_templateId: !!templateId,
-      has_publicKey: !!publicKey,
+      serviceId,
+      templateId,
+      publicKey,
       toEmail,
       toName,
     });
@@ -3137,6 +3137,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               to_email: toEmail,
               to_name: toName,
               verification_link: verifyLink,
+              verify_link: verifyLink,
+              link: verifyLink,
               subject: 'Verify your GARF Account ✉️',
             },
           }),
@@ -3161,7 +3163,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         `• Service ID: ${serviceId ? '✅ Configured' : '❌ Missing'}\n` +
         `• Template ID: ${templateId ? '✅ Configured' : '❌ Missing'}\n` +
         `• Public Key: ${publicKey ? '✅ Configured' : '❌ Missing'}\n\n` +
-        `Please add these variables in your AI Studio Settings (click Settings in the menu).`,
+        `Please add these variables in your AI Studio Settings.`,
         { duration: 8000 }
       );
     }
@@ -3169,14 +3171,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const sendRealPasswordResetEmail = async (toEmail: string, toName: string, resetLink: string) => {
-    const serviceId = (import.meta as any).env.VITE_EMAILJS_SERVICE_ID || '';
+    const serviceId = (import.meta as any).env.VITE_EMAILJS_SERVICE_ID || 'service_t9g5tw9';
     const templateId = (import.meta as any).env.VITE_EMAILJS_RESET_TEMPLATE_ID || 'template_ioai0qb';
-    const publicKey = (import.meta as any).env.VITE_EMAILJS_PUBLIC_KEY || '';
+    const publicKey = (import.meta as any).env.VITE_EMAILJS_PUBLIC_KEY || 'cX2jZ5gg6mmqjZlEJ';
 
     console.log('[DEBUG] sendRealPasswordResetEmail config:', {
-      has_serviceId: !!serviceId,
-      has_templateId: !!templateId,
-      has_publicKey: !!publicKey,
+      serviceId,
+      templateId,
+      publicKey,
       toEmail,
       toName,
     });
@@ -3196,6 +3198,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               to_email: toEmail,
               to_name: toName,
               reset_link: resetLink,
+              link: resetLink,
               subject: 'Reset your GARF Password 🔑',
             },
           }),
