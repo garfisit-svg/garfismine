@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { 
   Profile, Venue, VenueResource, Slot, Booking, Review, 
   CoinTransaction, Offer, Notification, AdminLog, CoinTransactionType,
@@ -3113,6 +3114,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const templateId = (import.meta as any).env.VITE_EMAILJS_TEMPLATE_ID || 'template_rzejxg8';
     const publicKey = (import.meta as any).env.VITE_EMAILJS_PUBLIC_KEY || '';
 
+    console.log('[DEBUG] sendRealVerificationEmail config:', {
+      has_serviceId: !!serviceId,
+      has_templateId: !!templateId,
+      has_publicKey: !!publicKey,
+      toEmail,
+      toName,
+    });
+
     if (serviceId && templateId && publicKey) {
       try {
         const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
@@ -3134,16 +3143,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         if (response.ok) {
           console.log(`[REAL EMAIL SENT TO ${toEmail}] via EmailJS`);
+          toast.success(`Verification email successfully sent to ${toEmail}! ✉️`);
           return true;
         } else {
           const errText = await response.text();
           console.error('EmailJS Error Response:', errText);
+          toast.error(`EmailJS Error (Code ${response.status}): "${errText}". Check template_params and EmailJS setup.`);
         }
       } catch (err) {
         console.error('Error sending email via EmailJS:', err);
+        toast.error(`EmailJS connection error: ${(err as any)?.message || err}`);
       }
     } else {
       console.warn('⚠️ EmailJS credentials (VITE_EMAILJS_SERVICE_ID, VITE_EMAILJS_TEMPLATE_ID, VITE_EMAILJS_PUBLIC_KEY) are not configured. Cannot send real emails.');
+      toast.error(
+        `EmailJS configuration is incomplete!\n` +
+        `• Service ID: ${serviceId ? '✅ Configured' : '❌ Missing'}\n` +
+        `• Template ID: ${templateId ? '✅ Configured' : '❌ Missing'}\n` +
+        `• Public Key: ${publicKey ? '✅ Configured' : '❌ Missing'}\n\n` +
+        `Please add these variables in your AI Studio Settings (click Settings in the menu).`,
+        { duration: 8000 }
+      );
     }
     return false;
   };
@@ -3152,6 +3172,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const serviceId = (import.meta as any).env.VITE_EMAILJS_SERVICE_ID || '';
     const templateId = (import.meta as any).env.VITE_EMAILJS_RESET_TEMPLATE_ID || 'template_ioai0qb';
     const publicKey = (import.meta as any).env.VITE_EMAILJS_PUBLIC_KEY || '';
+
+    console.log('[DEBUG] sendRealPasswordResetEmail config:', {
+      has_serviceId: !!serviceId,
+      has_templateId: !!templateId,
+      has_publicKey: !!publicKey,
+      toEmail,
+      toName,
+    });
 
     if (serviceId && templateId && publicKey) {
       try {
@@ -3174,16 +3202,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         if (response.ok) {
           console.log(`[REAL RESET EMAIL SENT TO ${toEmail}] via EmailJS`);
+          toast.success(`Password reset email successfully sent to ${toEmail}! 🔑`);
           return true;
         } else {
           const errText = await response.text();
           console.error('EmailJS Password Reset Error Response:', errText);
+          toast.error(`EmailJS Error (Code ${response.status}): "${errText}". Check template_params and EmailJS setup.`);
         }
       } catch (err) {
         console.error('Error sending password reset email via EmailJS:', err);
+        toast.error(`EmailJS connection error: ${(err as any)?.message || err}`);
       }
     } else {
       console.warn('⚠️ EmailJS password reset template credential (VITE_EMAILJS_RESET_TEMPLATE_ID) is not configured. Cannot send real reset emails.');
+      toast.error(
+        `EmailJS Password Reset configuration is incomplete!\n` +
+        `• Service ID: ${serviceId ? '✅ Configured' : '❌ Missing'}\n` +
+        `• Reset Template ID: ${templateId ? '✅ Configured' : '❌ Missing'}\n` +
+        `• Public Key: ${publicKey ? '✅ Configured' : '❌ Missing'}\n\n` +
+        `Please configure VITE_EMAILJS_RESET_TEMPLATE_ID in your AI Studio Settings.`,
+        { duration: 8000 }
+      );
     }
     return false;
   };
