@@ -25,7 +25,7 @@ export const OwnerLoginPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const user = await logIn(email);
+      const user = await logIn(email, password);
       
       if (user.role === 'customer') {
         // Customer login error barrier on owner page

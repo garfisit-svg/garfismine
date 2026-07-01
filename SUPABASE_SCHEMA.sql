@@ -51,6 +51,9 @@ CREATE TABLE profiles (
   is_suspended BOOLEAN DEFAULT FALSE NOT NULL,
   no_show_count INTEGER DEFAULT 0 NOT NULL,
   pay_at_venue_blocked BOOLEAN DEFAULT FALSE NOT NULL,
+  password TEXT,
+  "resetToken" TEXT,
+  "resetTokenExpires" TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

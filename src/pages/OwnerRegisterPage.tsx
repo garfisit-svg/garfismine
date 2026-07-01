@@ -97,7 +97,7 @@ export const OwnerRegisterPage: React.FC = () => {
           setLoading(false);
           return;
         }
-        await logIn(email);
+        await logIn(email, password);
         toast.success(`Log in verified! Continuing venue registration.`);
       }
     } catch (err: any) {

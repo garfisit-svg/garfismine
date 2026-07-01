@@ -69,7 +69,7 @@ export const LoginPage: React.FC = () => {
 
     try {
       setLoading(true);
-      const user = await logIn(email);
+      const user = await logIn(email, password);
       
       if (user.role === 'owner' || user.role === 'owner_pending') {
         setOwnerRoleError(true);

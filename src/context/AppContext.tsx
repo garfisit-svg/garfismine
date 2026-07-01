@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { 
   Profile, Venue, VenueResource, Slot, Booking, Review, 
   CoinTransaction, Offer, Notification, AdminLog, CoinTransactionType,
@@ -307,6 +308,106 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return null;
   });
+
+  // Load profiles from Supabase on mount if active
+  useEffect(() => {
+    const loadSupabaseProfiles = async () => {
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase.from('profiles').select('*');
+          if (data && !error) {
+            // Merge database profiles with local ones. Database profiles take priority!
+            const dbProfilesMap = new Map(data.map((p: any) => [p.id, p]));
+            
+            // Local profiles
+            const localSaved = localStorage.getItem('garf_profiles');
+            let localProfiles: Profile[] = [];
+            if (localSaved) {
+              try {
+                localProfiles = JSON.parse(localSaved);
+              } catch (e) {
+                console.error('Error parsing local profiles during merge:', e);
+              }
+            }
+
+            // Combine both, letting database items overwrite local ones of the same ID
+            const combinedMap = new Map<string, Profile>();
+            localProfiles.forEach(p => {
+              if (p && p.id) {
+                combinedMap.set(p.id, p);
+              }
+            });
+            
+            data.forEach((p: any) => {
+              if (p && p.id) {
+                const existing = combinedMap.get(p.id);
+                combinedMap.set(p.id, {
+                  ...existing,
+                  ...p,
+                  emailVerified: p.emailVerified ?? existing?.emailVerified ?? true
+                });
+              }
+            });
+
+            const mergedList = Array.from(combinedMap.values());
+            setProfiles(mergedList);
+            localStorage.setItem('garf_profiles', JSON.stringify(mergedList));
+          }
+        } catch (err) {
+          console.error('Failed to sync profiles from Supabase:', err);
+        }
+      }
+    };
+
+    loadSupabaseProfiles();
+  }, []);
+
+  const saveProfileToSupabase = async (profile: Profile) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const payload: any = {
+          id: profile.id,
+          full_name: profile.full_name,
+          email: profile.email,
+          phone: profile.phone,
+          avatar_url: profile.avatar_url,
+          role: profile.role,
+          garf_coins: profile.garf_coins,
+          referral_code: profile.referral_code,
+          referred_by: profile.referred_by,
+          date_of_birth: profile.date_of_birth,
+          city: profile.city,
+          is_suspended: profile.is_suspended,
+          password: profile.password,
+          resetToken: profile.resetToken,
+          resetTokenExpires: profile.resetTokenExpires,
+          updated_at: new Date().toISOString()
+        };
+
+        const { error } = await supabase
+          .from('profiles')
+          .upsert(payload, { onConflict: 'id' });
+          
+        if (error) {
+          console.warn('Supabase profile upsert warning (trying fallback query without reset/password columns):', error.message);
+          const fallbackPayload = { ...payload };
+          delete fallbackPayload.password;
+          delete fallbackPayload.resetToken;
+          delete fallbackPayload.resetTokenExpires;
+          
+          const { error: fallbackError } = await supabase
+            .from('profiles')
+            .upsert(fallbackPayload, { onConflict: 'id' });
+            
+          if (fallbackError) {
+            console.error('Failed to upsert profile in fallback mode:', fallbackError.message);
+          }
+        }
+      } catch (err) {
+        console.error('Error executing saveProfileToSupabase:', err);
+      }
+    }
+  };
 
   const [venues, setVenues] = useState<Venue[]>(() => {
     const saved = localStorage.getItem('garf_venues');
@@ -853,11 +954,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
             setCoinTransactions(prevTx => [newTx, ...prevTx]);
             addNotificationSilently(p.id, 'Referral Bonus Received! 🎁', `Friend ${data.full_name} joined with your code! +100 GARF coins are in!`, 'coins');
-            return {
+            const updatedParent = {
               ...p,
               garf_coins: afterCoins,
               updated_at: new Date().toISOString()
             };
+            saveProfileToSupabase(updatedParent);
+            return updatedParent;
           }
           return p;
         }));
@@ -867,6 +970,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setProfiles(prev => [...prev, newProfile]);
+    saveProfileToSupabase(newProfile);
     
     // Auto-login registered users directly
     setCurrentUser(newProfile);
@@ -889,21 +993,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newProfile;
   };
 
-  const logIn = async (email: string) => {
+  const logIn = async (email: string, password?: string) => {
     // Matches hardcoded emails for simulation:
     let profile: Profile | undefined;
     const cleanEmail = email.trim().toLowerCase();
     
+    // Read freshest profiles list from localStorage
+    const saved = localStorage.getItem('garf_profiles');
+    let currentProfiles = profiles;
+    if (saved) {
+      try {
+        currentProfiles = JSON.parse(saved);
+      } catch (err) {
+        console.error('Error parsing profiles from localStorage:', err);
+      }
+    }
+
     if (cleanEmail === 'founder@garf.com') {
-      profile = profiles.find(p => p.role === 'admin' || p.id === 'user-admin-1');
+      profile = currentProfiles.find(p => p.role === 'admin' || p.id === 'user-admin-1');
     } else if (cleanEmail === 'owner@arena.com') {
-      profile = profiles.find(p => p.role === 'owner' || p.id === 'user-owner-1');
+      profile = currentProfiles.find(p => p.role === 'owner' || p.id === 'user-owner-1');
     } else if (cleanEmail === 'player@garf.com') {
-      profile = profiles.find(p => p.id === 'user-customer-1');
+      profile = currentProfiles.find(p => p.id === 'user-customer-1');
     } else {
       // Find inside profiles list by matching custom email if present, or search by name.
       // Since it is simulated, we support direct login for any profile!
-      profile = profiles.find(p => p.email?.trim().toLowerCase() === cleanEmail || p.phone === email || p.full_name.toLowerCase().replace(/\s+/g, '') === cleanEmail.split('@')[0].toLowerCase());
+      profile = currentProfiles.find(p => p.email?.trim().toLowerCase() === cleanEmail || p.phone === email || p.full_name.toLowerCase().replace(/\s+/g, '') === cleanEmail.split('@')[0].toLowerCase());
+    }
+
+    if (profile) {
+      // If the profile has a password, verify it!
+      if (profile.password && password && profile.password !== password) {
+        throw new Error('Incorrect password. Please try again.');
+      }
     }
 
     if (!profile) {
@@ -929,10 +1051,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         is_suspended: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        emailVerified: true
+        emailVerified: true,
+        password: password || 'password' // Save the typed password or default
       };
 
       setProfiles(prev => [...prev, newP]);
+      saveProfileToSupabase(newP);
       profile = newP;
 
       // Welcome transaction
@@ -3221,6 +3345,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: 'Your email address has been verified successfully! 🎉' };
   };
 
+  const encodeResetToken = (email: string, expires: string, rawToken: string): string => {
+    try {
+      const dataStr = `${email}||${expires}||${rawToken}`;
+      return btoa(dataStr);
+    } catch (e) {
+      return rawToken;
+    }
+  };
+
+  const decodeResetToken = (token: string): { email: string; expires: string; rawToken: string } | null => {
+    try {
+      const decodedStr = atob(token);
+      const parts = decodedStr.split('||');
+      if (parts.length === 3) {
+        return {
+          email: parts[0],
+          expires: parts[1],
+          rawToken: parts[2]
+        };
+      }
+    } catch (e) {
+      // Return null if not base64 encoded or mismatch
+    }
+    return null;
+  };
+
   const sendPasswordResetEmail = async (email: string): Promise<{ success: boolean; message: string; token?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
     
@@ -3240,17 +3390,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw new Error('No user account found with this email address. New emails must sign up first!');
     }
 
-    const newToken = generateSecureToken();
-    const expires = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
+    const rawToken = generateSecureToken();
+    const expires = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString(); // 1 hour
+    const newToken = encodeResetToken(cleanEmail, expires, rawToken);
 
     const updated = currentProfiles.map(p => {
       if (p.id === matchedProfile.id) {
-        return {
+        const updatedP = {
           ...p,
           resetToken: newToken,
           resetTokenExpires: expires,
           updated_at: new Date().toISOString()
         };
+        saveProfileToSupabase(updatedP);
+        return updatedP;
       }
       return p;
     });
@@ -3269,7 +3422,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('garf_current_user', JSON.stringify(updatedUser));
     }
 
-    const resetLink = `${window.location.origin}/login?resetToken=${newToken}`;
+    const resetLink = `${window.location.origin}/login?resetToken=${encodeURIComponent(newToken)}`;
     addNotificationSilently(
       matchedProfile.id,
       'Password Reset Link 🔑',
@@ -3298,24 +3451,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    const matchedProfile = currentProfiles.find(p => p.resetToken === token);
+    const decoded = decodeResetToken(token);
+    let matchedProfile: Profile | undefined;
+
+    if (decoded) {
+      const { email: tokenEmail, expires: tokenExpires } = decoded;
+      
+      // Check expiration directly from token!
+      if (new Date(tokenExpires) < new Date()) {
+        throw new Error('Your password reset link has expired. Please request a new one.');
+      }
+
+      matchedProfile = currentProfiles.find(p => p.email?.toLowerCase().trim() === tokenEmail.toLowerCase().trim());
+    } else {
+      // Fallback search by raw token (just in case they have older tokens or non-encoded tokens)
+      matchedProfile = currentProfiles.find(p => p.resetToken === token);
+      if (matchedProfile && matchedProfile.resetTokenExpires && new Date(matchedProfile.resetTokenExpires) < new Date()) {
+        throw new Error('Your password reset link has expired. Please request a new one.');
+      }
+    }
+
     if (!matchedProfile) {
       throw new Error('Invalid or expired password reset token.');
     }
 
-    if (matchedProfile.resetTokenExpires && new Date(matchedProfile.resetTokenExpires) < new Date()) {
-      throw new Error('Your password reset link has expired. Please request a new one.');
-    }
-
     const updated = currentProfiles.map(p => {
-      if (p.id === matchedProfile.id) {
-        return {
+      if (p.id === matchedProfile!.id) {
+        const updatedP = {
           ...p,
           password: newPass,
           resetToken: undefined,
           resetTokenExpires: undefined,
           updated_at: new Date().toISOString()
         };
+        saveProfileToSupabase(updatedP);
+        return updatedP;
       }
       return p;
     });
