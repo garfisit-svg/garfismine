@@ -901,8 +901,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // AUTH ACTIONS
   const signUp = async (data: { full_name: string, email: string, phone: string, d_o_b?: string, city?: string, referral_code?: string, password?: string, role?: 'customer' | 'owner' | 'admin' | 'owner_pending', avatar_url?: string }) => {
-    // Unique email check
-    const exist = profiles.some(p => p?.email?.toLowerCase() === data.email?.toLowerCase()); // basic duplicate catch
+    const cleanEmail = data.email?.trim().toLowerCase();
+    
+    // Read freshest profiles list from localStorage
+    const saved = localStorage.getItem('garf_profiles');
+    let currentProfiles = profiles;
+    if (saved) {
+      try {
+        currentProfiles = JSON.parse(saved);
+      } catch (err) {
+        console.error('Error parsing profiles from localStorage:', err);
+      }
+    }
+
+    const exist = currentProfiles.some(p => p?.email?.toLowerCase().trim() === cleanEmail);
+    if (exist) {
+      throw new Error('An account with this email address already exists. Please log in or use another email.');
+    }
     
     // Auto-generate ref code
     const rFour = Math.random().toString(36).substring(2, 6).toUpperCase();
