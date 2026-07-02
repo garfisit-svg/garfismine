@@ -702,6 +702,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (!e.key || !e.newValue) return;
+      
+      const ourKeys = [
+        'garf_slots',
+        'garf_bookings',
+        'garf_venues',
+        'garf_resources',
+        'garf_profiles',
+        'garf_current_user',
+        'garf_offers',
+        'garf_notifications',
+        'garf_coin_transactions',
+        'garf_admin_logs'
+      ];
+
+      if (!ourKeys.includes(e.key)) return;
+
       try {
         const parsed = JSON.parse(e.newValue);
         switch (e.key) {
@@ -1742,18 +1758,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Confirm Pay-at-Venue instantly locks the slots as held!
     if (data.paymentMethod === 'pay_at_venue') {
       // Create slots changes
-      setSlots(prev => prev.map(s => {
-        if (requestedSlotIds.includes(s.id)) {
-          return {
-            ...s,
-            status: 'held' as const,
-            booking_id: bookingId,
-            held_until: holdExpAt,
-            updated_at: new Date().toISOString()
-          };
-        }
-        return s;
-      }));
+      setSlots(prev => {
+        const updated = [...prev];
+        requestedSlotIds.forEach((sid, idx) => {
+          const sTime = data.slots[idx];
+          const hr = parseInt((sTime || '09:00').split(':')[0]);
+          const existIdx = updated.findIndex(s => s.id === sid);
+          if (existIdx === -1) {
+            const startStr = `${hr.toString().padStart(2, '0')}:00`;
+            const endStr = `${(hr + 1).toString().padStart(2, '0')}:00`;
+            updated.push({
+              id: sid,
+              venue_id: data.venueId,
+              resource_id: data.resourceId,
+              slot_date: data.date,
+              start_time: startStr,
+              end_time: endStr,
+              status: 'held',
+              booking_id: bookingId,
+              held_until: holdExpAt,
+              blocked_reason: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          }
+        });
+        return updated.map(s => {
+          if (requestedSlotIds.includes(s.id)) {
+            return {
+              ...s,
+              status: 'held' as const,
+              booking_id: bookingId,
+              held_until: holdExpAt,
+              updated_at: new Date().toISOString()
+            };
+          }
+          return s;
+        });
+      });
 
       addNotificationSilently(currentUser.id, 'Slot Held! ⏳', `Booking ${refCode} held. Arrive within 15 minutes of ${data.slots[0]} start time.`, 'booking');
       
@@ -1764,18 +1806,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } else {
       // Online flow: locks standard checkout 5 min hold!
-      setSlots(prev => prev.map(s => {
-        if (requestedSlotIds.includes(s.id)) {
-          return {
-            ...s,
-            status: 'held' as const,
-            booking_id: bookingId,
-            held_until: holdsExp,
-            updated_at: new Date().toISOString()
-          };
-        }
-        return s;
-      }));
+      setSlots(prev => {
+        const updated = [...prev];
+        requestedSlotIds.forEach((sid, idx) => {
+          const sTime = data.slots[idx];
+          const hr = parseInt((sTime || '09:00').split(':')[0]);
+          const existIdx = updated.findIndex(s => s.id === sid);
+          if (existIdx === -1) {
+            const startStr = `${hr.toString().padStart(2, '0')}:00`;
+            const endStr = `${(hr + 1).toString().padStart(2, '0')}:00`;
+            updated.push({
+              id: sid,
+              venue_id: data.venueId,
+              resource_id: data.resourceId,
+              slot_date: data.date,
+              start_time: startStr,
+              end_time: endStr,
+              status: 'held',
+              booking_id: bookingId,
+              held_until: holdsExp,
+              blocked_reason: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          }
+        });
+        return updated.map(s => {
+          if (requestedSlotIds.includes(s.id)) {
+            return {
+              ...s,
+              status: 'held' as const,
+              booking_id: bookingId,
+              held_until: holdsExp,
+              updated_at: new Date().toISOString()
+            };
+          }
+          return s;
+        });
+      });
     }
 
     setBookings(prev => [...prev, newBooking]);
@@ -2206,18 +2274,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Instant lock slots
     const targetSlotIds = data.slots.map(s => `slot-${res.id}-${data.date}-${parseInt(s.split(':')[0])}`);
-    setSlots(prev => prev.map(s => {
-      if (targetSlotIds.includes(s.id)) {
-        return {
-          ...s,
-          status: 'booked' as const,
-          booking_id: bId,
-          held_until: null,
-          updated_at: new Date().toISOString()
-        };
-      }
-      return s;
-    }));
+    setSlots(prev => {
+      const updated = [...prev];
+      targetSlotIds.forEach((sid, idx) => {
+        const sTime = data.slots[idx];
+        const hr = parseInt((sTime || '09:00').split(':')[0]);
+        const existIdx = updated.findIndex(s => s.id === sid);
+        if (existIdx === -1) {
+          const startStr = `${hr.toString().padStart(2, '0')}:00`;
+          const endStr = `${(hr + 1).toString().padStart(2, '0')}:00`;
+          updated.push({
+            id: sid,
+            venue_id: res.venue_id,
+            resource_id: res.id,
+            slot_date: data.date,
+            start_time: startStr,
+            end_time: endStr,
+            status: 'booked',
+            booking_id: bId,
+            held_until: null,
+            blocked_reason: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        }
+      });
+      return updated.map(s => {
+        if (targetSlotIds.includes(s.id)) {
+          return {
+            ...s,
+            status: 'booked' as const,
+            booking_id: bId,
+            held_until: null,
+            updated_at: new Date().toISOString()
+          };
+        }
+        return s;
+      });
+    });
 
     setBookings(prev => [...prev, newB]);
   };
@@ -2314,102 +2408,153 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const res = resources.find(r => r.id === resourceId);
     if (!res) return;
 
-    const targetSlotsMap = new Map(slotsList.map(s => {
-      const hr = parseInt(s.split(':')[0]);
-      return [hr, s];
-    }));
+    // Find all resources belonging to this venue
+    const venueResources = resources.filter(r => r.venue_id === res.venue_id);
+
+    // Is it blocking the entire day? Let's check operating hours length
+    const v = venues.find(x => x.id === res.venue_id);
+    const sHour = v ? parseInt((v.operating_hours_start || '09:00').split(':')[0]) || 9 : 9;
+    const eHour = v ? parseInt((v.operating_hours_end || '23:00').split(':')[0]) || 23 : 23;
+    const totalDayHours = Math.max(1, eHour - sHour);
+
+    const isAllDay = slotsList.length >= totalDayHours;
+    const resourcesToBlock = isAllDay ? venueResources : [res];
 
     setSlots(prev => {
-      const updated = prev.map(s => {
-        if (s.resource_id === resourceId && s.slot_date === date) {
-          const hr = parseInt(s.start_time.split(':')[0]);
-          if (targetSlotsMap.has(hr)) {
-            targetSlotsMap.delete(hr);
-            return {
-              ...s,
-              status: 'blocked' as const,
-              blocked_reason: reason,
-              updated_at: new Date().toISOString()
-            };
+      let updated = [...prev];
+
+      resourcesToBlock.forEach(targetRes => {
+        const targetSlotsMap = new Map(slotsList.map(s => {
+          const hr = parseInt(s.split(':')[0]);
+          return [hr, s];
+        }));
+
+        updated = updated.map(s => {
+          if (s.resource_id === targetRes.id && s.slot_date === date) {
+            const hr = parseInt(s.start_time.split(':')[0]);
+            if (targetSlotsMap.has(hr)) {
+              targetSlotsMap.delete(hr);
+              return {
+                ...s,
+                status: 'blocked' as const,
+                blocked_reason: reason,
+                updated_at: new Date().toISOString()
+              };
+            }
           }
-        }
-        return s;
-      });
-
-      const newSlots: Slot[] = [];
-      targetSlotsMap.forEach((sTime, hr) => {
-        const startStr = `${hr.toString().padStart(2, '0')}:00`;
-        const endStr = `${(hr + 1).toString().padStart(2, '0')}:00`;
-        newSlots.push({
-          id: `slot-${resourceId}-${date}-${hr}`,
-          venue_id: res.venue_id,
-          resource_id: resourceId,
-          slot_date: date,
-          start_time: startStr,
-          end_time: endStr,
-          status: 'blocked',
-          booking_id: null,
-          held_until: null,
-          blocked_reason: reason,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          return s;
         });
+
+        const newSlots: Slot[] = [];
+        targetSlotsMap.forEach((sTime, hr) => {
+          const startStr = `${hr.toString().padStart(2, '0')}:00`;
+          const endStr = `${(hr + 1).toString().padStart(2, '0')}:00`;
+          newSlots.push({
+            id: `slot-${targetRes.id}-${date}-${hr}`,
+            venue_id: targetRes.venue_id,
+            resource_id: targetRes.id,
+            slot_date: date,
+            start_time: startStr,
+            end_time: endStr,
+            status: 'blocked',
+            booking_id: null,
+            held_until: null,
+            blocked_reason: reason,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        });
+
+        updated = [...updated, ...newSlots];
       });
 
-      return [...updated, ...newSlots];
+      return updated;
     });
+
+    // Sync with venue's closed_dates
+    if (isAllDay && v) {
+      const closed = v.closed_dates || [];
+      if (!closed.includes(date)) {
+        updateVenue(v.id, { closed_dates: [...closed, date].sort() });
+      }
+    }
   };
 
   const bulkUnblockSlots = (resourceId: string, date: string, slotsList: string[]) => {
     const res = resources.find(r => r.id === resourceId);
     if (!res) return;
 
-    const targetSlotsMap = new Map(slotsList.map(s => {
-      const hr = parseInt(s.split(':')[0]);
-      return [hr, s];
-    }));
+    // Find all resources belonging to this venue
+    const venueResources = resources.filter(r => r.venue_id === res.venue_id);
+
+    const v = venues.find(x => x.id === res.venue_id);
+    const sHour = v ? parseInt((v.operating_hours_start || '09:00').split(':')[0]) || 9 : 9;
+    const eHour = v ? parseInt((v.operating_hours_end || '23:00').split(':')[0]) || 23 : 23;
+    const totalDayHours = Math.max(1, eHour - sHour);
+
+    const isAllDay = slotsList.length >= totalDayHours;
+    const resourcesToUnblock = isAllDay ? venueResources : [res];
 
     setSlots(prev => {
-      const updated = prev.map(s => {
-        if (s.resource_id === resourceId && s.slot_date === date) {
-          const hr = parseInt(s.start_time.split(':')[0]);
-          if (targetSlotsMap.has(hr)) {
-            targetSlotsMap.delete(hr);
-            if (s.status === 'blocked') {
-              return {
-                ...s,
-                status: 'available' as const,
-                blocked_reason: null,
-                updated_at: new Date().toISOString()
-              };
+      let updated = [...prev];
+
+      resourcesToUnblock.forEach(targetRes => {
+        const targetSlotsMap = new Map(slotsList.map(s => {
+          const hr = parseInt(s.split(':')[0]);
+          return [hr, s];
+        }));
+
+        updated = updated.map(s => {
+          if (s.resource_id === targetRes.id && s.slot_date === date) {
+            const hr = parseInt(s.start_time.split(':')[0]);
+            if (targetSlotsMap.has(hr)) {
+              targetSlotsMap.delete(hr);
+              if (s.status === 'blocked') {
+                return {
+                  ...s,
+                  status: 'available' as const,
+                  blocked_reason: null,
+                  updated_at: new Date().toISOString()
+                };
+              }
             }
           }
-        }
-        return s;
-      });
-
-      const newSlots: Slot[] = [];
-      targetSlotsMap.forEach((sTime, hr) => {
-        const startStr = `${hr.toString().padStart(2, '0')}:00`;
-        const endStr = `${(hr + 1).toString().padStart(2, '0')}:00`;
-        newSlots.push({
-          id: `slot-${resourceId}-${date}-${hr}`,
-          venue_id: res.venue_id,
-          resource_id: resourceId,
-          slot_date: date,
-          start_time: startStr,
-          end_time: endStr,
-          status: 'available',
-          booking_id: null,
-          held_until: null,
-          blocked_reason: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          return s;
         });
+
+        const newSlots: Slot[] = [];
+        targetSlotsMap.forEach((sTime, hr) => {
+          const startStr = `${hr.toString().padStart(2, '0')}:00`;
+          const endStr = `${(hr + 1).toString().padStart(2, '0')}:00`;
+          newSlots.push({
+            id: `slot-${targetRes.id}-${date}-${hr}`,
+            venue_id: targetRes.venue_id,
+            resource_id: targetRes.id,
+            slot_date: date,
+            start_time: startStr,
+            end_time: endStr,
+            status: 'available',
+            booking_id: null,
+            held_until: null,
+            blocked_reason: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        });
+
+        updated = [...updated, ...newSlots];
       });
 
-      return [...updated, ...newSlots];
+      return updated;
     });
+
+    // Remove from closed_dates if unblocking all-day
+    if (isAllDay && v) {
+      const closed = v.closed_dates || [];
+      if (closed.includes(date)) {
+        updateVenue(v.id, { closed_dates: closed.filter(d => d !== date) });
+      }
+    }
   };
 
   const registerDetailedVenue = async (
