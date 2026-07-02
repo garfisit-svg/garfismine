@@ -163,15 +163,19 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
       return `${hr < 10 ? '0' : ''}${hr}:00`;
     });
     const todayStr = currentTime.toISOString().split('T')[0];
+    const isTodayClosed = venue?.closed_dates?.includes(todayStr);
 
     return currentVenueResources.map(res => {
       const hourSlots = hours.map(hr => {
         const matchingSlot = slots.find(s => s.resource_id === res.id && s.slot_date === todayStr && s.start_time === hr);
-        let color: 'green' | 'yellow' | 'blue' | 'red' | 'gray' = 'green';
+        let color: 'green' | 'yellow' | 'blue' | 'red' | 'gray' | 'rose' = 'green';
         let detail = 'Available';
         let bookingId: string | null = null;
 
-        if (matchingSlot) {
+        if (isTodayClosed) {
+          color = 'rose';
+          detail = 'Venue Closed (Holiday/Break)';
+        } else if (matchingSlot) {
           if (matchingSlot.status === 'booked') {
             const b = bookings.find(x => x.id === matchingSlot.booking_id);
             if (b) {
@@ -203,7 +207,8 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
           detail,
           bookingId,
           resourceId: res.id,
-          date: todayStr
+          date: todayStr,
+          isClosed: isTodayClosed
         };
       });
 
@@ -212,7 +217,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
         columns: hourSlots
       };
     });
-  }, [currentVenueResources, slots, bookings, currentTime]);
+  }, [currentVenueResources, slots, bookings, currentTime, venue]);
 
   // Modal actions handlers
   const handleConfirmCheckIn = () => {
@@ -249,6 +254,10 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
   };
 
   const handleBlockGridCell = (cell: any) => {
+    if (venue?.closed_dates?.includes(cell.date)) {
+      toast.error('Venue is closed today (Configured in Settings)');
+      return;
+    }
     if (cell.color === 'green') {
       setBlockCellSlot(cell);
       setBlockReason('Maintenance');
@@ -388,15 +397,17 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
                   <td className="py-3 px-3 font-bold text-white">{row.resource.name}</td>
                   {row.columns.map(col => {
                     const statusStyles = 
-                      col.color === 'green'
-                        ? 'bg-emerald-400/10 hover:bg-emerald-400/25 border-emerald-400/20 text-emerald-400'
-                        : col.color === 'yellow'
-                          ? 'bg-yellow-500/15 border-yellow-500/30 text-yellow-500'
-                          : col.color === 'blue'
-                            ? 'bg-[#7C3AED]/20 border-[#7C3AED]/35 text-[#a8a8cf]'
-                            : col.color === 'red'
-                              ? 'bg-red-500/15 border-red-500/30 text-red-400'
-                              : 'bg-gray-600/10 border-gray-600/20 text-text-secondary/50';
+                      col.color === 'rose'
+                        ? 'bg-rose-500/10 border-rose-500/20 text-rose-400 opacity-60 cursor-not-allowed'
+                        : col.color === 'green'
+                          ? 'bg-emerald-400/10 hover:bg-emerald-400/25 border-emerald-400/20 text-emerald-400'
+                          : col.color === 'yellow'
+                            ? 'bg-yellow-500/15 border-yellow-500/30 text-yellow-500'
+                            : col.color === 'blue'
+                              ? 'bg-[#7C3AED]/20 border-[#7C3AED]/35 text-[#a8a8cf]'
+                              : col.color === 'red'
+                                ? 'bg-red-500/15 border-red-500/30 text-red-400'
+                                : 'bg-gray-600/10 border-gray-600/20 text-text-secondary/50';
 
                     return (
                       <td key={col.hour} className="p-1">

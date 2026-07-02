@@ -10,7 +10,7 @@ interface WalkInModalProps {
 }
 
 export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, preselectedSlot }) => {
-  const { resources, slots, bookings, addWalkInBooking, ownerReleaseSlot } = useApp();
+  const { resources, slots, bookings, addWalkInBooking, ownerReleaseSlot, venues } = useApp();
 
   const [step, setStep] = useState(1);
   const [selectedResourceId, setSelectedResourceId] = useState(preselectedSlot?.resourceId || '');
@@ -56,6 +56,13 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, prese
     return resources.find(r => r.id === selectedResourceId) || null;
   }, [selectedResourceId, resources]);
 
+  const isDayClosed = useMemo(() => {
+    const res = selectedResource || resources[0];
+    if (!res) return false;
+    const v = venues.find(x => x.id === res.venue_id);
+    return v?.closed_dates?.includes(selectedDate) || false;
+  }, [selectedResource, resources, venues, selectedDate]);
+
   // Compute 24-hourly blocks status
   const hourlySlotsStatus = useMemo(() => {
     if (!selectedResourceId) return [];
@@ -73,7 +80,9 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, prese
       let customerNameStr: string = '';
       let bookingId: string | null = null;
 
-      if (dbSlot) {
+      if (isDayClosed) {
+        status = 'blocked';
+      } else if (dbSlot) {
         status = dbSlot.status;
         if (dbSlot.booking_id) {
           bookingId = dbSlot.booking_id;
@@ -93,7 +102,7 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, prese
         customerNameStr
       };
     });
-  }, [selectedResourceId, selectedDate, slots, bookings]);
+  }, [selectedResourceId, selectedDate, slots, bookings, isDayClosed]);
 
   // Pricing details
   const standardPrice = useMemo(() => {
@@ -106,6 +115,10 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, prese
   if (!isOpen) return null;
 
   const handleSlotCellClick = (cell: any) => {
+    if (isDayClosed) {
+      toast.error('Venue is closed on this date (Configured in Settings)');
+      return;
+    }
     if (cell.status === 'booked' || cell.status === 'blocked') {
       toast.error('This slot is locked and unavailable for walk-ins');
       return;
@@ -198,6 +211,12 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, prese
         <div className="p-6 overflow-y-auto max-h-[80vh] space-y-6">
           {step === 1 ? (
             <div className="space-y-4">
+              {isDayClosed && (
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 text-rose-400 text-xs flex items-center gap-2 animate-pulse">
+                  <AlertTriangle className="h-4 w-4 text-rose-400 flex-shrink-0" />
+                  <span>This date is configured as <strong className="font-bold">CLOSED</strong> in Venue Settings. No walk-ins can be registered on closed dates.</span>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase tracking-wider text-text-secondary font-mono mb-1.5">1. Target Resource</label>

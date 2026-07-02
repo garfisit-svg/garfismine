@@ -86,6 +86,11 @@ export const SlotsTab: React.FC<SlotsTabProps> = ({ venue }) => {
 
   const executeCellAction = () => {
     if (interactCell) {
+      if (venue?.closed_dates?.includes(interactCell.date)) {
+        toast.error('Cannot modify slots on a closed day');
+        setInteractCell(null);
+        return;
+      }
       if (interactCell.status === 'available') {
         bulkBlockSlots(selectedResId, interactCell.date, [interactCell.hour], cellReason);
         toast.success(`Slot blocked at ${interactCell.hour}`);
@@ -207,12 +212,17 @@ export const SlotsTab: React.FC<SlotsTabProps> = ({ venue }) => {
                       {weekDays.map(day => {
                         const dateStr = day.toISOString().split('T')[0];
                         const dbSlot = slots.find(s => s.resource_id === selectedResId && s.slot_date === dateStr && s.start_time === hr);
+                        const isDayClosed = venue?.closed_dates?.includes(dateStr);
                         
                         let cellStatus = 'available';
                         let detail = 'Available - Click to block';
                         let label = 'AV';
 
-                        if (dbSlot) {
+                        if (isDayClosed) {
+                          cellStatus = 'closed';
+                          detail = 'Venue Closed (Holiday/Break)';
+                          label = 'CLOSED';
+                        } else if (dbSlot) {
                           cellStatus = dbSlot.status;
                           if (dbSlot.status === 'booked') {
                             const b = bookings.find(x => x.id === dbSlot.booking_id);
@@ -229,7 +239,9 @@ export const SlotsTab: React.FC<SlotsTabProps> = ({ venue }) => {
 
                         // Style modifiers
                         let colorStyles = 'bg-emerald-400/10 hover:bg-emerald-400/25 border-emerald-400/20 text-emerald-400';
-                        if (cellStatus === 'booked') {
+                        if (isDayClosed) {
+                          colorStyles = 'bg-rose-500/10 border-rose-500/20 text-rose-400 opacity-60 cursor-not-allowed';
+                        } else if (cellStatus === 'booked') {
                           colorStyles = 'bg-[#7C3AED]/20 border-[#7C3AED]/35 text-[#a8a8cf]';
                         } else if (cellStatus === 'held') {
                           colorStyles = 'bg-yellow-500/15 border-yellow-500/30 text-yellow-500';
@@ -242,6 +254,10 @@ export const SlotsTab: React.FC<SlotsTabProps> = ({ venue }) => {
                             <button
                               type="button"
                               onClick={() => {
+                                if (isDayClosed) {
+                                  toast.error(`Venue is closed on ${dateStr} (Configured in Settings)`);
+                                  return;
+                                }
                                 setInteractCell({
                                   hour: hr,
                                   date: dateStr,
