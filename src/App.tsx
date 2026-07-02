@@ -454,7 +454,7 @@ export default function App() {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 mt-10 border-t border-[#12121F]/80 text-center font-mono text-xs text-text-secondary/60">
-          <p>© {new Date().getFullYear()} GARF Platforms Inc. All gaming coordinates secured. Built for elite computing and athletic squads.</p>
+          <p>© {new Date().getFullYear()} GARF Platforms Inc. All gaming coordinates secured. Built for elite computing and gaming cafes.</p>
         </div>
       </footer>
     </div>

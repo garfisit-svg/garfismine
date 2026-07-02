@@ -103,7 +103,7 @@ export const OwnerSignupPage: React.FC = () => {
                 List Your Venue Spec List
               </h3>
               <p className="text-xs text-text-secondary leading-relaxed">
-                Reach thousands of active esports players and athletic squads looking for custom slots near them.
+                Reach thousands of active gamers looking for gaming cafe slots near them.
               </p>
             </div>
 
