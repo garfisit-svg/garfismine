@@ -698,6 +698,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('garf_squad_events', JSON.stringify(squadEvents));
   }, [squadEvents]);
 
+  // Real-time synchronization across multiple browser tabs/frames using storage events
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (!e.key || !e.newValue) return;
+      try {
+        const parsed = JSON.parse(e.newValue);
+        switch (e.key) {
+          case 'garf_slots':
+            setSlots(parsed);
+            break;
+          case 'garf_bookings':
+            setBookings(parsed);
+            break;
+          case 'garf_venues':
+            setVenues(parsed);
+            break;
+          case 'garf_resources':
+            setResources(parsed);
+            break;
+          case 'garf_profiles':
+            setProfiles(parsed);
+            break;
+          case 'garf_current_user':
+            setCurrentUser(parsed);
+            break;
+          case 'garf_offers':
+            setOffers(parsed);
+            break;
+          case 'garf_notifications':
+            setNotifications(parsed);
+            break;
+          case 'garf_coin_transactions':
+            setCoinTransactions(parsed);
+            break;
+          case 'garf_admin_logs':
+            setAdminLogs(parsed);
+            break;
+          default:
+            break;
+        }
+      } catch (err) {
+        console.error('Error syncing localStorage change:', err);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
   // Write all state hook dependencies to localStorage on changes
   useEffect(() => {
     localStorage.setItem('garf_profiles', JSON.stringify(profiles));
@@ -2260,33 +2311,105 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const bulkBlockSlots = (resourceId: string, date: string, slotsList: string[], reason: string) => {
-    const targetSlotIds = slotsList.map(s => `slot-${resourceId}-${date}-${parseInt(s.split(':')[0])}`);
-    setSlots(prev => prev.map(s => {
-      if (targetSlotIds.includes(s.id)) {
-        return {
-          ...s,
-          status: 'blocked' as const,
-          blocked_reason: reason,
-          updated_at: new Date().toISOString()
-        };
-      }
-      return s;
+    const res = resources.find(r => r.id === resourceId);
+    if (!res) return;
+
+    const targetSlotsMap = new Map(slotsList.map(s => {
+      const hr = parseInt(s.split(':')[0]);
+      return [hr, s];
     }));
+
+    setSlots(prev => {
+      const updated = prev.map(s => {
+        if (s.resource_id === resourceId && s.slot_date === date) {
+          const hr = parseInt(s.start_time.split(':')[0]);
+          if (targetSlotsMap.has(hr)) {
+            targetSlotsMap.delete(hr);
+            return {
+              ...s,
+              status: 'blocked' as const,
+              blocked_reason: reason,
+              updated_at: new Date().toISOString()
+            };
+          }
+        }
+        return s;
+      });
+
+      const newSlots: Slot[] = [];
+      targetSlotsMap.forEach((sTime, hr) => {
+        const startStr = `${hr.toString().padStart(2, '0')}:00`;
+        const endStr = `${(hr + 1).toString().padStart(2, '0')}:00`;
+        newSlots.push({
+          id: `slot-${resourceId}-${date}-${hr}`,
+          venue_id: res.venue_id,
+          resource_id: resourceId,
+          slot_date: date,
+          start_time: startStr,
+          end_time: endStr,
+          status: 'blocked',
+          booking_id: null,
+          held_until: null,
+          blocked_reason: reason,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      });
+
+      return [...updated, ...newSlots];
+    });
   };
 
   const bulkUnblockSlots = (resourceId: string, date: string, slotsList: string[]) => {
-    const targetSlotIds = slotsList.map(s => `slot-${resourceId}-${date}-${parseInt(s.split(':')[0])}`);
-    setSlots(prev => prev.map(s => {
-      if (targetSlotIds.includes(s.id) && s.status === 'blocked') {
-        return {
-          ...s,
-          status: 'available' as const,
-          blocked_reason: null,
-          updated_at: new Date().toISOString()
-        };
-      }
-      return s;
+    const res = resources.find(r => r.id === resourceId);
+    if (!res) return;
+
+    const targetSlotsMap = new Map(slotsList.map(s => {
+      const hr = parseInt(s.split(':')[0]);
+      return [hr, s];
     }));
+
+    setSlots(prev => {
+      const updated = prev.map(s => {
+        if (s.resource_id === resourceId && s.slot_date === date) {
+          const hr = parseInt(s.start_time.split(':')[0]);
+          if (targetSlotsMap.has(hr)) {
+            targetSlotsMap.delete(hr);
+            if (s.status === 'blocked') {
+              return {
+                ...s,
+                status: 'available' as const,
+                blocked_reason: null,
+                updated_at: new Date().toISOString()
+              };
+            }
+          }
+        }
+        return s;
+      });
+
+      const newSlots: Slot[] = [];
+      targetSlotsMap.forEach((sTime, hr) => {
+        const startStr = `${hr.toString().padStart(2, '0')}:00`;
+        const endStr = `${(hr + 1).toString().padStart(2, '0')}:00`;
+        newSlots.push({
+          id: `slot-${resourceId}-${date}-${hr}`,
+          venue_id: res.venue_id,
+          resource_id: resourceId,
+          slot_date: date,
+          start_time: startStr,
+          end_time: endStr,
+          status: 'available',
+          booking_id: null,
+          held_until: null,
+          blocked_reason: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      });
+
+      return [...updated, ...newSlots];
+    });
   };
 
   const registerDetailedVenue = async (
