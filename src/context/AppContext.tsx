@@ -1147,8 +1147,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       owner_id: currentUser.id,
       rating: 0,
       total_reviews: 0,
-      is_verified: true,
-      is_active: true,
+      is_verified: false,
+      is_active: false,
       is_featured: false,
       is_suspended: false,
       commission_percent: 10,
@@ -1278,9 +1278,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     setSlots(prev => [...prev, ...allNewSlots]);
 
-    // Update user role to Owner
-    setProfiles(prev => prev.map(p => p.id === currentUser.id ? { ...p, role: 'owner' as const } : p));
-    setCurrentUser(prev => prev ? { ...prev, role: 'owner' as const } : null);
+    // Update user role to Owner Pending until verification
+    setProfiles(prev => {
+      const updated = prev.map(p => p.id === currentUser.id ? { ...p, role: 'owner_pending' as const } : p);
+      localStorage.setItem('garf_profiles', JSON.stringify(updated));
+      return updated;
+    });
+    setCurrentUser(prev => {
+      if (prev) {
+        const updated = { ...prev, role: 'owner_pending' as const };
+        localStorage.setItem('garf_current_user', JSON.stringify(updated));
+        return updated;
+      }
+      return null;
+    });
 
     // Notify admins of new pending venue
     profiles.filter(p => p.role === 'admin').forEach(adm => {
@@ -1351,8 +1362,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const verifyVenue = (venueId: string) => {
     if (!currentUser || currentUser.role !== 'admin') return;
 
+    let targetOwnerId = '';
     setVenues(prev => prev.map(v => {
       if (v.id === venueId) {
+        targetOwnerId = v.owner_id;
         addNotificationSilently(v.owner_id, 'Venue Verified! 🎉', `Congratulations! Your venue "${v.name}" has been verified and is now live on GARF!`, 'owner');
         return {
           ...v,
@@ -1363,6 +1376,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return v;
     }));
+
+    if (targetOwnerId) {
+      setProfiles(prev => {
+        const updated = prev.map(p => p.id === targetOwnerId ? { ...p, role: 'owner' as const } : p);
+        localStorage.setItem('garf_profiles', JSON.stringify(updated));
+        return updated;
+      });
+      setCurrentUser(prev => {
+        if (prev && prev.id === targetOwnerId) {
+          const updated = { ...prev, role: 'owner' as const };
+          localStorage.setItem('garf_current_user', JSON.stringify(updated));
+          return updated;
+        }
+        return prev;
+      });
+    }
 
     addLog(currentUser.id, 'Verified venue', 'venue', venueId);
   };
@@ -1519,6 +1548,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (!data.slots || data.slots.length === 0) {
       throw new Error('Please select at least one slot to proceed with booking.');
+    }
+
+    const targetVenue = venues.find(v => v.id === data.venueId);
+    if (targetVenue && targetVenue.closed_dates?.includes(data.date)) {
+      throw new Error('This venue is closed on this date. Bookings are not allowed.');
     }
 
     // RULE 1: SLOT CONFLICT PREVENTION (with database-level safety check)

@@ -43,6 +43,7 @@ export const OwnerRegisterPage: React.FC = () => {
     'RTX 3060, Intel i5, 16GB RAM, 144Hz Monitor', 
     'RTX 3060, Intel i5, 16GB RAM, 144Hz Monitor'
   ]);
+  const [resourcePrices, setResourcePrices] = useState<number[]>([150, 150]);
 
   const [bulkPCs, setBulkPCs] = useState<number>(5);
   const [bulkPS5s, setBulkPS5s] = useState<number>(3);
@@ -51,14 +52,17 @@ export const OwnerRegisterPage: React.FC = () => {
   const handleApplyBulkGenerator = () => {
     const names: string[] = [];
     const specs: string[] = [];
+    const prices: number[] = [];
     
     for (let i = 1; i <= bulkPCs; i++) {
       names.push(`Gaming PC Station ${i}`);
       specs.push('RTX 4060 Ti, Intel i7, 16GB RAM, 165Hz Monitor');
+      prices.push(40); // Standard PC pricing ₹40/hr
     }
     for (let i = 1; i <= bulkPS5s; i++) {
       names.push(`PS5 Console Booth ${i}`);
       specs.push('PlayStation 5 Console, DualSense Controller, 4K HDR TV');
+      prices.push(60); // Standard PS5 pricing ₹60/hr
     }
     
     if (names.length === 0) {
@@ -68,7 +72,8 @@ export const OwnerRegisterPage: React.FC = () => {
     
     setResourceNames(names);
     setResourceSpecs(specs);
-    toast.success(`Generated ${bulkPCs} PCs and ${bulkPS5s} PS5 stations bulk layout!`);
+    setResourcePrices(prices);
+    toast.success(`Generated ${bulkPCs} PCs (at ₹40/hr) and ${bulkPS5s} PS5 stations (at ₹60/hr) bulk layout!`);
     setShowBulkGenerator(false);
   };
 
@@ -110,12 +115,14 @@ export const OwnerRegisterPage: React.FC = () => {
   const addResourceRow = () => {
     setResourceNames([...resourceNames, `Station ${resourceNames.length + 1}`]);
     setResourceSpecs([...resourceSpecs, venueType === 'gaming_cafe' ? 'RTX 3060, Intel i5, 16GB RAM' : 'Flood lights, synthetic grass']);
+    setResourcePrices([...resourcePrices, Number(basePrice) || 150]);
   };
 
   const removeResourceRow = (index: number) => {
     if (resourceNames.length <= 1) return;
     setResourceNames(resourceNames.filter((_, i) => i !== index));
     setResourceSpecs(resourceSpecs.filter((_, i) => i !== index));
+    setResourcePrices(resourcePrices.filter((_, i) => i !== index));
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -162,7 +169,7 @@ export const OwnerRegisterPage: React.FC = () => {
       const resourcesData = resourceNames.map((name, i) => ({
         name,
         type: venueType === 'gaming_cafe' ? ('pc' as const) : ('turf' as const),
-        price_per_hour: Number(basePrice) || 150,
+        price_per_hour: Number(resourcePrices[i]) || Number(basePrice) || 150,
         is_active: true,
         specifications: resourceSpecs[i] || 'High performance rig details'
       }));
@@ -687,7 +694,7 @@ export const OwnerRegisterPage: React.FC = () => {
                   <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
                     {resourceNames.map((name, idx) => (
                       <div key={idx} className="flex gap-3 items-start bg-[#12121A] border border-border-dark p-4 rounded-xl relative">
-                        <div className="flex-grow grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex-grow grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary mb-1">Station/Rig Label</label>
                             <input
@@ -698,7 +705,7 @@ export const OwnerRegisterPage: React.FC = () => {
                                 copy[idx] = e.target.value;
                                 setResourceNames(copy);
                               }}
-                              className="w-full bg-[#1C1C2D] border border-border-dark rounded-lg p-2 text-xs outline-none"
+                              className="w-full bg-[#1C1C2D] border border-border-dark rounded-lg p-2 text-xs outline-none text-white focus:border-brand-purple"
                               placeholder="e.g. PC 1, PS5 Console Booth A"
                               required
                             />
@@ -713,8 +720,23 @@ export const OwnerRegisterPage: React.FC = () => {
                                 copy[idx] = e.target.value;
                                 setResourceSpecs(copy);
                               }}
-                              className="w-full bg-[#1C1C2D] border border-border-dark rounded-lg p-2 text-xs outline-none"
+                              className="w-full bg-[#1C1C2D] border border-border-dark rounded-lg p-2 text-xs outline-none text-white focus:border-brand-purple"
                               placeholder="e.g. RTX 4060, Intel i7, 16GB RAM, or PS5 Slim"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary mb-1">Hourly Price (₹)</label>
+                            <input
+                              type="number"
+                              value={resourcePrices[idx] !== undefined ? resourcePrices[idx] : basePrice}
+                              onChange={e => {
+                                const copy = [...resourcePrices];
+                                copy[idx] = Number(e.target.value) || 0;
+                                setResourcePrices(copy);
+                              }}
+                              className="w-full bg-[#1C1C2D] border border-border-dark rounded-lg p-2 text-xs outline-none font-mono text-white focus:border-brand-purple"
+                              placeholder="e.g. 40"
                               required
                             />
                           </div>

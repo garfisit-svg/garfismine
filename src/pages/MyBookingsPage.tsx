@@ -352,13 +352,14 @@ export const MyBookingsPage: React.FC = () => {
               </p>
             </div>
 
-            {/* Simulated Ticket QR Block */}
-            <div className="bg-white p-4 rounded-xl w-48 h-48 mx-auto flex items-center justify-center border-4 border-brand-purple shadow-lg shadow-brand-purple/20">
-              <div className="grid grid-cols-5 gap-1.5 opacity-80">
-                {Array.from({ length: 25 }).map((_, i) => (
-                  <div key={i} className={`h-6 w-6 ${(i % 3 === 0 || i % 7 === 1) ? 'bg-black' : 'bg-transparent'}`}></div>
-                ))}
-              </div>
+            {/* Real Scannable Ticket QR Block */}
+            <div className="bg-white p-3 rounded-xl w-48 h-48 mx-auto flex items-center justify-center border-4 border-brand-purple shadow-lg shadow-brand-purple/20">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`GARF Booking Reference: ${selectedQRBooking.booking_ref}`)}`}
+                alt="Ticket QR Code"
+                className="w-full h-full object-contain"
+                referrerPolicy="no-referrer"
+              />
             </div>
 
             <div className="text-xs text-text-secondary font-mono space-y-1 bg-[#161622]/60 py-3 rounded-lg border border-border-dark/60">

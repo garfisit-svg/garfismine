@@ -15,11 +15,10 @@ import { ResourcesTab } from '../components/owner/ResourcesTab';
 import { RevenueTab } from '../components/owner/RevenueTab';
 import { ReviewsTab } from '../components/owner/ReviewsTab';
 import { OffersTab } from '../components/owner/OffersTab';
-import { StaffTab } from '../components/owner/StaffTab';
 import { SettingsTab } from '../components/owner/SettingsTab';
 import { WalkInModal } from '../components/owner/WalkInModal';
 
-type ConsoleTab = 'dashboard' | 'bookings' | 'slots' | 'resources' | 'revenue' | 'reviews' | 'offers' | 'staff' | 'settings';
+type ConsoleTab = 'dashboard' | 'bookings' | 'slots' | 'resources' | 'revenue' | 'reviews' | 'offers' | 'settings';
 
 export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
   const { currentUser, venues } = useApp();
@@ -60,7 +59,53 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
     setShowWalkInModal(true);
   };
 
-  // Authentication barrier
+  // Authentication & Verification Pending barrier
+  if (currentUser && currentUser.role === 'owner_pending') {
+    const mainVenue = ownerVenues[0];
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-24 sm:px-6 text-center space-y-6 text-white font-sans">
+        <span className="text-7xl block animate-bounce">⏳</span>
+        <div className="space-y-3">
+          <h2 className="text-3xl font-display font-black tracking-tight text-white">Verification Pending Approval</h2>
+          {mainVenue && (
+            <p className="text-brand-purple font-mono font-bold text-sm uppercase tracking-widest">
+              FOR: {mainVenue.name}
+            </p>
+          )}
+          <p className="text-text-secondary text-sm max-w-lg mx-auto leading-relaxed">
+            Thank you for registering your venue on GARF! Your application is currently under review by our administration team.
+            We are verifying your gaming stations, hardware specifications, and UPI configuration to ensure seamless transactions.
+          </p>
+          <div className="p-4 bg-[#12121A] border border-[#2a2a3e] rounded-xl max-w-md mx-auto text-left text-xs space-y-2 text-text-secondary font-mono">
+            <p className="text-white font-bold">What happens next?</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>Our admin reviews your PC/Console specifications.</li>
+              <li>Your UPI ID is verified for secure payouts.</li>
+              <li>Once verified, your venue goes live on the Explore map.</li>
+              <li>You will receive full access to this operational dashboard.</li>
+            </ul>
+          </div>
+        </div>
+        
+        <p className="text-xs text-text-secondary">
+          Have questions or need fast-track approval? Reach out to <a href="mailto:partners@garf.com" className="text-brand-purple hover:underline font-bold">partners@garf.com</a>
+        </p>
+
+        <div className="pt-2">
+          <button
+            onClick={() => {
+              localStorage.removeItem('garf_current_user');
+              window.location.href = '/login';
+            }}
+            className="px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#1c1c2e] text-white cursor-pointer hover:bg-[#25253c] transition border border-[#2a2a3e]"
+          >
+            Logout & Switch Account
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentUser || currentUser.role !== 'owner') {
     return (
       <div className="max-w-md mx-auto px-4 py-24 text-center space-y-5 text-white">
@@ -119,7 +164,6 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
     { id: 'revenue', label: 'Payout Revenue', icon: DollarSign },
     { id: 'reviews', label: 'Client Reviews', icon: Award },
     { id: 'offers', label: 'Discount offers', icon: Percent },
-    { id: 'staff', label: 'Supervisor Staff', icon: Users },
     { id: 'settings', label: 'Venue Settings', icon: Settings }
   ];
 
@@ -201,7 +245,6 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
           {activeTab === 'revenue' && <RevenueTab venue={activeVenue} />}
           {activeTab === 'reviews' && <ReviewsTab venue={activeVenue} />}
           {activeTab === 'offers' && <OffersTab venue={activeVenue} />}
-          {activeTab === 'staff' && <StaffTab venue={activeVenue} />}
           {activeTab === 'settings' && <SettingsTab venue={activeVenue} />}
         </main>
 

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Venue } from '../../types';
-import { Settings, Save, MapPin, Sparkles, Building, Key, BellRing, Trash2, AlertTriangle } from 'lucide-react';
+import { Settings, Save, MapPin, Sparkles, Building, Key, BellRing, Trash2, AlertTriangle, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface SettingsTabProps {
@@ -11,7 +11,7 @@ interface SettingsTabProps {
 export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
   const { currentUser, updateProfile, updateVenue, deleteVenue } = useApp();
 
-  const [activeSegment, setActiveSegment] = useState<'profile' | 'hours' | 'bank' | 'danger'>('profile');
+  const [activeSegment, setActiveSegment] = useState<'profile' | 'hours' | 'bank' | 'closed-dates' | 'danger'>('profile');
 
   // Input states (initialized from venue info if exists)
   const [venueName, setVenueName] = useState(venue?.name || '');
@@ -23,6 +23,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
 
   const [operationFrom, setOperationFrom] = useState(venue?.operating_hours_start || '09:00');
   const [operationTo, setOperationTo] = useState(venue?.operating_hours_end || '23:00');
+
+  // Closed dates state
+  const [closedDates, setClosedDates] = useState<string[]>(venue?.closed_dates || []);
+  const [newClosedDate, setNewClosedDate] = useState('');
 
   // UPI configuration state
   const [upiId, setUpiId] = useState(currentUser?.upi_id || '');
@@ -38,6 +42,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
       setVenueType(venue.type);
       setOperationFrom(venue.operating_hours_start || '09:00');
       setOperationTo(venue.operating_hours_end || '23:00');
+      setClosedDates(venue.closed_dates || []);
     }
   }, [venue]);
 
@@ -118,6 +123,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
           >
             <Settings className="h-4 w-4" />
             <span>UPI Payout ID</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSegment('closed-dates')}
+            className={`px-4 py-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 transition cursor-pointer flex-1 md:flex-initial ${activeSegment === 'closed-dates' ? 'bg-[#7C3AED]/20 text-white border-l-2 border-brand-purple' : 'text-text-secondary hover:text-white'}`}
+          >
+            <Calendar className="h-4 w-4" />
+            <span>Closed Dates / Holidays</span>
           </button>
 
           <button
@@ -314,6 +327,85 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
                 <Save className="h-4 w-4" />
                 <span>Save UPI Payout ID</span>
               </button>
+            </div>
+          )}
+
+          {activeSegment === 'closed-dates' && (
+            <div className="space-y-6">
+              <div>
+                <h5 className="font-bold text-white text-base font-display">Manage Closed Dates & Holidays</h5>
+                <p className="text-xs text-text-secondary mt-1">
+                  Mark certain dates when your entire cafe or arena will be closed. Customers will be unable to select these dates or book any slots.
+                </p>
+              </div>
+
+              <div className="bg-[#12121A] p-5 rounded-xl border border-[#2a2a3e] space-y-4">
+                <h6 className="font-bold text-white text-xs uppercase tracking-wider">Declare a Closed Date</h6>
+                <div className="flex flex-col sm:flex-row gap-3 items-end">
+                  <div className="flex-grow">
+                    <label className="block text-[10px] sm:text-xs font-bold uppercase text-text-secondary mb-1">Select Date</label>
+                    <input
+                      type="date"
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full bg-[#161622] border border-[#2a2a3e] rounded-lg p-2.5 text-sm outline-none text-white font-mono"
+                      value={newClosedDate}
+                      onChange={e => setNewClosedDate(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!venue) return;
+                      if (!newClosedDate) {
+                        toast.error('Please pick a date first!');
+                        return;
+                      }
+                      if (closedDates.includes(newClosedDate)) {
+                        toast.error('This date is already marked as closed!');
+                        return;
+                      }
+                      const updatedDates = [...closedDates, newClosedDate].sort();
+                      setClosedDates(updatedDates);
+                      updateVenue(venue.id, { closed_dates: updatedDates });
+                      toast.success(`Venue will remain closed on ${newClosedDate}!`);
+                      setNewClosedDate('');
+                    }}
+                    className="py-3 px-5 bg-brand-purple text-white rounded-lg text-xs font-bold uppercase cursor-pointer hover:bg-brand-purple/90 transition"
+                  >
+                    Add Closed Date
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h6 className="font-bold text-white text-xs uppercase tracking-wider">Currently declared Closed Dates ({closedDates.length})</h6>
+                {closedDates.length === 0 ? (
+                  <div className="p-6 bg-[#12121A]/40 rounded-xl text-center text-text-secondary border border-dashed border-[#2a2a3e]">
+                    No closed dates configured. Your venue is operating on all standard days.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {closedDates.map(date => (
+                      <div key={date} className="flex justify-between items-center bg-[#12121A] border border-[#2a2a3e] p-3 rounded-lg font-mono">
+                        <span className="text-white text-xs font-bold">{date}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!venue) return;
+                            const updatedDates = closedDates.filter(d => d !== date);
+                            setClosedDates(updatedDates);
+                            updateVenue(venue.id, { closed_dates: updatedDates });
+                            toast.success(`Date ${date} is now open for bookings!`);
+                          }}
+                          className="text-red-400 hover:text-red-300 text-[10px] uppercase font-bold"
+                        >
+                          Delete / Open
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

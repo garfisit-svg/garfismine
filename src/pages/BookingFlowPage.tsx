@@ -364,7 +364,15 @@ export const BookingFlowPage: React.FC = () => {
             <div className="space-y-4">
               <span className="text-xs uppercase font-mono text-text-secondary tracking-widest font-bold block">3. SECURE HOURS TIME SLOT</span>
               
-              {!selectedResource ? (
+              {venue.closed_dates?.includes(selectedDate) ? (
+                <div className="p-8 bg-red-500/10 border border-dashed border-red-500/30 rounded-xl text-center text-red-400 font-sans space-y-2">
+                  <span className="text-2xl">🛑</span>
+                  <h4 className="font-bold text-sm">Venue Closed on This Date</h4>
+                  <p className="text-xs text-text-secondary leading-relaxed">
+                    The owner has marked this date as closed. No pre-bookings or slots are available on this day. Please select another date from the calendar above.
+                  </p>
+                </div>
+              ) : !selectedResource ? (
                 <div className="p-8 bg-[#12121A]/40 border border-dashed border-[#2a2a3e] rounded-xl text-center text-text-secondary text-sm">
                   Please pick your target gaming station card above to load active slot matrices.
                 </div>
@@ -591,8 +599,13 @@ export const BookingFlowPage: React.FC = () => {
                   {/* Unified QR Code */}
                   <div className="pt-2 border-t border-[#2a2a3e] space-y-3 font-sans">
                     <div className="flex items-center gap-3 bg-black/20 p-3 rounded-lg">
-                      <div className="p-1.5 bg-white rounded-lg border border-border-dark flex-shrink-0">
-                        <QrCode className="h-16 w-16 text-black" />
+                      <div className="p-1 bg-white rounded-lg border border-border-dark flex-shrink-0 w-20 h-20 flex items-center justify-center">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=${ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '') || 'venue'}@okaxis`}&pn=${encodeURIComponent(venue?.name || 'GARF Cafe')}&am=${finalCheckoutAmount}&cu=INR`)}`}
+                          alt="Pay UPI QR Code"
+                          className="w-full h-full object-contain"
+                          referrerPolicy="no-referrer"
+                        />
                       </div>
                       <div className="space-y-1">
                         <p className="text-[11px] text-white leading-tight font-semibold">
@@ -806,8 +819,13 @@ export const BookingFlowPage: React.FC = () => {
             {/* QR CARD */}
             {confirmedBooking.payment_method === 'online' && (
               <div className="pt-6 border-t border-border-dark flex flex-col items-center text-center space-y-4">
-                <div className="bg-white p-3 rounded-lg border-2 border-brand-purple">
-                  <QrCode className="h-32 w-32 text-black" />
+                <div className="bg-white p-2 rounded-lg border-2 border-brand-purple w-32 h-32 flex items-center justify-center">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`GARF Booking Reference: ${confirmedBooking.booking_ref}`)}`}
+                    alt="Ticket QR Code"
+                    className="w-full h-full object-contain"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
                 <span className="text-[10px] text-text-secondary/60 uppercase font-bold tracking-widest font-mono">Show ticket code to operator at counter</span>
               </div>
