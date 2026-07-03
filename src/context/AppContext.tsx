@@ -165,6 +165,7 @@ interface AppContextType {
   detectedCity: string;
   isDetectingCity: boolean;
   detectUserCity: () => Promise<string>;
+  resetAllAppData: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -3825,6 +3826,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: 'Your password has been reset successfully! 🎉' };
   };
 
+  const resetAllAppData = () => {
+    const keys = [
+      'garf_profiles',
+      'garf_current_user',
+      'garf_venues',
+      'garf_resources',
+      'garf_slots',
+      'garf_bookings',
+      'garf_reviews',
+      'garf_coin_transactions',
+      'garf_offers',
+      'garf_notifications',
+      'garf_admin_logs',
+      'garf_gaming_equipments',
+      'garf_turf_details',
+      'garf_equipment_sessions',
+      'garf_walk_in_sessions',
+      'garf_turf_bookings',
+      'garf_squad_profiles',
+      'garf_squads',
+      'garf_squad_members',
+      'garf_messages',
+      'garf_polls',
+      'garf_poll_votes',
+      'garf_player_needed_posts',
+      'garf_player_needed_responses',
+      'garf_dm_threads',
+      'garf_nearby_checkins',
+      'garf_squad_invites',
+      'garf_squad_events'
+    ];
+    keys.forEach(k => localStorage.removeItem(k));
+    
+    // Reset memory state
+    setProfiles([]);
+    setCurrentUser(null);
+    setVenues([]);
+    setResources([]);
+    setSlots([]);
+    setBookings([]);
+    setReviews([]);
+    setCoinTransactions([]);
+    setOffers([]);
+    setNotifications([]);
+    setAdminLogs([]);
+    setGamingEquipments([]);
+    setTurfDetails([]);
+    setEquipmentSessions([]);
+    setWalkInSessions([]);
+    setTurfBookings([]);
+    setSquadProfiles([]);
+    setSquads([]);
+    setSquadMembers([]);
+    setMessages([]);
+    setPolls([]);
+    setPollVotes([]);
+    setPlayerNeededPosts([]);
+    setPlayerNeededResponses([]);
+    setDmThreads([]);
+    setNearbyCheckins([]);
+    setSquadInvites([]);
+    setSquadEvents([]);
+
+    toast.success('All logins, users, and registered venues have been cleared! Redirecting to home...');
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 1500);
+  };
+
   return (
     <AppContext.Provider value={{
       profiles, venues, resources, slots, bookings, reviews, coinTransactions, offers, notifications, adminLogs, currentUser,
@@ -3854,7 +3924,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createSquadProfile, updateSquadProfile, createSquad, joinSquadWithCode, joinPublicSquad, leaveSquad, acceptSquadJoinRequest, declineSquadJoinRequest, editSquad, deleteSquad, sendMessage, deleteMessage, replyToMessage, createPoll, voteInPoll, createPlayerNeededPost, requestToJoinPlayerNeeded, respondToPlayerNeededJoin, managePlayerNeededPost, sendSquadInvite, respondToSquadInvite, createSquadEvent, rsvpToSquadEvent, updateNearbyCheckinMeetStatus, checkoutNearbyCheckin,
 
       // Geolocation city detection
-      detectedCity, isDetectingCity, detectUserCity
+      detectedCity, isDetectingCity, detectUserCity,
+      
+      // Global data reset action
+      resetAllAppData
     }}>
       {children}
     </AppContext.Provider>

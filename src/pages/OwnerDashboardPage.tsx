@@ -34,6 +34,9 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
   // Multi-venue selection context
   const ownerVenues = useMemo(() => {
     if (!currentUser) return [];
+    if (currentUser.role === 'admin') {
+      return venues; // Admins can view and manage ALL venues!
+    }
     return venues.filter(v => v.owner_id === currentUser.id);
   }, [venues, currentUser]);
 
@@ -106,7 +109,7 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
     );
   }
 
-  if (!currentUser || currentUser.role !== 'owner') {
+  if (!currentUser || (currentUser.role !== 'owner' && currentUser.role !== 'admin')) {
     return (
       <div className="max-w-md mx-auto px-4 py-24 text-center space-y-5 text-white">
         <span className="text-6xl animate-pulse">🔐</span>

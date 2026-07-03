@@ -5,7 +5,7 @@ import { Lock, Mail, AlertCircle, Building2, ShieldCheck, CheckCircle } from 'lu
 import toast from 'react-hot-toast';
 
 export const OwnerLoginPage: React.FC = () => {
-  const { logIn } = useApp();
+  const { logIn, resetAllAppData, venues } = useApp();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,7 +39,12 @@ export const OwnerLoginPage: React.FC = () => {
       if (user.role === 'admin') {
         navigate('/garf-hq-2025');
       } else if (user.role === 'owner_pending') {
-        navigate('/owner/register');
+        const hasVenue = venues.some(v => v.owner_id === user.id);
+        if (hasVenue) {
+          navigate('/owner-dashboard');
+        } else {
+          navigate('/owner/register');
+        }
       } else {
         navigate('/owner-dashboard');
       }
@@ -201,7 +206,7 @@ export const OwnerLoginPage: React.FC = () => {
               </button>
             </form>
 
-            <div className="border-t border-border-dark/60 my-6 pt-4 text-center space-y-2">
+            <div className="border-t border-border-dark/60 my-6 pt-4 text-center space-y-3">
               <p className="text-xs text-text-secondary">
                 New to GARF?{' '}
                 <Link to="/owner/signup" className="text-[#06B6D4] font-semibold hover:underline">
@@ -214,6 +219,20 @@ export const OwnerLoginPage: React.FC = () => {
                   User Login →
                 </Link>
               </p>
+              <div className="pt-2 border-t border-border-dark/40">
+                <p className="text-[10px] text-text-secondary/50 mb-1.5">Need to clear all previous test profiles & register fresh owner/user accounts?</p>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm("Are you sure you want to clear all logins, owners, players, and registered venues? This will completely reset the database to a blank state.")) {
+                      resetAllAppData();
+                    }
+                  }}
+                  className="px-3 py-1 bg-red-950/40 border border-red-500/20 text-red-400 hover:text-white hover:bg-red-900/30 transition text-[9px] font-mono font-bold uppercase tracking-wider rounded-lg cursor-pointer inline-block"
+                >
+                  ⚠️ Reset All App Data & Logins
+                </button>
+              </div>
             </div>
 
           </div>

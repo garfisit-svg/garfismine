@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  const { currentUser, logoutUser, verifyEmailToken } = useApp();
+  const { currentUser, logoutUser, verifyEmailToken, venues } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -94,6 +94,15 @@ export default function App() {
           return;
         }
 
+        // Redirect away from Owner Register if they already have a registered venue
+        if (location.pathname === '/owner/register') {
+          const hasVenue = venues.some(v => v.owner_id === currentUser.id);
+          if (hasVenue) {
+            navigate('/owner-dashboard');
+            return;
+          }
+        }
+
         const forbiddenForOwner = [
           '/', '/explore', '/booking', '/my-bookings', '/my-profile', '/squad', '/login', '/signup', '/garfadmin'
         ];
@@ -110,14 +119,19 @@ export default function App() {
           });
           
           if (role === 'owner_pending') {
-            navigate('/owner/register');
+            const hasVenue = venues.some(v => v.owner_id === currentUser.id);
+            if (hasVenue) {
+              navigate('/owner-dashboard');
+            } else {
+              navigate('/owner/register');
+            }
           } else {
             navigate('/owner-dashboard');
           }
         }
       }
     }
-  }, [currentUser, location.pathname, navigate]);
+  }, [currentUser, location.pathname, navigate, venues]);
 
   const handleLogout = () => {
     const wasOwner = isOwner;
