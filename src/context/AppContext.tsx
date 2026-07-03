@@ -1896,20 +1896,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const rejectVenue = (venueId: string, reason: string) => {
     if (!currentUser || currentUser.role !== 'admin') return;
 
-    setVenues(prev => prev.map(v => {
-      if (v.id === venueId) {
-        addNotificationSilently(v.owner_id, 'Venue Rejected ❌', `Your venue registration for "${v.name}" was not approved. Reason: ${reason}`, 'owner');
-        return {
-          ...v,
-          is_verified: false,
-          is_active: false,
-          rejection_reason: reason
-        };
-      }
-      return v;
-    }));
+    const v = venues.find(item => item.id === venueId);
+    if (v) {
+      addNotificationSilently(v.owner_id, 'Venue Rejected ❌', `Your venue registration for "${v.name}" was not approved. Reason: ${reason}`, 'owner');
+      
+      addLog(currentUser.id, 'Rejected and deleted venue', 'venue', venueId, `Reason: ${reason}`);
 
-    addLog(currentUser.id, 'Rejected venue', 'venue', venueId, `Reason: ${reason}`);
+      // Delete the venue entirely
+      setVenues(prev => prev.filter(item => item.id !== venueId));
+      setResources(prev => prev.filter(r => r.venue_id !== venueId));
+      setSlots(prev => prev.filter(s => s.venue_id !== venueId));
+    }
   };
 
   const toggleFeatureVenue = (venueId: string) => {
