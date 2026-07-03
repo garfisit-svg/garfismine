@@ -5,7 +5,7 @@ import { Lock, Mail, AlertCircle, Gamepad2, ArrowRight, ArrowLeft, CheckCircle2 
 import toast from 'react-hot-toast';
 
 export const LoginPage: React.FC = () => {
-  const { logIn, profiles, sendPasswordResetEmail, resetPasswordWithToken, resetAllAppData } = useApp();
+  const { logIn, profiles, sendPasswordResetEmail, resetPasswordWithToken } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState((location.state as any)?.prefilledEmail || '');
@@ -387,21 +387,6 @@ export const LoginPage: React.FC = () => {
             <div className="text-center text-sm text-text-secondary">
               <span>Don't have an email registered? </span>
               <Link to="/signup" className="text-brand-cyan hover:underline font-semibold">Sign Up</Link>
-            </div>
-
-            <div className="pt-4 border-t border-[#1C1C2A] text-center">
-              <p className="text-[11px] text-text-secondary/80 mb-2">Want to clear all previous logins, registered venues, and start completely clean?</p>
-              <button 
-                type="button"
-                onClick={() => {
-                  if (window.confirm("Are you sure you want to clear all logins, owners, players, and registered venues? This will completely reset the database to a blank state.")) {
-                    resetAllAppData();
-                  }
-                }}
-                className="px-3.5 py-1.5 bg-red-950/40 border border-red-500/20 text-red-400 hover:text-white hover:bg-red-900/30 transition text-[10px] font-mono font-bold uppercase tracking-wider rounded-lg cursor-pointer inline-block"
-              >
-                ⚠️ Reset All App Data & Logins
-              </button>
             </div>
           </>
         )}
