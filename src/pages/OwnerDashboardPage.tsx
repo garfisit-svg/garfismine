@@ -6,6 +6,7 @@ import {
   Cpu, Award, DollarSign, Settings, Users, PlusCircle, ArrowUpRight 
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 // Tab Subcomponents
 import { DashboardTab } from '../components/owner/DashboardTab';
@@ -21,9 +22,20 @@ import { WalkInModal } from '../components/owner/WalkInModal';
 type ConsoleTab = 'dashboard' | 'bookings' | 'slots' | 'resources' | 'revenue' | 'reviews' | 'offers' | 'settings';
 
 export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
-  const { currentUser, venues } = useApp();
+  const { currentUser, venues, updateVenue } = useApp();
 
   const [activeTab, setActiveTab] = useState<ConsoleTab>(tab || 'dashboard');
+
+  // Resubmission form states
+  const [isEditingRejected, setIsEditingRejected] = useState(false);
+  const [resubmitName, setResubmitName] = useState('');
+  const [resubmitDesc, setResubmitDesc] = useState('');
+  const [resubmitAddress, setResubmitAddress] = useState('');
+  const [resubmitPincode, setResubmitPincode] = useState('');
+  const [resubmitPhone, setResubmitPhone] = useState('');
+  const [resubmitEmail, setResubmitEmail] = useState('');
+  const [resubmitPrice, setResubmitPrice] = useState(150);
+  const [resubmitUpi, setResubmitUpi] = useState('');
 
   React.useEffect(() => {
     if (tab) {
@@ -49,6 +61,21 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
     }
   }, [ownerVenues, selectedVenueId]);
 
+  const mainVenue = ownerVenues[0];
+
+  React.useEffect(() => {
+    if (mainVenue) {
+      setResubmitName(mainVenue.name || '');
+      setResubmitDesc(mainVenue.description || '');
+      setResubmitAddress(mainVenue.address || '');
+      setResubmitPincode(mainVenue.pincode || '');
+      setResubmitPhone(mainVenue.phone || '');
+      setResubmitEmail(mainVenue.email || '');
+      setResubmitPrice(mainVenue.price_per_hour || 150);
+      setResubmitUpi(currentUser?.upi_id || '');
+    }
+  }, [mainVenue, currentUser]);
+
   const activeVenue = useMemo(() => {
     return ownerVenues.find(v => v.id === selectedVenueId) || null;
   }, [selectedVenueId, ownerVenues]);
@@ -65,6 +92,179 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
   // Authentication & Verification Pending barrier
   if (currentUser && currentUser.role === 'owner_pending') {
     const mainVenue = ownerVenues[0];
+
+    if (mainVenue && mainVenue.rejection_reason) {
+      if (isEditingRejected) {
+        return (
+          <div className="max-w-2xl mx-auto px-4 py-12 sm:px-6 text-white font-sans space-y-6 animate-fade-in-quick">
+            <div className="text-center space-y-2">
+              <span className="text-4xl">📝</span>
+              <h2 className="text-3xl font-display font-black tracking-tight text-white">Modify Registration Details</h2>
+              <p className="text-xs text-text-secondary">Update your venue specification details to clear the administrative objection.</p>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!resubmitName || !resubmitDesc || !resubmitAddress || !resubmitPhone || !resubmitEmail) {
+                toast.error('Please fill in all core venue parameters');
+                return;
+              }
+              
+              updateVenue(mainVenue.id, {
+                name: resubmitName,
+                description: resubmitDesc,
+                address: resubmitAddress,
+                pincode: resubmitPincode,
+                phone: resubmitPhone,
+                email: resubmitEmail,
+                price_per_hour: Number(resubmitPrice),
+                rejection_reason: null // Clear rejection status!
+              });
+              
+              toast.success('Your modified registration details have been submitted for verification!');
+              setIsEditingRejected(false);
+            }} className="bg-[#12121A] border border-[#232338] p-6 rounded-2xl space-y-4">
+              
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Gaming Cafe / Arena Name</label>
+                <input
+                  type="text"
+                  className="w-full bg-[#1c1c2a] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none text-white focus:border-brand-purple"
+                  value={resubmitName}
+                  onChange={e => setResubmitName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Detailed Description (PCs, Consoles, amenities)</label>
+                <textarea
+                  rows={3}
+                  className="w-full bg-[#1c1c2a] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none text-white focus:border-brand-purple"
+                  value={resubmitDesc}
+                  onChange={e => setResubmitDesc(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Help Contact Phone</label>
+                  <input
+                    type="tel"
+                    className="w-full bg-[#1c1c2a] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none text-white focus:border-brand-purple"
+                    value={resubmitPhone}
+                    onChange={e => setResubmitPhone(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Help Desk Email</label>
+                  <input
+                    type="email"
+                    className="w-full bg-[#1c1c2a] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none text-white focus:border-brand-purple"
+                    value={resubmitEmail}
+                    onChange={e => setResubmitEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Physical Address</label>
+                <input
+                  type="text"
+                  className="w-full bg-[#1c1c2a] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none text-white focus:border-brand-purple"
+                  value={resubmitAddress}
+                  onChange={e => setResubmitAddress(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Pincode</label>
+                  <input
+                    type="text"
+                    className="w-full bg-[#1c1c2a] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none text-white focus:border-brand-purple"
+                    value={resubmitPincode}
+                    onChange={e => setResubmitPincode(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1">Hourly Base Price (₹)</label>
+                  <input
+                    type="number"
+                    className="w-full bg-[#1c1c2a] border border-[#2a2a3e] rounded-lg p-3 text-sm outline-none text-white focus:border-brand-purple"
+                    value={resubmitPrice}
+                    onChange={e => setResubmitPrice(Number(e.target.value))}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingRejected(false)}
+                  className="px-6 py-2.5 bg-[#12121A] border border-[#2a2a3e] rounded-lg text-xs font-bold uppercase text-text-secondary hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-gradient px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider"
+                >
+                  Resubmit Application 🚀
+                </button>
+              </div>
+            </form>
+          </div>
+        );
+      }
+
+      return (
+        <div className="max-w-2xl mx-auto px-4 py-24 sm:px-6 text-center space-y-6 text-white font-sans animate-fade-in-quick">
+          <span className="text-7xl block animate-bounce">❌</span>
+          <div className="space-y-3">
+            <h2 className="text-3xl font-display font-black tracking-tight text-white">Registration Rejected</h2>
+            {mainVenue && (
+              <p className="text-red-500 font-mono font-bold text-sm uppercase tracking-widest">
+                FOR: {mainVenue.name}
+              </p>
+            )}
+            <div className="p-5 bg-red-500/10 border border-red-500/25 rounded-2xl max-w-lg mx-auto text-left space-y-2">
+              <p className="text-red-400 font-bold text-sm">Objection / Rejection Reason:</p>
+              <p className="text-text-secondary text-xs leading-relaxed font-mono whitespace-pre-line">
+                {mainVenue.rejection_reason}
+              </p>
+            </div>
+            <p className="text-text-secondary text-sm max-w-lg mx-auto leading-relaxed pt-2">
+              Our administration team reviewed your application but found some inconsistencies or missing items. Please resolve the issues mentioned above and resubmit your request.
+            </p>
+          </div>
+          
+          <div className="pt-4 flex justify-center gap-4">
+            <button
+              onClick={() => setIsEditingRejected(true)}
+              className="px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider btn-gradient text-white cursor-pointer"
+            >
+              Edit & Resubmit Details
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem('garf_current_user');
+                window.location.href = '/login';
+              }}
+              className="px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#1c1c2e] text-white cursor-pointer hover:bg-[#25253c] transition border border-[#2a2a3e]"
+            >
+              Logout & Switch Account
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="max-w-2xl mx-auto px-4 py-24 sm:px-6 text-center space-y-6 text-white font-sans">
         <span className="text-7xl block animate-bounce">⏳</span>

@@ -176,14 +176,18 @@ export const GarfAdminPage: React.FC = () => {
   // Statistics calculation helpers
   const totalUsersCount = profiles.length;
   const totalOwnersCount = profiles.filter(p => p.role === 'owner' || p.role === 'owner_pending').length;
-  const pendingApprovalsCount = venues.filter(v => !v.is_verified).length;
+  const pendingApprovalsCount = venues.filter(v => !v.is_verified && !v.rejection_reason).length;
   const approvedVenuesCount = venues.filter(v => v.is_verified).length;
   const totalBookingsCount = bookings.length;
   const revenueTotal = bookings.filter(b => b.booking_status === 'completed' || b.booking_status === 'confirmed').reduce((sum, item) => sum + item.final_amount, 0);
 
+  // Rejected venues list for admin reference
+  const rejectedVenues = venues.filter(v => !v.is_verified && v.rejection_reason);
+
   // Filter listings
   const filteredPendingVenues = venues.filter(v => {
     if (v.is_verified) return false;
+    if (v.rejection_reason) return false; // Filter out rejected ones!
     const matchText = v.name.toLowerCase().includes(venueSearchText.toLowerCase()) || 
                       v.city.toLowerCase().includes(venueSearchText.toLowerCase()) ||
                       v.address.toLowerCase().includes(venueSearchText.toLowerCase());
@@ -737,6 +741,87 @@ export const GarfAdminPage: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Rejected Registrations sub-section */}
+          {rejectedVenues.length > 0 && (
+            <div className="mt-12 pt-8 border-t border-[#232338] space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+                <h4 className="text-lg font-bold font-display text-red-400">Rejected Registrations ({rejectedVenues.length})</h4>
+              </div>
+              <p className="text-xs text-text-secondary">These applications have been rejected. The owners have been notified via notifications and must correct their registration details in their Partner dashboard.</p>
+              
+              <div className="grid grid-cols-1 gap-6">
+                {rejectedVenues.map(ven => {
+                  const owner = profiles.find(p => p.id === ven.owner_id);
+                  return (
+                    <div key={ven.id} className="bg-[#12121A]/50 border border-red-500/10 rounded-2xl p-6 flex flex-col lg:flex-row justify-between gap-6 opacity-85 hover:opacity-100 transition duration-300">
+                      <div className="space-y-4 flex-1">
+                        <div className="flex gap-4 items-start">
+                          <img 
+                            src={ven.cover_image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=600'} 
+                            alt={ven.name}
+                            className="h-20 w-20 rounded-xl object-cover bg-black/40 border border-[#232338] flex-shrink-0 grayscale"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div>
+                            <span className="px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400 font-mono text-[9px] uppercase tracking-wider font-bold">
+                              REJECTED / ACTION REQUIRED
+                            </span>
+                            <h4 className="text-xl font-bold font-display text-white mt-1">{ven.name}</h4>
+                            <p className="text-xs text-text-secondary">{ven.address}, {ven.city}, {ven.state} - {ven.pincode}</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-red-500/5 p-4 rounded-xl border border-red-500/10 space-y-1">
+                          <p className="text-xs font-bold text-red-400 font-mono">Rejection Reason Given:</p>
+                          <p className="text-xs text-text-secondary/90 leading-relaxed font-mono">{ven.rejection_reason}</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-black/20 p-4 rounded-xl border border-black/10 text-xs">
+                          <div>
+                            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">Owner Contact</span>
+                            <p className="text-xs font-bold text-white mt-0.5">{owner?.full_name || 'Owner Profile'}</p>
+                            <p className="text-[10px] text-text-secondary/80 font-mono">{ven.phone}</p>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">Pricing</span>
+                            <p className="text-xs font-bold text-white mt-0.5">₹{ven.price_per_hour}/hr</p>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">Operating Hours</span>
+                            <p className="text-xs font-bold text-white mt-0.5">{ven.operating_hours_start} - {ven.operating_hours_end}</p>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">ID reference</span>
+                            <p className="text-xs font-bold text-white mt-0.5 font-mono">{ven.id.substring(0,8)}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex lg:flex-col gap-3 justify-center lg:justify-start min-w-[180px]">
+                        <button
+                          onClick={() => handleApproveVenue(ven.id)}
+                          className="py-2.5 px-4 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black border border-emerald-500/25 rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Check className="h-4 w-4" />
+                          <span>Approve & Restore</span>
+                        </button>
+                        
+                        <button
+                          onClick={() => handleTriggerDelete(ven.id, 'venue')}
+                          className="py-2.5 px-4 bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/25 rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span>Delete Permanent</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
