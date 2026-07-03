@@ -363,6 +363,203 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadSupabaseProfiles();
   }, []);
 
+  // Load venues, resources, slots, and bookings from Supabase on mount if active, and subscribe to real-time events
+  useEffect(() => {
+    if (isSupabaseConfigured && supabase) {
+      // Load venues
+      const loadVenues = async () => {
+        try {
+          const { data, error } = await supabase.from('venues').select('*');
+          if (data && !error) {
+            rawSetVenues(prev => {
+              const localSaved = localStorage.getItem('garf_venues');
+              let localVenues: Venue[] = [];
+              if (localSaved) {
+                try { localVenues = JSON.parse(localSaved); } catch(e) {}
+              }
+              const combinedMap = new Map<string, Venue>();
+              localVenues.forEach(v => { if (v && v.id) combinedMap.set(v.id, v); });
+              data.forEach((v: any) => { if (v && v.id) combinedMap.set(v.id, v); });
+              const merged = Array.from(combinedMap.values());
+              localStorage.setItem('garf_venues', JSON.stringify(merged));
+              return merged;
+            });
+          }
+        } catch (err) {
+          console.error('Error fetching venues from Supabase on mount:', err);
+        }
+      };
+
+      // Load resources
+      const loadResources = async () => {
+        try {
+          const { data, error } = await supabase.from('venue_resources').select('*');
+          if (data && !error) {
+            rawSetResources(prev => {
+              const localSaved = localStorage.getItem('garf_resources');
+              let localResources: VenueResource[] = [];
+              if (localSaved) {
+                try { localResources = JSON.parse(localSaved); } catch(e) {}
+              }
+              const combinedMap = new Map<string, VenueResource>();
+              localResources.forEach(r => { if (r && r.id) combinedMap.set(r.id, r); });
+              data.forEach((r: any) => { if (r && r.id) combinedMap.set(r.id, r); });
+              const merged = Array.from(combinedMap.values());
+              localStorage.setItem('garf_resources', JSON.stringify(merged));
+              return merged;
+            });
+          }
+        } catch (err) {
+          console.error('Error fetching venue_resources from Supabase on mount:', err);
+        }
+      };
+
+      // Load slots
+      const loadSlots = async () => {
+        try {
+          const { data, error } = await supabase.from('slots').select('*');
+          if (data && !error) {
+            rawSetSlots(prev => {
+              const localSaved = localStorage.getItem('garf_slots');
+              let localSlots: Slot[] = [];
+              if (localSaved) {
+                try { localSlots = JSON.parse(localSaved); } catch(e) {}
+              }
+              const combinedMap = new Map<string, Slot>();
+              localSlots.forEach(s => { if (s && s.id) combinedMap.set(s.id, s); });
+              data.forEach((s: any) => { if (s && s.id) combinedMap.set(s.id, s); });
+              const merged = Array.from(combinedMap.values());
+              localStorage.setItem('garf_slots', JSON.stringify(merged));
+              return merged;
+            });
+          }
+        } catch (err) {
+          console.error('Error fetching slots from Supabase on mount:', err);
+        }
+      };
+
+      // Load bookings
+      const loadBookings = async () => {
+        try {
+          const { data, error } = await supabase.from('bookings').select('*');
+          if (data && !error) {
+            rawSetBookings(prev => {
+              const localSaved = localStorage.getItem('garf_bookings');
+              let localBookings: Booking[] = [];
+              if (localSaved) {
+                try { localBookings = JSON.parse(localSaved); } catch(e) {}
+              }
+              const combinedMap = new Map<string, Booking>();
+              localBookings.forEach(b => { if (b && b.id) combinedMap.set(b.id, b); });
+              data.forEach((b: any) => { if (b && b.id) combinedMap.set(b.id, b); });
+              const merged = Array.from(combinedMap.values());
+              localStorage.setItem('garf_bookings', JSON.stringify(merged));
+              return merged;
+            });
+          }
+        } catch (err) {
+          console.error('Error fetching bookings from Supabase on mount:', err);
+        }
+      };
+
+      loadVenues();
+      loadResources();
+      loadSlots();
+      loadBookings();
+
+      // Subscribe to real-time postgres changes
+      const channels = [
+        supabase.channel('public-venues-sync')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'venues' }, payload => {
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              const item = payload.new as Venue;
+              rawSetVenues(prev => {
+                const updated = prev.some(v => v.id === item.id)
+                  ? prev.map(v => v.id === item.id ? item : v)
+                  : [...prev, item];
+                localStorage.setItem('garf_venues', JSON.stringify(updated));
+                return updated;
+              });
+            } else if (payload.eventType === 'DELETE') {
+              const oldId = payload.old.id;
+              rawSetVenues(prev => {
+                const updated = prev.filter(v => v.id !== oldId);
+                localStorage.setItem('garf_venues', JSON.stringify(updated));
+                return updated;
+              });
+            }
+          }).subscribe(),
+
+        supabase.channel('public-resources-sync')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'venue_resources' }, payload => {
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              const item = payload.new as VenueResource;
+              rawSetResources(prev => {
+                const updated = prev.some(r => r.id === item.id)
+                  ? prev.map(r => r.id === item.id ? item : r)
+                  : [...prev, item];
+                localStorage.setItem('garf_resources', JSON.stringify(updated));
+                return updated;
+              });
+            } else if (payload.eventType === 'DELETE') {
+              const oldId = payload.old.id;
+              rawSetResources(prev => {
+                const updated = prev.filter(r => r.id !== oldId);
+                localStorage.setItem('garf_resources', JSON.stringify(updated));
+                return updated;
+              });
+            }
+          }).subscribe(),
+
+        supabase.channel('public-slots-sync')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, payload => {
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              const item = payload.new as Slot;
+              rawSetSlots(prev => {
+                const updated = prev.some(s => s.id === item.id)
+                  ? prev.map(s => s.id === item.id ? item : s)
+                  : [...prev, item];
+                localStorage.setItem('garf_slots', JSON.stringify(updated));
+                return updated;
+              });
+            } else if (payload.eventType === 'DELETE') {
+              const oldId = payload.old.id;
+              rawSetSlots(prev => {
+                const updated = prev.filter(s => s.id !== oldId);
+                localStorage.setItem('garf_slots', JSON.stringify(updated));
+                return updated;
+              });
+            }
+          }).subscribe(),
+
+        supabase.channel('public-bookings-sync')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, payload => {
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              const item = payload.new as Booking;
+              rawSetBookings(prev => {
+                const updated = prev.some(b => b.id === item.id)
+                  ? prev.map(b => b.id === item.id ? item : b)
+                  : [...prev, item];
+                localStorage.setItem('garf_bookings', JSON.stringify(updated));
+                return updated;
+              });
+            } else if (payload.eventType === 'DELETE') {
+              const oldId = payload.old.id;
+              rawSetBookings(prev => {
+                const updated = prev.filter(b => b.id !== oldId);
+                localStorage.setItem('garf_bookings', JSON.stringify(updated));
+                return updated;
+              });
+            }
+          }).subscribe(),
+      ];
+
+      return () => {
+        channels.forEach(ch => supabase.removeChannel(ch));
+      };
+    }
+  }, []);
+
   const saveProfileToSupabase = async (profile: Profile) => {
     if (isSupabaseConfigured && supabase) {
       try {
@@ -410,14 +607,150 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const [venues, setVenues] = useState<Venue[]>(() => {
+  const saveVenueToSupabase = async (venue: Venue) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const payload = {
+          id: venue.id,
+          owner_id: venue.owner_id,
+          name: venue.name,
+          type: venue.type,
+          description: venue.description,
+          address: venue.address,
+          city: venue.city,
+          state: venue.state,
+          pincode: venue.pincode,
+          phone: venue.phone,
+          email: venue.email,
+          cover_image: venue.cover_image,
+          gallery_images: venue.gallery_images,
+          amenities: venue.amenities,
+          games_available: venue.games_available,
+          price_per_hour: Number(venue.price_per_hour),
+          rating: Number(venue.rating),
+          total_reviews: Number(venue.total_reviews),
+          is_verified: venue.is_verified,
+          is_active: venue.is_active,
+          is_featured: venue.is_featured,
+          is_suspended: venue.is_suspended,
+          operating_hours_start: venue.operating_hours_start,
+          operating_hours_end: venue.operating_hours_end,
+          operating_days: venue.operating_days,
+          commission_percent: Number(venue.commission_percent),
+          rejection_reason: venue.rejection_reason,
+          verified_at: venue.verified_at,
+          created_at: venue.created_at
+        };
+        const { error } = await supabase.from('venues').upsert(payload, { onConflict: 'id' });
+        if (error) console.error('Failed to upsert venue to Supabase:', error.message);
+      } catch (err) {
+        console.error('Error executing saveVenueToSupabase:', err);
+      }
+    }
+  };
+
+  const saveResourceToSupabase = async (resource: VenueResource) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const payload = {
+          id: resource.id,
+          venue_id: resource.venue_id,
+          name: resource.name,
+          type: resource.type,
+          specifications: resource.specifications,
+          price_per_hour: Number(resource.price_per_hour),
+          is_active: resource.is_active,
+          sort_order: Number(resource.sort_order),
+          created_at: resource.created_at
+        };
+        const { error } = await supabase.from('venue_resources').upsert(payload, { onConflict: 'id' });
+        if (error) console.error('Failed to upsert resource to Supabase:', error.message);
+      } catch (err) {
+        console.error('Error executing saveResourceToSupabase:', err);
+      }
+    }
+  };
+
+  const saveSlotToSupabase = async (slot: Slot) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const payload = {
+          id: slot.id,
+          venue_id: slot.venue_id,
+          resource_id: slot.resource_id,
+          slot_date: slot.slot_date,
+          start_time: slot.start_time,
+          end_time: slot.end_time,
+          status: slot.status,
+          booking_id: slot.booking_id,
+          held_until: slot.held_until,
+          blocked_reason: slot.blocked_reason,
+          created_at: slot.created_at,
+          updated_at: slot.updated_at
+        };
+        const { error } = await supabase.from('slots').upsert(payload, { onConflict: 'id' });
+        if (error) console.error('Failed to upsert slot to Supabase:', error.message);
+      } catch (err) {
+        console.error('Error executing saveSlotToSupabase:', err);
+      }
+    }
+  };
+
+  const saveBookingToSupabase = async (booking: Booking) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const payload = {
+          id: booking.id,
+          booking_ref: booking.booking_ref,
+          customer_id: booking.customer_id,
+          venue_id: booking.venue_id,
+          resource_id: booking.resource_id,
+          booking_date: booking.booking_date,
+          start_time: booking.start_time,
+          end_time: booking.end_time,
+          duration_hours: Number(booking.duration_hours),
+          base_amount: Number(booking.base_amount),
+          discount_amount: Number(booking.discount_amount),
+          coins_used: Number(booking.coins_used),
+          coins_discount_amount: Number(booking.coins_discount_amount),
+          platform_fee: Number(booking.platform_fee),
+          final_amount: Number(booking.final_amount),
+          payment_method: booking.payment_method,
+          payment_status: booking.payment_status,
+          booking_status: booking.booking_status,
+          hold_expires_at: booking.hold_expires_at,
+          advance_paid_amount: Number(booking.advance_paid_amount || 0),
+          checked_in_at: booking.checked_in_at,
+          completed_at: booking.completed_at,
+          cancelled_at: booking.cancelled_at,
+          cancellation_reason: booking.cancellation_reason,
+          refund_amount: Number(booking.refund_amount || 0),
+          garf_coins_earned: Number(booking.garf_coins_earned || 0),
+          offer_id: booking.offer_id,
+          walk_in_customer_name: booking.walk_in_customer_name,
+          walk_in_customer_phone: booking.walk_in_customer_phone,
+          walk_in_actual_start_time: booking.walk_in_actual_start_time,
+          walk_in_actual_end_time: booking.walk_in_actual_end_time,
+          quantity: Number(booking.quantity || 1),
+          created_at: booking.created_at,
+          updated_at: booking.updated_at
+        };
+        const { error } = await supabase.from('bookings').upsert(payload, { onConflict: 'id' });
+        if (error) console.error('Failed to upsert booking to Supabase:', error.message);
+      } catch (err) {
+        console.error('Error executing saveBookingToSupabase:', err);
+      }
+    }
+  };
+
+  const [venues, rawSetVenues] = useState<Venue[]>(() => {
     const saved = localStorage.getItem('garf_venues');
     if (saved) return JSON.parse(saved);
     const seed: Venue[] = [];
     return seed;
   });
 
-  const [resources, setResources] = useState<VenueResource[]>(() => {
+  const [resources, rawSetResources] = useState<VenueResource[]>(() => {
     const saved = localStorage.getItem('garf_resources');
     if (saved) return JSON.parse(saved);
     const seed: VenueResource[] = [];
@@ -425,18 +758,114 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   // Unique slots state which gets populated for current +7 days automatically
-  const [slots, setSlots] = useState<Slot[]>(() => {
+  const [slots, rawSetSlots] = useState<Slot[]>(() => {
     const saved = localStorage.getItem('garf_slots');
     if (saved) return JSON.parse(saved);
     return []; // Will build dynamically below!
   });
 
-  const [bookings, setBookings] = useState<Booking[]>(() => {
+  const [bookings, rawSetBookings] = useState<Booking[]>(() => {
     const saved = localStorage.getItem('garf_bookings');
     if (saved) return JSON.parse(saved);
     const seed: Booking[] = [];
     return seed;
   });
+
+  const setVenues = (val: Venue[] | ((prev: Venue[]) => Venue[])) => {
+    rawSetVenues(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      if (isSupabaseConfigured && supabase) {
+        const prevMap = new Map(prev.map(v => [v.id, v]));
+        next.forEach(v => {
+          const p = prevMap.get(v.id);
+          if (!p || JSON.stringify(p) !== JSON.stringify(v)) {
+            saveVenueToSupabase(v);
+          }
+        });
+        const nextIds = new Set(next.map(v => v.id));
+        prev.forEach(v => {
+          if (!nextIds.has(v.id)) {
+            supabase.from('venues').delete().eq('id', v.id).then(({ error }) => {
+              if (error) console.error('Failed to delete venue from Supabase:', error.message);
+            });
+          }
+        });
+      }
+      return next;
+    });
+  };
+
+  const setResources = (val: VenueResource[] | ((prev: VenueResource[]) => VenueResource[])) => {
+    rawSetResources(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      if (isSupabaseConfigured && supabase) {
+        const prevMap = new Map(prev.map(r => [r.id, r]));
+        next.forEach(r => {
+          const p = prevMap.get(r.id);
+          if (!p || JSON.stringify(p) !== JSON.stringify(r)) {
+            saveResourceToSupabase(r);
+          }
+        });
+        const nextIds = new Set(next.map(r => r.id));
+        prev.forEach(r => {
+          if (!nextIds.has(r.id)) {
+            supabase.from('venue_resources').delete().eq('id', r.id).then(({ error }) => {
+              if (error) console.error('Failed to delete resource from Supabase:', error.message);
+            });
+          }
+        });
+      }
+      return next;
+    });
+  };
+
+  const setSlots = (val: Slot[] | ((prev: Slot[]) => Slot[])) => {
+    rawSetSlots(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      if (isSupabaseConfigured && supabase) {
+        const prevMap = new Map(prev.map(s => [s.id, s]));
+        next.forEach(s => {
+          const p = prevMap.get(s.id);
+          if (!p || JSON.stringify(p) !== JSON.stringify(s)) {
+            saveSlotToSupabase(s);
+          }
+        });
+        const nextIds = new Set(next.map(s => s.id));
+        prev.forEach(s => {
+          if (!nextIds.has(s.id)) {
+            supabase.from('slots').delete().eq('id', s.id).then(({ error }) => {
+              if (error) console.error('Failed to delete slot from Supabase:', error.message);
+            });
+          }
+        });
+      }
+      return next;
+    });
+  };
+
+  const setBookings = (val: Booking[] | ((prev: Booking[]) => Booking[])) => {
+    rawSetBookings(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      if (isSupabaseConfigured && supabase) {
+        const prevMap = new Map(prev.map(b => [b.id, b]));
+        next.forEach(b => {
+          const p = prevMap.get(b.id);
+          if (!p || JSON.stringify(p) !== JSON.stringify(b)) {
+            saveBookingToSupabase(b);
+          }
+        });
+        const nextIds = new Set(next.map(b => b.id));
+        prev.forEach(b => {
+          if (!nextIds.has(b.id)) {
+            supabase.from('bookings').delete().eq('id', b.id).then(({ error }) => {
+              if (error) console.error('Failed to delete booking from Supabase:', error.message);
+            });
+          }
+        });
+      }
+      return next;
+    });
+  };
 
   const [reviews, setReviews] = useState<Review[]>(() => {
     const saved = localStorage.getItem('garf_reviews');
@@ -723,16 +1152,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const parsed = JSON.parse(e.newValue);
         switch (e.key) {
           case 'garf_slots':
-            setSlots(parsed);
+            rawSetSlots(parsed);
             break;
           case 'garf_bookings':
-            setBookings(parsed);
+            rawSetBookings(parsed);
             break;
           case 'garf_venues':
-            setVenues(parsed);
+            rawSetVenues(parsed);
             break;
           case 'garf_resources':
-            setResources(parsed);
+            rawSetResources(parsed);
             break;
           case 'garf_profiles':
             setProfiles(parsed);
