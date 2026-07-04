@@ -52,7 +52,7 @@ interface AppContextType {
     resourcesData: Array<Omit<VenueResource, 'id' | 'venue_id' | 'created_at'>>,
     detailedEquipments?: Array<Omit<GamingEquipment, 'id' | 'venue_id' | 'created_at' | 'updated_at'>>,
     detailedTurfs?: Array<Omit<TurfDetails, 'id' | 'venue_id' | 'created_at' | 'updated_at'>>
-  ) => void;
+  ) => Promise<void>;
   registerDetailedVenue: (
     venueData: Omit<Venue, 'id' | 'owner_id' | 'rating' | 'total_reviews' | 'is_verified' | 'is_active' | 'is_featured' | 'is_suspended' | 'created_at'>,
     equipments: Array<Omit<GamingEquipment, 'id' | 'venue_id' | 'created_at' | 'updated_at'>>,
@@ -1592,7 +1592,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedProfiles = [...currentProfiles, newProfile];
     setProfiles(updatedProfiles);
     localStorage.setItem('garf_profiles', JSON.stringify(updatedProfiles));
-    saveProfileToSupabase(newProfile);
+    await saveProfileToSupabase(newProfile);
     
     // Auto-login registered users directly
     setCurrentUser(newProfile);
@@ -1689,13 +1689,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // VENUE REGISTRATION & OWNER ACTIONS
-  const registerVenue = (
+  const registerVenue = async (
     venueData: Omit<Venue, 'id' | 'owner_id' | 'rating' | 'total_reviews' | 'is_verified' | 'is_active' | 'is_featured' | 'is_suspended'>,
     resourcesData: Array<Omit<VenueResource, 'id' | 'venue_id' | 'created_at'>> = [],
     detailedEquipments?: Array<Omit<GamingEquipment, 'id' | 'venue_id' | 'created_at' | 'updated_at'>>,
     detailedTurfs?: Array<Omit<TurfDetails, 'id' | 'venue_id' | 'created_at' | 'updated_at'>>
   ) => {
     if (!currentUser) return;
+
+    // Await profile update in Supabase to 'owner_pending' before inserting the venue
+    // to strictly prevent the foreign key constraint from failing!
+    if (isSupabaseConfigured && supabase) {
+      const updatedProfile = { ...currentUser, role: 'owner_pending' as const };
+      await saveProfileToSupabase(updatedProfile);
+    }
 
     const vId = `venue-${Math.random().toString(36).substr(2, 9)}`;
     const newV: Venue = {
@@ -1843,6 +1850,88 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
     setSlots(prev => [...prev, ...allNewSlots]);
+
+    // Save all newly generated entities to Supabase in a bulk & validated manner
+    if (isSupabaseConfigured && supabase) {
+      try {
+        // 1. Save Venue
+        const venuePayload = {
+          id: newV.id,
+          owner_id: newV.owner_id,
+          name: newV.name,
+          type: newV.type,
+          description: newV.description,
+          address: newV.address,
+          city: newV.city,
+          state: newV.state,
+          pincode: newV.pincode,
+          phone: newV.phone,
+          email: newV.email,
+          cover_image: newV.cover_image,
+          gallery_images: newV.gallery_images,
+          amenities: newV.amenities,
+          games_available: newV.games_available,
+          price_per_hour: Number(newV.price_per_hour),
+          rating: Number(newV.rating),
+          total_reviews: Number(newV.total_reviews),
+          is_verified: newV.is_verified,
+          is_active: newV.is_active,
+          is_featured: newV.is_featured,
+          is_suspended: newV.is_suspended,
+          operating_hours_start: newV.operating_hours_start,
+          operating_hours_end: newV.operating_hours_end,
+          operating_days: newV.operating_days,
+          commission_percent: Number(newV.commission_percent),
+          rejection_reason: newV.rejection_reason,
+          verified_at: newV.verified_at,
+          created_at: newV.created_at
+        };
+        const { error: venueError } = await supabase.from('venues').upsert(venuePayload, { onConflict: 'id' });
+        if (venueError) {
+          throw new Error(`Failed to save Venue to Database: ${venueError.message}`);
+        }
+
+        // 2. Save Venue Resources
+        const resourcesPayload = newRes.map(res => ({
+          id: res.id,
+          venue_id: res.venue_id,
+          name: res.name,
+          type: res.type,
+          price_per_hour: Number(res.price_per_hour),
+          is_active: res.is_active,
+          specifications: res.specifications,
+          sort_order: res.sort_order,
+          created_at: res.created_at
+        }));
+        const { error: resError } = await supabase.from('venue_resources').upsert(resourcesPayload, { onConflict: 'id' });
+        if (resError) {
+          throw new Error(`Failed to save Venue Resources to Database: ${resError.message}`);
+        }
+
+        // 3. Save Slots in bulk
+        const slotsPayload = allNewSlots.map(slot => ({
+          id: slot.id,
+          venue_id: slot.venue_id,
+          resource_id: slot.resource_id,
+          slot_date: slot.slot_date,
+          start_time: slot.start_time,
+          end_time: slot.end_time,
+          status: slot.status,
+          booking_id: slot.booking_id,
+          held_until: slot.held_until,
+          blocked_reason: slot.blocked_reason,
+          created_at: slot.created_at,
+          updated_at: slot.updated_at
+        }));
+        const { error: slotError } = await supabase.from('slots').upsert(slotsPayload, { onConflict: 'id' });
+        if (slotError) {
+          throw new Error(`Failed to save Slots to Database: ${slotError.message}`);
+        }
+      } catch (err: any) {
+        console.error('Error in registerVenue Supabase execution:', err);
+        throw err;
+      }
+    }
 
     // Update user role to Owner Pending until verification
     setProfiles(prev => {
