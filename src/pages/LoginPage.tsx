@@ -45,15 +45,7 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-    const matchedProfile = profiles?.find(p => p.email?.trim().toLowerCase() === cleanEmail);
-
-    if (!matchedProfile) {
-      setError('No account registered with this email address. Please sign up to register.');
-      return;
-    }
-
-    // Email exists, proceed directly to password step (no verification check)
+    // Proceed directly to password step to support seamless test/simulated accounts
     setStep('password');
   };
 

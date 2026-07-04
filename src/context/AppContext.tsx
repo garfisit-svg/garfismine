@@ -290,7 +290,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    const seed: Profile[] = [];
+    const seed: Profile[] = [
+      {
+        id: 'user-admin-1',
+        full_name: 'Garf Founder Admin',
+        email: 'founder@garf.com',
+        phone: '9999988888',
+        avatar_url: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=founder',
+        role: 'admin',
+        garf_coins: 1000,
+        referral_code: 'GARF-ADMIN',
+        referred_by: null,
+        date_of_birth: '1990-01-01',
+        city: 'Mumbai',
+        is_suspended: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        emailVerified: true,
+        password: 'password'
+      },
+      {
+        id: 'user-garf-isit',
+        full_name: 'Garfisit Admin',
+        email: 'garfisit@gmail.com',
+        phone: '9999955555',
+        avatar_url: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=garfisit',
+        role: 'admin',
+        garf_coins: 1000,
+        referral_code: 'GARF-ISIT',
+        referred_by: null,
+        date_of_birth: '1992-08-21',
+        city: 'Mumbai',
+        is_suspended: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        emailVerified: true,
+        password: 'password'
+      },
+      {
+        id: 'user-owner-1',
+        full_name: 'Arena Manager Owner',
+        email: 'owner@arena.com',
+        phone: '9999977777',
+        avatar_url: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=owner',
+        role: 'owner',
+        garf_coins: 500,
+        referral_code: 'GARF-OWNER',
+        referred_by: null,
+        date_of_birth: '1988-05-15',
+        city: 'Mumbai',
+        is_suspended: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        emailVerified: true,
+        password: 'password'
+      },
+      {
+        id: 'user-customer-1',
+        full_name: 'Player One',
+        email: 'player@garf.com',
+        phone: '9999966666',
+        avatar_url: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=player',
+        role: 'customer',
+        garf_coins: 150,
+        referral_code: 'GARF-PLAY1',
+        referred_by: null,
+        date_of_birth: '1998-11-20',
+        city: 'Mumbai',
+        is_suspended: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        emailVerified: true,
+        password: 'password'
+      }
+    ];
     return seed;
   });
 
@@ -309,6 +382,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return null;
   });
+
+  // Keep currentUser state in sync with profiles array whenever profiles change (vital for real-time tab sync and immediate role transitions!)
+  useEffect(() => {
+    if (currentUser) {
+      const dbProfile = profiles.find(p => p.id === currentUser.id);
+      if (dbProfile && JSON.stringify(dbProfile) !== JSON.stringify(currentUser)) {
+        setCurrentUser(dbProfile);
+      }
+    }
+  }, [profiles, currentUser]);
 
   // Load profiles from Supabase on mount if active
   useEffect(() => {
@@ -1554,7 +1637,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         email: cleanEmail,
         phone: '1234567890',
         avatar_url: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${username}`,
-        role: cleanEmail === 'garfisit@gmail.com' || cleanEmail.includes('admin') ? 'admin' : (cleanEmail.includes('owner') ? 'owner' : 'customer'),
+        role: cleanEmail === 'garfisit@gmail.com' || cleanEmail.includes('admin') || cleanEmail === 'founder@garf.com' ? 'admin' : (cleanEmail.includes('owner') || cleanEmail === 'owner@arena.com' ? 'owner' : 'customer'),
         garf_coins: 150,
         referral_code: myRefCode,
         referred_by: null,
