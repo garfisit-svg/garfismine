@@ -37,7 +37,7 @@ DROP TABLE IF EXISTS profiles CASCADE;
 
 -- 1. PROFILES Table
 CREATE TABLE profiles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   full_name TEXT NOT NULL,
   email TEXT UNIQUE,
   phone TEXT,
@@ -60,8 +60,8 @@ CREATE TABLE profiles (
 
 -- 2. VENUES Table
 CREATE TABLE venues (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  owner_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('gaming_cafe', 'turf', 'both')),
   description TEXT NOT NULL,
@@ -93,8 +93,8 @@ CREATE TABLE venues (
 
 -- 3. VENUE_RESOURCES Table
 CREATE TABLE venue_resources (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  venue_id UUID REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('pc', 'ps5', 'xbox', 'vr', 'turf')),
   specifications TEXT,
@@ -106,8 +106,8 @@ CREATE TABLE venue_resources (
 
 -- 4. OFFERS Table
 CREATE TABLE offers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  venue_id UUID REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
   title TEXT NOT NULL,
   description TEXT,
   discount_type TEXT NOT NULL CHECK (discount_type IN ('percentage', 'flat')),
@@ -126,11 +126,11 @@ CREATE TABLE offers (
 
 -- 5. BOOKINGS Table
 CREATE TABLE bookings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   booking_ref TEXT UNIQUE NOT NULL,
-  customer_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  venue_id UUID REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
-  resource_id UUID REFERENCES venue_resources(id) ON DELETE CASCADE NOT NULL,
+  customer_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  resource_id TEXT REFERENCES venue_resources(id) ON DELETE CASCADE NOT NULL,
   booking_date DATE NOT NULL,
   start_time TEXT NOT NULL,
   end_time TEXT NOT NULL,
@@ -152,7 +152,7 @@ CREATE TABLE bookings (
   cancellation_reason TEXT,
   refund_amount NUMERIC(10,2) DEFAULT 0 NOT NULL,
   garf_coins_earned INTEGER DEFAULT 0 NOT NULL,
-  offer_id UUID REFERENCES offers(id) ON DELETE SET NULL,
+  offer_id TEXT REFERENCES offers(id) ON DELETE SET NULL,
   walk_in_customer_name TEXT,
   walk_in_customer_phone TEXT,
   walk_in_actual_start_time TEXT,
@@ -164,14 +164,14 @@ CREATE TABLE bookings (
 
 -- 6. SLOTS Table
 CREATE TABLE slots (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  venue_id UUID REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
-  resource_id UUID REFERENCES venue_resources(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  resource_id TEXT REFERENCES venue_resources(id) ON DELETE CASCADE NOT NULL,
   slot_date DATE NOT NULL,
   start_time TEXT NOT NULL,
   end_time TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('available', 'held', 'booked', 'blocked')),
-  booking_id UUID REFERENCES bookings(id) ON DELETE SET NULL,
+  booking_id TEXT REFERENCES bookings(id) ON DELETE SET NULL,
   held_until TIMESTAMP WITH TIME ZONE,
   blocked_reason TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -181,10 +181,10 @@ CREATE TABLE slots (
 
 -- 7. REVIEWS Table
 CREATE TABLE reviews (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  booking_id UUID REFERENCES bookings(id) ON DELETE CASCADE UNIQUE NOT NULL,
-  customer_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  venue_id UUID REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  booking_id TEXT REFERENCES bookings(id) ON DELETE CASCADE UNIQUE NOT NULL,
+  customer_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
   rating INTEGER CHECK (rating BETWEEN 1 AND 5) NOT NULL,
   comment TEXT NOT NULL,
   owner_reply TEXT,
@@ -194,20 +194,20 @@ CREATE TABLE reviews (
 
 -- 8. COIN_TRANSACTIONS Table
 CREATE TABLE coin_transactions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   amount INTEGER NOT NULL,
   type TEXT NOT NULL,
   description TEXT NOT NULL,
-  reference_id UUID,
+  reference_id TEXT,
   balance_after INTEGER NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- 9. NOTIFICATIONS Table
 CREATE TABLE notifications (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('booking', 'reminder', 'coins', 'promotion', 'review', 'system', 'owner', 'admin')),
@@ -218,11 +218,11 @@ CREATE TABLE notifications (
 
 -- 10. ADMIN_LOGS Table
 CREATE TABLE admin_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  admin_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  admin_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   action TEXT NOT NULL,
   target_type TEXT NOT NULL CHECK (target_type IN ('venue', 'user', 'booking')),
-  target_id UUID NOT NULL,
+  target_id TEXT NOT NULL,
   details TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -233,7 +233,7 @@ CREATE TABLE admin_logs (
 
 -- 11. SQUAD_PROFILES Table
 CREATE TABLE squad_profiles (
-  id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+  id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
   username TEXT UNIQUE NOT NULL,
   gamer_tag TEXT,
   bio TEXT,
@@ -249,7 +249,7 @@ CREATE TABLE squad_profiles (
 
 -- 12. SQUADS Table
 CREATE TABLE squads (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
   type TEXT NOT NULL CHECK (type IN ('gaming', 'sports', 'mixed', 'casual')),
@@ -259,8 +259,8 @@ CREATE TABLE squads (
   game_or_sport TEXT,
   max_members INTEGER DEFAULT 20 NOT NULL,
   is_private BOOLEAN DEFAULT FALSE NOT NULL,
-  created_by UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  venue_id UUID REFERENCES venues(id) ON DELETE SET NULL,
+  created_by TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES venues(id) ON DELETE SET NULL,
   is_active BOOLEAN DEFAULT TRUE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -268,12 +268,12 @@ CREATE TABLE squads (
 
 -- 13. SQUAD_MEMBERS Table
 CREATE TABLE squad_members (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  squad_id UUID REFERENCES squads(id) ON DELETE CASCADE NOT NULL,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  squad_id TEXT REFERENCES squads(id) ON DELETE CASCADE NOT NULL,
+  user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('admin', 'moderator', 'member')),
   status TEXT NOT NULL CHECK (status IN ('active', 'invited', 'requested', 'removed', 'left')),
-  invited_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  invited_by TEXT REFERENCES profiles(id) ON DELETE SET NULL,
   joined_at TIMESTAMP WITH TIME ZONE,
   invited_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -282,9 +282,9 @@ CREATE TABLE squad_members (
 
 -- 14. POLLS Table
 CREATE TABLE polls (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  created_by UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  squad_id UUID REFERENCES squads(id) ON DELETE CASCADE,
+  id TEXT PRIMARY KEY,
+  created_by TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  squad_id TEXT REFERENCES squads(id) ON DELETE CASCADE,
   city TEXT,
   question TEXT NOT NULL,
   options TEXT[] NOT NULL,
@@ -297,9 +297,9 @@ CREATE TABLE polls (
 
 -- 15. POLL_VOTES Table
 CREATE TABLE poll_votes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  poll_id UUID REFERENCES polls(id) ON DELETE CASCADE NOT NULL,
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  poll_id TEXT REFERENCES polls(id) ON DELETE CASCADE NOT NULL,
+  user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   selected_options INTEGER[] NOT NULL, -- index array of chosen options
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   CONSTRAINT unique_poll_vote UNIQUE (poll_id, user_id)
@@ -307,10 +307,10 @@ CREATE TABLE poll_votes (
 
 -- 16. PLAYER_NEEDED_POSTS Table
 CREATE TABLE player_needed_posts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  posted_by UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  posted_by TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   city TEXT NOT NULL,
-  venue_id UUID REFERENCES venues(id) ON DELETE SET NULL,
+  venue_id TEXT REFERENCES venues(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   description TEXT,
   game_or_sport TEXT NOT NULL,
@@ -326,9 +326,9 @@ CREATE TABLE player_needed_posts (
 
 -- 17. PLAYER_NEEDED_RESPONSES Table
 CREATE TABLE player_needed_responses (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  post_id UUID REFERENCES player_needed_posts(id) ON DELETE CASCADE NOT NULL,
-  responder_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  post_id TEXT REFERENCES player_needed_posts(id) ON DELETE CASCADE NOT NULL,
+  responder_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   message TEXT,
   status TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'rejected')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -337,29 +337,29 @@ CREATE TABLE player_needed_responses (
 
 -- 18. MESSAGES Table (supports global_city, squad, and direct chat messages!)
 CREATE TABLE messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   type TEXT NOT NULL CHECK (type IN ('global_city', 'squad', 'direct')),
-  sender_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  squad_id UUID REFERENCES squads(id) ON DELETE CASCADE,
-  receiver_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  sender_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  squad_id TEXT REFERENCES squads(id) ON DELETE CASCADE,
+  receiver_id TEXT REFERENCES profiles(id) ON DELETE CASCADE,
   city TEXT,
   content TEXT,
   message_type TEXT NOT NULL CHECK (message_type IN ('text', 'image', 'poll', 'squad_invite', 'booking_share', 'player_needed', 'gif')),
-  poll_id UUID REFERENCES polls(id) ON DELETE SET NULL,
-  booking_id UUID REFERENCES bookings(id) ON DELETE SET NULL,
-  player_needed_id UUID REFERENCES player_needed_posts(id) ON DELETE SET NULL,
+  poll_id TEXT REFERENCES polls(id) ON DELETE SET NULL,
+  booking_id TEXT REFERENCES bookings(id) ON DELETE SET NULL,
+  player_needed_id TEXT REFERENCES player_needed_posts(id) ON DELETE SET NULL,
   is_deleted BOOLEAN DEFAULT FALSE NOT NULL,
   is_edited BOOLEAN DEFAULT FALSE NOT NULL,
   edited_at TIMESTAMP WITH TIME ZONE,
-  reply_to_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+  reply_to_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- 19. DM_THREADS Table
 CREATE TABLE dm_threads (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user1_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  user2_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  user1_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  user2_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   last_message_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   last_message_preview TEXT NOT NULL,
   user1_unread_count INTEGER DEFAULT 0 NOT NULL,
@@ -370,10 +370,10 @@ CREATE TABLE dm_threads (
 
 -- 20. NEARBY_CHECKINS Table
 CREATE TABLE nearby_checkins (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  venue_id UUID REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
-  booking_id UUID REFERENCES bookings(id) ON DELETE SET NULL,
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  booking_id TEXT REFERENCES bookings(id) ON DELETE SET NULL,
   checked_in_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   checked_out_at TIMESTAMP WITH TIME ZONE,
   is_active BOOLEAN DEFAULT TRUE NOT NULL,
@@ -383,10 +383,10 @@ CREATE TABLE nearby_checkins (
 
 -- 21. SQUAD_INVITES Table
 CREATE TABLE squad_invites (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  squad_id UUID REFERENCES squads(id) ON DELETE CASCADE NOT NULL,
-  invited_by UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  invited_user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  squad_id TEXT REFERENCES squads(id) ON DELETE CASCADE NOT NULL,
+  invited_by TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  invited_user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   message TEXT,
   status TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'declined')),
   expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -395,13 +395,13 @@ CREATE TABLE squad_invites (
 
 -- 22. SQUAD_EVENTS Table
 CREATE TABLE squad_events (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  squad_id UUID REFERENCES squads(id) ON DELETE CASCADE NOT NULL,
-  created_by UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  squad_id TEXT REFERENCES squads(id) ON DELETE CASCADE NOT NULL,
+  created_by TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   title TEXT NOT NULL,
   event_date DATE NOT NULL,
   event_time TEXT NOT NULL,
-  venue_id UUID REFERENCES venues(id) ON DELETE SET NULL,
+  venue_id TEXT REFERENCES venues(id) ON DELETE SET NULL,
   game_or_sport TEXT NOT NULL,
   max_participants INTEGER DEFAULT 10 NOT NULL,
   notes TEXT,
@@ -415,8 +415,8 @@ CREATE TABLE squad_events (
 
 -- 23. GAMING_EQUIPMENTS Table
 CREATE TABLE gaming_equipments (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  venue_id UUID REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
   equipment_type TEXT NOT NULL CHECK (equipment_type IN ('pc', 'ps5', 'ps4', 'xbox_series_x', 'xbox_one', 'vr_headset', 'racing_sim', 'arcade')),
   custom_name TEXT NOT NULL,
   total_quantity INTEGER DEFAULT 1 NOT NULL,
@@ -436,8 +436,8 @@ CREATE TABLE gaming_equipments (
 
 -- 24. TURF_DETAILS Table
 CREATE TABLE turf_details (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  venue_id UUID REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
   turf_name TEXT NOT NULL,
   turf_type TEXT NOT NULL CHECK (turf_type IN ('football_5aside', 'football_7aside', 'football_11aside', 'cricket_box', 'cricket_full', 'badminton', 'basketball', 'volleyball', 'tennis', 'multi_sport')),
   sports_allowed TEXT[] DEFAULT '{}'::TEXT[] NOT NULL,
@@ -469,13 +469,13 @@ CREATE TABLE turf_details (
 
 -- 25. EQUIPMENT_SESSIONS Table
 CREATE TABLE equipment_sessions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  venue_id UUID REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
-  equipment_id UUID REFERENCES gaming_equipments(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  equipment_id TEXT REFERENCES gaming_equipments(id) ON DELETE CASCADE NOT NULL,
   quantity_used INTEGER DEFAULT 1 NOT NULL,
   session_type TEXT NOT NULL CHECK (session_type IN ('online_booking', 'walk_in')),
-  booking_id UUID REFERENCES bookings(id) ON DELETE SET NULL,
-  walk_in_id UUID,
+  booking_id TEXT REFERENCES bookings(id) ON DELETE SET NULL,
+  walk_in_id TEXT,
   started_at TIMESTAMP WITH TIME ZONE NOT NULL,
   expected_end_at TIMESTAMP WITH TIME ZONE NOT NULL,
   actual_end_at TIMESTAMP WITH TIME ZONE,
@@ -485,10 +485,10 @@ CREATE TABLE equipment_sessions (
 
 -- 26. WALK_IN_SESSIONS Table
 CREATE TABLE walk_in_sessions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  venue_id UUID REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
-  equipment_id UUID REFERENCES gaming_equipments(id) ON DELETE SET NULL,
-  turf_id UUID REFERENCES turf_details(id) ON DELETE SET NULL,
+  id TEXT PRIMARY KEY,
+  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  equipment_id TEXT REFERENCES gaming_equipments(id) ON DELETE SET NULL,
+  turf_id TEXT REFERENCES turf_details(id) ON DELETE SET NULL,
   quantity_used INTEGER DEFAULT 1 NOT NULL,
   customer_name TEXT,
   customer_phone TEXT,
@@ -509,9 +509,9 @@ CREATE TABLE walk_in_sessions (
 
 -- 27. TURF_BOOKINGS Table
 CREATE TABLE turf_bookings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  booking_id UUID REFERENCES bookings(id) ON DELETE CASCADE NOT NULL,
-  turf_id UUID REFERENCES turf_details(id) ON DELETE CASCADE NOT NULL,
+  id TEXT PRIMARY KEY,
+  booking_id TEXT REFERENCES bookings(id) ON DELETE CASCADE NOT NULL,
+  turf_id TEXT REFERENCES turf_details(id) ON DELETE CASCADE NOT NULL,
   number_of_players INTEGER DEFAULT 10 NOT NULL,
   sport_being_played TEXT NOT NULL,
   equipment_rental_requested BOOLEAN DEFAULT FALSE NOT NULL,

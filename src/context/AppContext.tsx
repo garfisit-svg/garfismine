@@ -279,7 +279,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  const [profiles, setProfiles] = useState<Profile[]>(() => {
+  const [profiles, rawSetProfiles] = useState<Profile[]>(() => {
     // Force a one-time clean reset to clear all stale previous data/emails for a clean real-world launch!
     const dbVersion = localStorage.getItem('garf_db_version_clean_v3');
     if (!dbVersion) {
@@ -943,6 +943,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (!nextIds.has(b.id)) {
             supabase.from('bookings').delete().eq('id', b.id).then(({ error }) => {
               if (error) console.error('Failed to delete booking from Supabase:', error.message);
+            });
+          }
+        });
+      }
+      return next;
+    });
+  };
+
+  const setProfiles = (val: Profile[] | ((prev: Profile[]) => Profile[])) => {
+    rawSetProfiles(prev => {
+      const next = typeof val === 'function' ? val(prev) : val;
+      if (isSupabaseConfigured && supabase) {
+        const prevMap = new Map((prev || []).map(p => [p.id, p]));
+        (next || []).forEach(p => {
+          const old = prevMap.get(p.id);
+          if (!old || JSON.stringify(old) !== JSON.stringify(p)) {
+            saveProfileToSupabase(p);
+          }
+        });
+        const nextIds = new Set((next || []).map(p => p.id));
+        (prev || []).forEach(p => {
+          if (!nextIds.has(p.id)) {
+            supabase.from('profiles').delete().eq('id', p.id).then(({ error }) => {
+              if (error) console.error('Failed to delete profile from Supabase:', error.message);
             });
           }
         });
