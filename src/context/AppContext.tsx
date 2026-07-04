@@ -280,6 +280,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const [profiles, setProfiles] = useState<Profile[]>(() => {
+    // Force a one-time clean reset to clear all stale previous data/emails for a clean real-world launch!
+    const dbVersion = localStorage.getItem('garf_db_version_clean_v3');
+    if (!dbVersion) {
+      const keys = [
+        'garf_profiles',
+        'garf_current_user',
+        'garf_venues',
+        'garf_resources',
+        'garf_slots',
+        'garf_bookings',
+        'garf_reviews',
+        'garf_coin_transactions',
+        'garf_offers',
+        'garf_notifications',
+        'garf_admin_logs',
+        'garf_gaming_equipments',
+        'garf_turf_details',
+        'garf_equipment_sessions',
+        'garf_walk_in_sessions',
+        'garf_turf_bookings',
+        'garf_squad_profiles',
+        'garf_squads',
+        'garf_squad_members',
+        'garf_messages',
+        'garf_polls',
+        'garf_poll_votes',
+        'garf_player_needed_posts',
+        'garf_player_needed_responses',
+        'garf_dm_threads',
+        'garf_nearby_checkins',
+        'garf_squad_invites',
+        'garf_squad_events'
+      ];
+      keys.forEach(k => localStorage.removeItem(k));
+      localStorage.setItem('garf_db_version_clean_v3', 'true');
+    }
+
     const saved = localStorage.getItem('garf_profiles');
     if (saved) {
       try {
@@ -320,42 +357,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         referral_code: 'GARF-ISIT',
         referred_by: null,
         date_of_birth: '1992-08-21',
-        city: 'Mumbai',
-        is_suspended: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        emailVerified: true,
-        password: 'password'
-      },
-      {
-        id: 'user-owner-1',
-        full_name: 'Arena Manager Owner',
-        email: 'owner@arena.com',
-        phone: '9999977777',
-        avatar_url: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=owner',
-        role: 'owner',
-        garf_coins: 500,
-        referral_code: 'GARF-OWNER',
-        referred_by: null,
-        date_of_birth: '1988-05-15',
-        city: 'Mumbai',
-        is_suspended: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        emailVerified: true,
-        password: 'password'
-      },
-      {
-        id: 'user-customer-1',
-        full_name: 'Player One',
-        email: 'player@garf.com',
-        phone: '9999966666',
-        avatar_url: 'https://api.dicebear.com/7.x/pixel-art/svg?seed=player',
-        role: 'customer',
-        garf_coins: 150,
-        referral_code: 'GARF-PLAY1',
-        referred_by: null,
-        date_of_birth: '1998-11-20',
         city: 'Mumbai',
         is_suspended: false,
         created_at: new Date().toISOString(),
@@ -1564,11 +1565,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    setProfiles(prev => [...prev, newProfile]);
+    const updatedProfiles = [...currentProfiles, newProfile];
+    setProfiles(updatedProfiles);
+    localStorage.setItem('garf_profiles', JSON.stringify(updatedProfiles));
     saveProfileToSupabase(newProfile);
     
     // Auto-login registered users directly
     setCurrentUser(newProfile);
+    localStorage.setItem('garf_current_user', JSON.stringify(newProfile));
 
     // Welcome coin transaction
     const txIdWelcome = `txn-${Math.random().toString(36).substr(2,9)}`;
@@ -1624,49 +1628,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (!profile) {
-      // Create user on-fly so tester doesn't get stuck
-      const username = cleanEmail.split('@')[0] || 'player';
-      const fullName = username.charAt(0).toUpperCase() + username.slice(1);
-      
-      const rFour = Math.random().toString(36).substring(2, 6).toUpperCase();
-      const myRefCode = `GARF-${rFour}`;
-
-      const newP: Profile = {
-        id: `user-${Math.random().toString(36).substr(2, 9)}`,
-        full_name: fullName,
-        email: cleanEmail,
-        phone: '1234567890',
-        avatar_url: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${username}`,
-        role: cleanEmail === 'garfisit@gmail.com' || cleanEmail.includes('admin') || cleanEmail === 'founder@garf.com' ? 'admin' : (cleanEmail.includes('owner') || cleanEmail === 'owner@arena.com' ? 'owner' : 'customer'),
-        garf_coins: 150,
-        referral_code: myRefCode,
-        referred_by: null,
-        date_of_birth: '1998-11-20',
-        city: 'Mumbai',
-        is_suspended: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        emailVerified: true,
-        password: password || 'password' // Save the typed password or default
-      };
-
-      setProfiles(prev => [...prev, newP]);
-      saveProfileToSupabase(newP);
-      profile = newP;
-
-      // Welcome transaction
-      const txId = `txn-${Math.random().toString(36).substr(1,8)}`;
-      const tx: CoinTransaction = {
-        id: txId,
-        user_id: newP.id,
-        amount: 150,
-        type: 'welcome_bonus',
-        description: 'Auto-seed login welcome credits!',
-        reference_id: null,
-        balance_after: 150,
-        created_at: new Date().toISOString()
-      };
-      setCoinTransactions(prev => [tx, ...prev]);
+      throw new Error('No account found with this email. Please sign up to register first.');
     }
 
     if (profile.is_suspended) {
