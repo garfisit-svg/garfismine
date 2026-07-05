@@ -92,6 +92,20 @@ export const GarfAdminPage: React.FC = () => {
     }
   }, [currentUser]);
 
+  // Auto-sync database from Supabase on successful admin authorization
+  useEffect(() => {
+    if (isAuthorized) {
+      const runAutoSync = async () => {
+        try {
+          await syncDatabase();
+        } catch (err) {
+          console.error('Auto-sync database failed on console mount:', err);
+        }
+      };
+      runAutoSync();
+    }
+  }, [isAuthorized]);
+
   // Handle local root password login
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();

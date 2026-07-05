@@ -638,6 +638,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               });
             }
           }).subscribe(),
+
+        supabase.channel('public-profiles-sync')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              const item = payload.new as Profile;
+              setProfiles(prev => {
+                const updated = prev.some(p => p.id === item.id)
+                  ? prev.map(p => p.id === item.id ? item : p)
+                  : [...prev, item];
+                localStorage.setItem('garf_profiles', JSON.stringify(updated));
+                return updated;
+              });
+            } else if (payload.eventType === 'DELETE') {
+              const oldId = payload.old.id;
+              setProfiles(prev => {
+                const updated = prev.filter(p => p.id !== oldId);
+                localStorage.setItem('garf_profiles', JSON.stringify(updated));
+                return updated;
+              });
+            }
+          }).subscribe(),
       ];
 
       return () => {
