@@ -5,7 +5,7 @@ import {
   Building, LayoutDashboard, CalendarDays, Key, Percent, 
   Cpu, Award, DollarSign, Settings, Users, PlusCircle, ArrowUpRight 
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 // Tab Subcomponents
@@ -22,9 +22,14 @@ import { WalkInModal } from '../components/owner/WalkInModal';
 type ConsoleTab = 'dashboard' | 'bookings' | 'slots' | 'resources' | 'revenue' | 'reviews' | 'offers' | 'settings';
 
 export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
-  const { currentUser, venues, notifications, updateVenue } = useApp();
+  const { currentUser, venues, notifications, updateVenue, deleteVenue, updateProfile } = useApp();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<ConsoleTab>(tab || 'dashboard');
+
+  // Cancel Verification states
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Resubmission form states
   const [isEditingRejected, setIsEditingRejected] = useState(false);
@@ -140,6 +145,24 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
       );
     }
 
+    const handleCancelVerification = async () => {
+      if (!mainVenue) return;
+      setIsCancelling(true);
+      const loadId = toast.loading('Withdrawing your verification application...');
+      try {
+        deleteVenue(mainVenue.id);
+        updateProfile({ role: 'customer' });
+        toast.success('Application withdrawn successfully. Your cafe registration has been canceled.', { id: loadId });
+        navigate('/explore');
+      } catch (err: any) {
+        console.error(err);
+        toast.error(err.message || 'Failed to withdraw application.', { id: loadId });
+      } finally {
+        setIsCancelling(false);
+        setShowCancelConfirm(false);
+      }
+    };
+
     return (
       <div className="max-w-2xl mx-auto px-4 py-24 sm:px-6 text-center space-y-6 text-white font-sans">
         <span className="text-7xl block animate-bounce">⏳</span>
@@ -164,22 +187,50 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
             </ul>
           </div>
         </div>
-        
-        <p className="text-xs text-text-secondary">
-          Have questions or need fast-track approval? Reach out to <a href="mailto:partners@garf.com" className="text-brand-purple hover:underline font-bold">partners@garf.com</a>
-        </p>
 
-        <div className="pt-2">
-          <button
-            onClick={() => {
-              localStorage.removeItem('garf_current_user');
-              window.location.href = '/login';
-            }}
-            className="px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#1c1c2e] text-white cursor-pointer hover:bg-[#25253c] transition border border-[#2a2a3e]"
-          >
-            Logout & Switch Account
-          </button>
-        </div>
+        {showCancelConfirm ? (
+          <div className="p-5 bg-red-500/5 border border-red-500/20 rounded-2xl max-w-md mx-auto space-y-4 animate-fade-in-quick text-left">
+            <p className="text-sm font-bold text-red-400 font-display">Confirm Application Withdrawal</p>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Are you sure you want to stop the verification process? This will permanently delete your cafe listing, resources, and slots. You will have to register from scratch to list again.
+            </p>
+            <div className="flex gap-3 justify-start">
+              <button
+                onClick={handleCancelVerification}
+                disabled={isCancelling}
+                className="px-4 py-2 rounded-lg text-xs font-bold uppercase bg-red-600 hover:bg-red-700 text-white transition disabled:opacity-50 cursor-pointer"
+              >
+                {isCancelling ? 'Withdrawing...' : 'Yes, Withdraw Application'}
+              </button>
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                disabled={isCancelling}
+                className="px-4 py-2 rounded-lg text-xs font-bold uppercase bg-[#1c1c2e] hover:bg-[#25253c] border border-[#2a2a3e] text-white transition disabled:opacity-50 cursor-pointer"
+              >
+                Go Back
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="pt-2 flex flex-col sm:flex-row justify-center gap-4 max-w-md mx-auto">
+            <button
+              onClick={() => setShowCancelConfirm(true)}
+              className="px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-400 hover:bg-red-500/20 transition border border-red-500/25 cursor-pointer"
+            >
+              Cancel Verification
+            </button>
+            
+            <button
+              onClick={() => {
+                localStorage.removeItem('garf_current_user');
+                window.location.href = '/login';
+              }}
+              className="px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#1c1c2e] text-white cursor-pointer hover:bg-[#25253c] transition border border-[#2a2a3e]"
+            >
+              Logout & Switch Account
+            </button>
+          </div>
+        )}
       </div>
     );
   }
