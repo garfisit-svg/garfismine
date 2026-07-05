@@ -166,6 +166,8 @@ interface AppContextType {
   isDetectingCity: boolean;
   detectUserCity: () => Promise<string>;
   resetAllAppData: () => void;
+  syncDatabase: () => Promise<void>;
+  isSupabaseConfigured: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -4410,6 +4412,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: 'Your password has been reset successfully! 🎉' };
   };
 
+  const syncDatabase = async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase is not configured. Real-time sync is unavailable in emulator mode.');
+    }
+
+    try {
+      // 1. Fetch profiles
+      const { data: profileList, error: profileErr } = await supabase.from('profiles').select('*');
+      if (profileErr) throw new Error(`Profiles: ${profileErr.message}`);
+
+      // 2. Fetch venues
+      const { data: venueList, error: venueErr } = await supabase.from('venues').select('*');
+      if (venueErr) throw new Error(`Venues: ${venueErr.message}`);
+
+      // 3. Fetch resources
+      const { data: resourceList, error: resourceErr } = await supabase.from('venue_resources').select('*');
+      if (resourceErr) throw new Error(`Resources: ${resourceErr.message}`);
+
+      // 4. Fetch slots
+      const { data: slotList, error: slotErr } = await supabase.from('slots').select('*');
+      if (slotErr) throw new Error(`Slots: ${slotErr.message}`);
+
+      // 5. Fetch bookings
+      const { data: bookingList, error: bookingErr } = await supabase.from('bookings').select('*');
+      if (bookingErr) throw new Error(`Bookings: ${bookingErr.message}`);
+
+      if (profileList) {
+        setProfiles(profileList);
+        localStorage.setItem('garf_profiles', JSON.stringify(profileList));
+      }
+      if (venueList) {
+        rawSetVenues(venueList);
+        localStorage.setItem('garf_venues', JSON.stringify(venueList));
+      }
+      if (resourceList) {
+        rawSetResources(resourceList);
+        localStorage.setItem('garf_resources', JSON.stringify(resourceList));
+      }
+      if (slotList) {
+        rawSetSlots(slotList);
+        localStorage.setItem('garf_slots', JSON.stringify(slotList));
+      }
+      if (bookingList) {
+        rawSetBookings(bookingList);
+        localStorage.setItem('garf_bookings', JSON.stringify(bookingList));
+      }
+    } catch (err: any) {
+      console.error('Manual database sync failed:', err);
+      throw err;
+    }
+  };
+
   const resetAllAppData = () => {
     const keys = [
       'garf_profiles',
@@ -4511,7 +4565,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       detectedCity, isDetectingCity, detectUserCity,
       
       // Global data reset action
-      resetAllAppData
+      resetAllAppData,
+      
+      // Manual DB Sync
+      syncDatabase,
+      isSupabaseConfigured
     }}>
       {children}
     </AppContext.Provider>

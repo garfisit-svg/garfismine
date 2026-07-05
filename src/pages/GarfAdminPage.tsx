@@ -19,8 +19,11 @@ export const GarfAdminPage: React.FC = () => {
     currentUser, profiles, venues, bookings, platformFee, setPlatformFee, 
     welcomeBonusCoins, setWelcomeBonusCoins, birthdayBonusCoins, setBirthdayBonusCoins,
     updateUserRole, toggleUserSuspension, toggleVenueVerification, toggleVenueActiveState,
-    rejectVenue, deleteVenue, updateVenue, cancelBooking, logIn, logOut, adminLogs
+    rejectVenue, deleteVenue, updateVenue, cancelBooking, logIn, logOut, adminLogs,
+    syncDatabase
   } = useApp();
+
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Route security checks
   const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
@@ -188,17 +191,23 @@ export const GarfAdminPage: React.FC = () => {
   const filteredPendingVenues = venues.filter(v => {
     if (v.is_verified) return false;
     if (v.rejection_reason) return false; // Filter out rejected ones!
-    const matchText = v.name.toLowerCase().includes(venueSearchText.toLowerCase()) || 
-                      v.city.toLowerCase().includes(venueSearchText.toLowerCase()) ||
-                      v.address.toLowerCase().includes(venueSearchText.toLowerCase());
+    const name = v.name || '';
+    const city = v.city || '';
+    const address = v.address || '';
+    const matchText = name.toLowerCase().includes(venueSearchText.toLowerCase()) || 
+                      city.toLowerCase().includes(venueSearchText.toLowerCase()) ||
+                      address.toLowerCase().includes(venueSearchText.toLowerCase());
     return matchText;
   });
 
   const filteredApprovedVenues = venues.filter(v => {
     if (!v.is_verified) return false;
-    const matchText = v.name.toLowerCase().includes(venueSearchText.toLowerCase()) || 
-                      v.city.toLowerCase().includes(venueSearchText.toLowerCase()) ||
-                      v.address.toLowerCase().includes(venueSearchText.toLowerCase());
+    const name = v.name || '';
+    const city = v.city || '';
+    const address = v.address || '';
+    const matchText = name.toLowerCase().includes(venueSearchText.toLowerCase()) || 
+                      city.toLowerCase().includes(venueSearchText.toLowerCase()) ||
+                      address.toLowerCase().includes(venueSearchText.toLowerCase());
     return matchText;
   });
 
@@ -347,6 +356,23 @@ export const GarfAdminPage: React.FC = () => {
     toast.success('Logged out from root secure admin console.');
   };
 
+  const handleManualSync = async () => {
+    if (!isSupabaseConfigured) {
+      toast.error('Supabase is not configured. Sync is only available in production DB mode.');
+      return;
+    }
+    setIsSyncing(true);
+    const load = toast.loading('Synchronizing database states from Supabase...');
+    try {
+      await syncDatabase();
+      toast.success('Database synchronized perfectly! Current records are up-to-date.', { id: load });
+    } catch (err: any) {
+      toast.error(`Sync failed: ${err.message || 'Unknown error'}`, { id: load });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 font-sans text-white space-y-8 pb-20 select-none">
       
@@ -368,12 +394,25 @@ export const GarfAdminPage: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleLocalSignout}
-          className="px-4 py-2 bg-[#1c1c2a] border border-[#2a2a3e] hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 rounded-xl text-xs font-bold font-mono tracking-wider transition uppercase cursor-pointer"
-        >
-          Close Console Session
-        </button>
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {isSupabaseConfigured && (
+            <button
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="flex items-center gap-1.5 px-4 py-2 bg-brand-purple/10 border border-brand-purple/30 hover:bg-brand-purple/20 hover:border-brand-purple/50 text-brand-purple rounded-xl text-xs font-bold font-mono tracking-wider transition uppercase cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? 'Syncing...' : 'Sync Database'}
+            </button>
+          )}
+
+          <button
+            onClick={handleLocalSignout}
+            className="px-4 py-2 bg-[#1c1c2a] border border-[#2a2a3e] hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 rounded-xl text-xs font-bold font-mono tracking-wider transition uppercase cursor-pointer"
+          >
+            Close Console Session
+          </button>
+        </div>
       </div>
 
       {/* ADMIN NAVIGATION TABS */}

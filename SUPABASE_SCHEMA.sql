@@ -532,6 +532,9 @@ alter publication supabase_realtime add table messages;
 alter publication supabase_realtime add table slots;
 alter publication supabase_realtime add table bookings;
 alter publication supabase_realtime add table notifications;
+alter publication supabase_realtime add table venues;
+alter publication supabase_realtime add table profiles;
+alter publication supabase_realtime add table venue_resources;
 
 -- =========================================================================
 --  📈 PERFORMANCE OPTIMIZING INDEXES
