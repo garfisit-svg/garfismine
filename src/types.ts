@@ -9,7 +9,7 @@ export interface Profile {
   email?: string;
   phone: string | null;
   avatar_url: string | null;
-  role: 'customer' | 'owner' | 'admin' | 'owner_pending';
+  role: 'customer' | 'owner' | 'admin';
   garf_coins: number;
   referral_code: string;
   referred_by: string | null;

@@ -101,7 +101,7 @@ export const OwnerSettingsPage: React.FC = () => {
     return <Navigate to="/owner/login" replace />;
   }
 
-  if (currentUser.role !== 'owner' && currentUser.role !== 'owner_pending' && currentUser.role !== 'admin') {
+  if (currentUser.role !== 'owner' && currentUser.role !== 'admin') {
     return <Navigate to="/" replace />;
   }
 

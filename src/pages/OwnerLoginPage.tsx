@@ -38,15 +38,13 @@ export const OwnerLoginPage: React.FC = () => {
 
       if (user.role === 'admin') {
         navigate('/garf-hq-2025');
-      } else if (user.role === 'owner_pending') {
+      } else {
         const hasVenue = venues.some(v => v.owner_id === user.id);
         if (hasVenue) {
           navigate('/owner-dashboard');
         } else {
           navigate('/owner/register');
         }
-      } else {
-        navigate('/owner-dashboard');
       }
     } catch (err: any) {
       setError(err.message || 'Incorrect credentials');

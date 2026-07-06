@@ -56,7 +56,7 @@ export default function App() {
     }
   }, [searchParams, setSearchParams, verifyEmailToken]);
 
-  const isOwner = currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending');
+  const isOwner = currentUser && (currentUser.role === 'owner');
 
   // 🛡️ ROLE INSULATION REDIRECTS CONTROLLER (Rule 1 & Rule 2)
   useEffect(() => {
@@ -87,7 +87,7 @@ export default function App() {
         if (isForbiddenOwnerOrAdminPath) {
           navigate('/');
         }
-      } else if (role === 'owner' || role === 'owner_pending') {
+      } else if (role === 'owner') {
         // Redirection away from My Profile to Owner Settings
         if (location.pathname === '/my-profile') {
           navigate('/owner/settings');
@@ -118,15 +118,11 @@ export default function App() {
             id: 'owner-redirect-toast'
           });
           
-          if (role === 'owner_pending') {
-            const hasVenue = venues.some(v => v.owner_id === currentUser.id);
-            if (hasVenue) {
-              navigate('/owner-dashboard');
-            } else {
-              navigate('/owner/register');
-            }
-          } else {
+          const hasVenue = venues.some(v => v.owner_id === currentUser.id);
+          if (hasVenue) {
             navigate('/owner-dashboard');
+          } else {
+            navigate('/owner/register');
           }
         }
       }

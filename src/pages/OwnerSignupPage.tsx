@@ -61,14 +61,14 @@ export const OwnerSignupPage: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        // Request enrollment as owner_pending
+        // Request enrollment as owner
         await signUp({
           full_name: fullName,
           email,
           phone,
           password,
           city,
-          role: 'owner_pending',
+          role: 'owner',
           avatar_url: selectedAvatar
         });
 
