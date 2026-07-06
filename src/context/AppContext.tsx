@@ -4515,24 +4515,118 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (bookingErr) throw new Error(`Bookings: ${bookingErr.message}`);
 
       if (profileList) {
-        setProfiles(profileList);
-        localStorage.setItem('garf_profiles', JSON.stringify(profileList));
+        const localSaved = localStorage.getItem('garf_profiles');
+        let localProfs: Profile[] = [];
+        if (localSaved) {
+          try { localProfs = JSON.parse(localSaved); } catch(e) {}
+        }
+        const mergedMap = new Map<string, Profile>();
+        localProfs.forEach(p => { if (p && p.id) mergedMap.set(p.id, p); });
+        profileList.forEach((p: any) => { if (p && p.id) mergedMap.set(p.id, p); });
+        const merged = Array.from(mergedMap.values());
+        
+        setProfiles(merged);
+        localStorage.setItem('garf_profiles', JSON.stringify(merged));
+
+        // Self-heal: upload local-only profiles to Supabase
+        const dbIds = new Set(profileList.map((p: any) => p.id));
+        localProfs.forEach(p => {
+          if (p && p.id && !dbIds.has(p.id)) {
+            saveProfileToSupabase(p);
+          }
+        });
       }
+
       if (venueList) {
-        rawSetVenues(venueList);
-        localStorage.setItem('garf_venues', JSON.stringify(venueList));
+        const localSaved = localStorage.getItem('garf_venues');
+        let localVenues: Venue[] = [];
+        if (localSaved) {
+          try { localVenues = JSON.parse(localSaved); } catch(e) {}
+        }
+        const mergedMap = new Map<string, Venue>();
+        localVenues.forEach(v => { if (v && v.id) mergedMap.set(v.id, v); });
+        venueList.forEach((v: any) => { if (v && v.id) mergedMap.set(v.id, v); });
+        const merged = Array.from(mergedMap.values());
+        
+        rawSetVenues(merged);
+        localStorage.setItem('garf_venues', JSON.stringify(merged));
+
+        // Self-heal: upload local-only venues to Supabase
+        const dbIds = new Set(venueList.map((v: any) => v.id));
+        localVenues.forEach(v => {
+          if (v && v.id && !dbIds.has(v.id)) {
+            saveVenueToSupabase(v);
+          }
+        });
       }
+
       if (resourceList) {
-        rawSetResources(resourceList);
-        localStorage.setItem('garf_resources', JSON.stringify(resourceList));
+        const localSaved = localStorage.getItem('garf_resources');
+        let localResources: VenueResource[] = [];
+        if (localSaved) {
+          try { localResources = JSON.parse(localSaved); } catch(e) {}
+        }
+        const mergedMap = new Map<string, VenueResource>();
+        localResources.forEach(r => { if (r && r.id) mergedMap.set(r.id, r); });
+        resourceList.forEach((r: any) => { if (r && r.id) mergedMap.set(r.id, r); });
+        const merged = Array.from(mergedMap.values());
+        
+        rawSetResources(merged);
+        localStorage.setItem('garf_resources', JSON.stringify(merged));
+
+        // Self-heal: upload local-only resources
+        const dbIds = new Set(resourceList.map((r: any) => r.id));
+        localResources.forEach(r => {
+          if (r && r.id && !dbIds.has(r.id)) {
+            saveResourceToSupabase(r);
+          }
+        });
       }
+
       if (slotList) {
-        rawSetSlots(slotList);
-        localStorage.setItem('garf_slots', JSON.stringify(slotList));
+        const localSaved = localStorage.getItem('garf_slots');
+        let localSlots: Slot[] = [];
+        if (localSaved) {
+          try { localSlots = JSON.parse(localSaved); } catch(e) {}
+        }
+        const mergedMap = new Map<string, Slot>();
+        localSlots.forEach(s => { if (s && s.id) mergedMap.set(s.id, s); });
+        slotList.forEach((s: any) => { if (s && s.id) mergedMap.set(s.id, s); });
+        const merged = Array.from(mergedMap.values());
+        
+        rawSetSlots(merged);
+        localStorage.setItem('garf_slots', JSON.stringify(merged));
+
+        // Self-heal: upload local-only slots
+        const dbIds = new Set(slotList.map((s: any) => s.id));
+        localSlots.forEach(s => {
+          if (s && s.id && !dbIds.has(s.id)) {
+            saveSlotToSupabase(s);
+          }
+        });
       }
+
       if (bookingList) {
-        rawSetBookings(bookingList);
-        localStorage.setItem('garf_bookings', JSON.stringify(bookingList));
+        const localSaved = localStorage.getItem('garf_bookings');
+        let localBookings: Booking[] = [];
+        if (localSaved) {
+          try { localBookings = JSON.parse(localSaved); } catch(e) {}
+        }
+        const mergedMap = new Map<string, Booking>();
+        localBookings.forEach(b => { if (b && b.id) mergedMap.set(b.id, b); });
+        bookingList.forEach((b: any) => { if (b && b.id) mergedMap.set(b.id, b); });
+        const merged = Array.from(mergedMap.values());
+        
+        rawSetBookings(merged);
+        localStorage.setItem('garf_bookings', JSON.stringify(merged));
+
+        // Self-heal: upload local-only bookings
+        const dbIds = new Set(bookingList.map((b: any) => b.id));
+        localBookings.forEach(b => {
+          if (b && b.id && !dbIds.has(b.id)) {
+            saveBookingToSupabase(b);
+          }
+        });
       }
     } catch (err: any) {
       console.error('Manual database sync failed:', err);
