@@ -27,6 +27,7 @@ export interface Profile {
   resetToken?: string;
   resetTokenExpires?: string;
   password?: string;
+  last_login_at?: string;
 }
 
 export interface Venue {

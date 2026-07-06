@@ -686,6 +686,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           password: profile.password,
           resetToken: profile.resetToken,
           resetTokenExpires: profile.resetTokenExpires,
+          last_login_at: profile.last_login_at,
           updated_at: new Date().toISOString()
         };
 
@@ -699,6 +700,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           delete fallbackPayload.password;
           delete fallbackPayload.resetToken;
           delete fallbackPayload.resetTokenExpires;
+          delete fallbackPayload.last_login_at;
           
           const { error: fallbackError } = await supabase
             .from('profiles')
@@ -1569,7 +1571,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       emailVerified: true,
-      password: data.password
+      password: data.password,
+      last_login_at: new Date().toISOString()
     };
 
     // Referral verification (Rule 8)
@@ -1689,8 +1692,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Checked birthday and streak coins disabled as per user simplified requirements.
     }
 
-    setCurrentUser(profile);
-    return profile;
+    const updatedProfile: Profile = {
+      ...profile,
+      last_login_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    setProfiles(prev => prev.map(p => p.id === updatedProfile.id ? updatedProfile : p));
+    setCurrentUser(updatedProfile);
+    localStorage.setItem('garf_current_user', JSON.stringify(updatedProfile));
+    
+    // Save to Supabase immediately so the admin can see it!
+    await saveProfileToSupabase(updatedProfile);
+
+    return updatedProfile;
   };
 
   const logOut = () => {

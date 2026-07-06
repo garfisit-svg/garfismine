@@ -1020,6 +1020,7 @@ export const GarfAdminPage: React.FC = () => {
                   <th className="py-3 px-4">EMAIL ADDRESS</th>
                   <th className="py-3 px-4 text-center">EMAIL VERIFIED</th>
                   <th className="py-3 px-4">SECURE PHONE</th>
+                  <th className="py-3 px-4">LAST LOGIN</th>
                   <th className="py-3 px-4">OPERATIONAL ROLE</th>
                   <th className="py-3 px-4 text-right">ACCOUNT STATUS</th>
                 </tr>
@@ -1027,18 +1028,33 @@ export const GarfAdminPage: React.FC = () => {
               <tbody className="divide-y divide-[#1e1e2d]">
                 {filteredUsers.map(u => {
                   const bCount = bookings.filter(b => b.customer_id === u.id).length;
+                  const isOnline = u.last_login_at 
+                    ? (Date.now() - new Date(u.last_login_at).getTime()) < 15 * 60 * 1000 
+                    : false;
                   return (
                     <tr key={u.id} className="hover:bg-[#12121A]/30 transition text-xs sm:text-sm text-[#bcbcdd]">
                       <td className="py-4 px-4 font-bold text-white">
                         <div className="flex items-center gap-2.5">
-                          <img 
-                            src={u.avatar_url || 'https://api.dicebear.com/7.x/pixel-art/svg?seed=Garf'} 
-                            alt={u.full_name}
-                            className="h-8 w-8 rounded-full border border-[#2a2a3e] flex-shrink-0"
-                            referrerPolicy="no-referrer"
-                          />
+                          <div className="relative">
+                            <img 
+                              src={u.avatar_url || 'https://api.dicebear.com/7.x/pixel-art/svg?seed=Garf'} 
+                              alt={u.full_name}
+                              className="h-8 w-8 rounded-full border border-[#2a2a3e] flex-shrink-0"
+                              referrerPolicy="no-referrer"
+                            />
+                            {isOnline && (
+                              <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-400 ring-2 ring-[#0c0c14] animate-pulse"></span>
+                            )}
+                          </div>
                           <div>
-                            <p className="font-bold text-white">{u.full_name}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-bold text-white">{u.full_name}</p>
+                              {isOnline && (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[8px] font-bold uppercase tracking-wider bg-green-500/10 text-green-400 border border-green-500/20">
+                                  Online
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[10px] text-text-secondary font-mono">ID: {u.id.substring(0,8)}</span>
                           </div>
                         </div>
@@ -1064,6 +1080,21 @@ export const GarfAdminPage: React.FC = () => {
 
                       <td className="py-4 px-4 font-mono">
                         {u.phone || 'N/A'}
+                      </td>
+
+                      <td className="py-4 px-4 font-mono">
+                        {u.last_login_at ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-white font-semibold text-xs">
+                              {new Date(u.last_login_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                            <span className="text-[10px] text-text-secondary">
+                              {new Date(u.last_login_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-text-secondary/40 italic font-mono text-xs">Never Logged In</span>
+                        )}
                       </td>
 
                       <td className="py-4 px-4">
