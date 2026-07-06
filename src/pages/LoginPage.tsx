@@ -63,7 +63,7 @@ export const LoginPage: React.FC = () => {
       setLoading(true);
       const user = await logIn(email, password);
       
-      if (user.role === 'owner') {
+      if (user.role === 'owner' || user.role === 'owner_pending') {
         setOwnerRoleError(true);
         setError('This login is for players and booking users only. Please use Owner Login to access your dashboard.');
         return;

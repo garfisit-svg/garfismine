@@ -192,10 +192,27 @@ export const GarfAdminPage: React.FC = () => {
 
   // Statistics calculation helpers
   const totalUsersCount = profiles.length;
-  const totalOwnersCount = profiles.filter(p => p.role === 'owner').length;
+  const totalOwnersCount = profiles.filter(p => p.role === 'owner' || p.role === 'owner_pending').length;
+  const pendingApprovalsCount = venues.filter(v => !v.is_verified && !v.rejection_reason).length;
   const approvedVenuesCount = venues.filter(v => v.is_verified).length;
   const totalBookingsCount = bookings.length;
   const revenueTotal = bookings.filter(b => b.booking_status === 'completed' || b.booking_status === 'confirmed').reduce((sum, item) => sum + item.final_amount, 0);
+
+  // Rejected venues list for admin reference
+  const rejectedVenues = venues.filter(v => !v.is_verified && v.rejection_reason);
+
+  // Filter listings
+  const filteredPendingVenues = venues.filter(v => {
+    if (v.is_verified) return false;
+    if (v.rejection_reason) return false; // Filter out rejected ones!
+    const name = v.name || '';
+    const city = v.city || '';
+    const address = v.address || '';
+    const matchText = name.toLowerCase().includes(venueSearchText.toLowerCase()) || 
+                      city.toLowerCase().includes(venueSearchText.toLowerCase()) ||
+                      address.toLowerCase().includes(venueSearchText.toLowerCase());
+    return matchText;
+  });
 
   const filteredApprovedVenues = venues.filter(v => {
     if (!v.is_verified) return false;
@@ -416,6 +433,7 @@ export const GarfAdminPage: React.FC = () => {
       <div className="flex border-b border-[#1f1f2f] overflow-x-auto gap-1 sm:gap-4 no-scrollbar">
         {[
           { key: 'overview', label: 'System Overview', icon: Activity },
+          { key: 'approvals', label: `Pending Approvals (${pendingApprovalsCount})`, icon: Award, highlight: pendingApprovalsCount > 0 },
           { key: 'approved', label: 'Manage Arenas', icon: Building },
           { key: 'users', label: 'Player Directory', icon: Users },
           { key: 'bookings', label: 'Session Bookings', icon: Calendar }
@@ -436,6 +454,9 @@ export const GarfAdminPage: React.FC = () => {
           >
             <tb.icon className={`h-4 w-4 ${activeTab === tb.key ? 'text-brand-purple' : 'text-text-secondary'}`} />
             <span>{tb.label}</span>
+            {tb.highlight && (
+              <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-brand-pink glow-pink animate-pulse"></span>
+            )}
             {activeTab === tb.key && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-purple glow-purple"></span>
             )}
@@ -454,7 +475,7 @@ export const GarfAdminPage: React.FC = () => {
             {[
               { label: 'Registered Users', val: totalUsersCount, desc: 'Total profile records', icon: Users, color: 'text-blue-400 bg-blue-500/5 border-blue-500/10' },
               { label: 'Total Partners', val: totalOwnersCount, desc: 'Registered cafe operators', icon: Building, color: 'text-brand-purple bg-brand-purple/5 border-brand-purple/10' },
-              { label: 'Active Arenas', val: approvedVenuesCount, desc: 'Live listed venues', icon: Building, color: 'text-amber-400 bg-amber-500/5 border-amber-500/10' },
+              { label: 'Pending Approvals', val: pendingApprovalsCount, desc: 'Awaiting verify audit', icon: Award, color: 'text-amber-400 bg-amber-500/5 border-amber-500/10' },
               { label: 'Cumulative Revenue', val: `₹${revenueTotal}`, desc: 'Volume transacted', icon: DollarSign, color: 'text-emerald-400 bg-emerald-500/5 border-emerald-500/10' }
             ].map((st, idx) => (
               <div key={idx} className="bg-[#12121A] border border-[#232338] p-5 rounded-2xl flex items-center justify-between gap-4">
@@ -624,6 +645,238 @@ export const GarfAdminPage: React.FC = () => {
 
           </div>
 
+        </div>
+      )}
+
+      {/* TAB 2: PENDING APPROVALS */}
+      {activeTab === 'approvals' && (
+        <div className="space-y-6 animate-fade-in-quick">
+          <div className="flex justify-between items-center border-b border-[#2a2a3e] pb-4">
+            <div>
+              <h3 className="text-xl font-bold font-display tracking-tight text-white">Pending Cafe Listings Awaiting Verification</h3>
+              <p className="text-xs text-text-secondary">Approve verified badges to launch physical computing lounges into search portals</p>
+            </div>
+            
+            <div className="relative w-64 flex-shrink-0 hidden sm:block">
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3">
+                <Search className="h-4 w-4 text-text-secondary" />
+              </span>
+              <input
+                type="text"
+                placeholder="Search requests..."
+                className="w-full bg-[#161622] border border-[#2a2a3e] rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none"
+                value={venueSearchText}
+                onChange={e => setVenueSearchText(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {filteredPendingVenues.length === 0 ? (
+            <div className="text-center py-16 bg-[#12121A]/30 border border-dashed border-[#232338] rounded-2xl text-text-secondary text-sm space-y-2">
+              <Building className="h-8 w-8 text-text-secondary/40 mx-auto" />
+              <p>No gaming cafe registrations currently await verification audits.</p>
+              <p className="text-xs text-text-secondary/60">All listings are verified and public.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-6">
+              {filteredPendingVenues.map(ven => {
+                const owner = profiles.find(p => p.id === ven.owner_id);
+                return (
+                  <div key={ven.id} className="bg-[#12121A] border border-[#232338] rounded-2xl p-6 flex flex-col lg:flex-row justify-between gap-6">
+                    
+                    {/* Visual Details column */}
+                    <div className="space-y-4 flex-1">
+                      
+                      <div className="flex gap-4 items-start">
+                        <img 
+                          src={ven.cover_image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=600'} 
+                          alt={ven.name}
+                          className="h-20 w-20 rounded-xl object-cover bg-black/40 border border-[#232338] flex-shrink-0"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div>
+                          <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono text-[9px] uppercase tracking-wider font-bold">
+                            PENDING VERIFICATION
+                          </span>
+                          <h4 className="text-xl font-bold font-display text-white mt-1">{ven.name}</h4>
+                          <p className="text-xs text-text-secondary">{ven.address}, {ven.city}, {ven.state} - {ven.pincode}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-black/20 p-4 rounded-xl border border-black/10">
+                        <div>
+                          <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">Owner Contact</span>
+                          <p className="text-xs font-bold text-white mt-0.5">{owner?.full_name || 'Owner Profile'}</p>
+                          <p className="text-[10px] text-text-secondary/80 font-mono">{ven.phone}</p>
+                          <p className="text-[10px] text-text-secondary/80 font-mono truncate">{ven.email}</p>
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">Pricing Model</span>
+                          <p className="text-xs font-bold text-white mt-0.5">₹{ven.price_per_hour}/hr base</p>
+                          <p className="text-[10px] text-text-secondary/80">Commission: {ven.commission_percent || 15}%</p>
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">Operating Hours</span>
+                          <p className="text-xs font-bold text-white mt-0.5">{ven.operating_hours_start} - {ven.operating_hours_end}</p>
+                          <p className="text-[10px] text-text-secondary/80 truncate">{ven.operating_days.slice(0, 3).join(', ')}...</p>
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">Submitted Date</span>
+                          <p className="text-xs font-bold text-white mt-0.5 font-mono">{new Date(ven.created_at).toLocaleDateString()}</p>
+                          <p className="text-[10px] text-text-secondary/80 font-mono">ID: {ven.id.substring(0,8)}</p>
+                        </div>
+                      </div>
+
+                      {/* Amenities & Games checklist tag lists */}
+                      <div className="flex flex-wrap gap-4 pt-2">
+                        <div className="space-y-1">
+                          <span className="text-[9px] font-mono text-[#a8a8cf] uppercase tracking-wider block font-bold">Hardware Specs / Amenities:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {ven.amenities?.map(am => (
+                              <span key={am} className="px-2 py-0.5 rounded-full bg-[#1b1b2a] border border-[#232338] text-[10px] text-[#bcbcdd]">
+                                {am.replace('_', ' ')}
+                              </span>
+                            )) || <span className="text-xs text-text-secondary">None</span>}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <span className="text-[9px] font-mono text-[#a8a8cf] uppercase tracking-wider block font-bold">Games Installed:</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {ven.games_available?.map(gm => (
+                              <span key={gm} className="px-2 py-0.5 rounded-full bg-[#1b1b2a] border border-[#232338] text-[10px] text-brand-cyan">
+                                {gm.toUpperCase()}
+                              </span>
+                            )) || <span className="text-xs text-[#a8a8cf]">None</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Operational controls list */}
+                    <div className="flex lg:flex-col gap-3.5 justify-center lg:justify-start min-w-[180px]">
+                      <button
+                        onClick={() => handleApproveVenue(ven.id)}
+                        className="py-3 px-4 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black border border-emerald-500/25 rounded-xl text-xs font-bold font-sans transition flex-1 sm:flex-none cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <Check className="h-4 w-4" />
+                        <span>Approve Verification</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenRejectModal(ven.id)}
+                        className="py-3 px-4 bg-red-500/10 hover:bg-red-500/20 hover:text-red-400 border border-red-500/25 rounded-xl text-xs font-bold font-sans transition flex-1 sm:flex-none cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <X className="h-4 w-4" />
+                        <span>Reject Registration</span>
+                      </button>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => handleOpenEditVenueModal(ven)}
+                          className="py-2.5 px-3 bg-[#1c1c2a] hover:bg-[#252538] border border-[#2a2a3e] rounded-xl text-xs font-bold font-sans transition cursor-pointer text-center"
+                        >
+                          Edit Details
+                        </button>
+                        <button
+                          onClick={() => handleTriggerDelete(ven.id, 'venue')}
+                          className="py-2.5 px-3 bg-[#1c1c2a] hover:bg-red-500/10 hover:text-red-400 border border-[#2a2a3e] rounded-xl text-xs font-bold font-sans transition cursor-pointer text-center"
+                        >
+                          Delete Permanent
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Rejected Registrations sub-section */}
+          {rejectedVenues.length > 0 && (
+            <div className="mt-12 pt-8 border-t border-[#232338] space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+                <h4 className="text-lg font-bold font-display text-red-400">Rejected Registrations ({rejectedVenues.length})</h4>
+              </div>
+              <p className="text-xs text-text-secondary">These applications have been rejected. The owners have been notified via notifications and must correct their registration details in their Partner dashboard.</p>
+              
+              <div className="grid grid-cols-1 gap-6">
+                {rejectedVenues.map(ven => {
+                  const owner = profiles.find(p => p.id === ven.owner_id);
+                  return (
+                    <div key={ven.id} className="bg-[#12121A]/50 border border-red-500/10 rounded-2xl p-6 flex flex-col lg:flex-row justify-between gap-6 opacity-85 hover:opacity-100 transition duration-300">
+                      <div className="space-y-4 flex-1">
+                        <div className="flex gap-4 items-start">
+                          <img 
+                            src={ven.cover_image || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=600'} 
+                            alt={ven.name}
+                            className="h-20 w-20 rounded-xl object-cover bg-black/40 border border-[#232338] flex-shrink-0 grayscale"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div>
+                            <span className="px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400 font-mono text-[9px] uppercase tracking-wider font-bold">
+                              REJECTED / ACTION REQUIRED
+                            </span>
+                            <h4 className="text-xl font-bold font-display text-white mt-1">{ven.name}</h4>
+                            <p className="text-xs text-text-secondary">{ven.address}, {ven.city}, {ven.state} - {ven.pincode}</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-red-500/5 p-4 rounded-xl border border-red-500/10 space-y-1">
+                          <p className="text-xs font-bold text-red-400 font-mono">Rejection Reason Given:</p>
+                          <p className="text-xs text-text-secondary/90 leading-relaxed font-mono">{ven.rejection_reason}</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-black/20 p-4 rounded-xl border border-black/10 text-xs">
+                          <div>
+                            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">Owner Contact</span>
+                            <p className="text-xs font-bold text-white mt-0.5">{owner?.full_name || 'Owner Profile'}</p>
+                            <p className="text-[10px] text-text-secondary/80 font-mono">{ven.phone}</p>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">Pricing</span>
+                            <p className="text-xs font-bold text-white mt-0.5">₹{ven.price_per_hour}/hr</p>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">Operating Hours</span>
+                            <p className="text-xs font-bold text-white mt-0.5">{ven.operating_hours_start} - {ven.operating_hours_end}</p>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-mono text-text-secondary uppercase tracking-widest block">ID reference</span>
+                            <p className="text-xs font-bold text-white mt-0.5 font-mono">{ven.id.substring(0,8)}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex lg:flex-col gap-3 justify-center lg:justify-start min-w-[180px]">
+                        <button
+                          onClick={() => handleApproveVenue(ven.id)}
+                          className="py-2.5 px-4 bg-emerald-500/10 hover:bg-emerald-500 hover:text-black border border-emerald-500/25 rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Check className="h-4 w-4" />
+                          <span>Approve & Restore</span>
+                        </button>
+                        
+                        <button
+                          onClick={() => handleTriggerDelete(ven.id, 'venue')}
+                          className="py-2.5 px-4 bg-red-500/10 hover:bg-red-500 hover:text-white border border-red-500/25 rounded-xl text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span>Delete Permanent</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

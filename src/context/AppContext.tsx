@@ -36,7 +36,7 @@ interface AppContextType {
   setTurfBookings: React.Dispatch<React.SetStateAction<TurfBooking[]>>;
   
   // Auth actions
-  signUp: (data: { full_name: string, email: string, phone: string, d_o_b?: string, city?: string, referral_code?: string, password?: string, role?: 'customer' | 'owner' | 'admin', avatar_url?: string }) => Promise<Profile>;
+  signUp: (data: { full_name: string, email: string, phone: string, d_o_b?: string, city?: string, referral_code?: string, password?: string, role?: 'customer' | 'owner' | 'admin' | 'owner_pending', avatar_url?: string }) => Promise<Profile>;
   logIn: (email: string) => Promise<Profile>;
   logOut: () => void;
   logoutUser: () => void;
@@ -1528,7 +1528,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // AUTH ACTIONS
-  const signUp = async (data: { full_name: string, email: string, phone: string, d_o_b?: string, city?: string, referral_code?: string, password?: string, role?: 'customer' | 'owner' | 'admin', avatar_url?: string }) => {
+  const signUp = async (data: { full_name: string, email: string, phone: string, d_o_b?: string, city?: string, referral_code?: string, password?: string, role?: 'customer' | 'owner' | 'admin' | 'owner_pending', avatar_url?: string }) => {
     const cleanEmail = data.email?.trim().toLowerCase();
     
     // Read freshest profiles list from localStorage
@@ -1720,10 +1720,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ) => {
     if (!currentUser) return;
 
-    // Await profile update in Supabase to 'owner' before inserting the venue
+    // Await profile update in Supabase to 'owner_pending' before inserting the venue
     // to strictly prevent the foreign key constraint from failing!
     if (isSupabaseConfigured && supabase) {
-      const updatedProfile = { ...currentUser, role: 'owner' as const };
+      const updatedProfile = { ...currentUser, role: 'owner_pending' as const };
       await saveProfileToSupabase(updatedProfile);
     }
 
@@ -1743,13 +1743,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       owner_id: currentUser.id,
       rating: 0,
       total_reviews: 0,
-      is_verified: true,
-      is_active: true,
+      is_verified: false,
+      is_active: false,
       is_featured: false,
       is_suspended: false,
       commission_percent: 10,
       rejection_reason: null,
-      verified_at: new Date().toISOString(),
+      verified_at: null,
       created_at: new Date().toISOString()
     };
 
@@ -1956,24 +1956,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // Update user role to Owner
+    // Update user role to Owner Pending
     setProfiles(prev => {
-      const updated = prev.map(p => p.id === currentUser.id ? { ...p, role: 'owner' as const } : p);
+      const updated = prev.map(p => p.id === currentUser.id ? { ...p, role: 'owner_pending' as const } : p);
       localStorage.setItem('garf_profiles', JSON.stringify(updated));
       return updated;
     });
     setCurrentUser(prev => {
       if (prev) {
-        const updated = { ...prev, role: 'owner' as const };
+        const updated = { ...prev, role: 'owner_pending' as const };
         localStorage.setItem('garf_current_user', JSON.stringify(updated));
         return updated;
       }
       return null;
     });
 
-    // Notify admins of new registered venue
+    // Notify admins of new registered venue awaiting verification
     profiles.filter(p => p.role === 'admin').forEach(adm => {
-      addNotificationSilently(adm.id, 'New Venue Registered 🏢', `Venue "${newV.name}" was registered by ${currentUser.full_name} and is now active.`, 'admin');
+      addNotificationSilently(adm.id, 'New Venue Pending Verification 🏢', `Venue "${newV.name}" was registered by ${currentUser.full_name} and is waiting review.`, 'admin');
     });
   };
 
@@ -2077,8 +2077,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const ownerProfile = profiles.find(p => p.id === targetOwnerId);
       if (ownerProfile) {
         const updatedProf = { ...ownerProfile, role: 'owner' as const, updated_at: new Date().toISOString() };
-        setProfiles(prev => prev.map(p => p.id === targetOwnerId ? updatedProf : p));
-        localStorage.setItem('garf_profiles', JSON.stringify(profiles.map(p => p.id === targetOwnerId ? updatedProf : p)));
+        setProfiles(prev => {
+          const updatedList = prev.map(p => p.id === targetOwnerId ? updatedProf : p);
+          localStorage.setItem('garf_profiles', JSON.stringify(updatedList));
+          return updatedList;
+        });
         if (isSupabaseConfigured && supabase) {
           saveProfileToSupabase(updatedProf);
         }
@@ -2105,6 +2108,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addNotificationSilently(v.owner_id, 'Venue Rejected ❌', `Your venue registration for "${v.name}" was not approved. Reason: ${reason}`, 'owner');
       
       addLog(currentUser.id, 'Rejected and deleted venue', 'venue', venueId, `Reason: ${reason}`);
+
+      // Change owner's role back to 'customer' so they can register again
+      const ownerProfile = profiles.find(p => p.id === v.owner_id);
+      if (ownerProfile) {
+        const updatedProf = { ...ownerProfile, role: 'customer' as const, updated_at: new Date().toISOString() };
+        setProfiles(prev => {
+          const updatedList = prev.map(p => p.id === v.owner_id ? updatedProf : p);
+          localStorage.setItem('garf_profiles', JSON.stringify(updatedList));
+          return updatedList;
+        });
+        if (isSupabaseConfigured && supabase) {
+          saveProfileToSupabase(updatedProf);
+        }
+      }
+
+      setCurrentUser(prev => {
+        if (prev && prev.id === v.owner_id) {
+          const updated = { ...prev, role: 'customer' as const };
+          localStorage.setItem('garf_current_user', JSON.stringify(updated));
+          return updated;
+        }
+        return prev;
+      });
 
       // Delete the venue entirely
       setVenues(prev => prev.filter(item => item.id !== venueId));

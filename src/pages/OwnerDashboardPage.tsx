@@ -81,12 +81,6 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
     }
   }, [mainVenue, currentUser]);
 
-  React.useEffect(() => {
-    if (currentUser && currentUser.role === 'owner_pending') {
-      updateProfile({ role: 'owner' });
-    }
-  }, [currentUser, updateProfile]);
-
   const activeVenue = useMemo(() => {
     return ownerVenues.find(v => v.id === selectedVenueId) || null;
   }, [selectedVenueId, ownerVenues]);
@@ -100,7 +94,7 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
     setShowWalkInModal(true);
   };
 
-  if (!currentUser || (currentUser.role !== 'owner' && currentUser.role !== 'admin')) {
+  if (!currentUser || (currentUser.role !== 'owner' && currentUser.role !== 'admin' && currentUser.role !== 'owner_pending')) {
     return (
       <div className="max-w-md mx-auto px-4 py-24 text-center space-y-5 text-white">
         <span className="text-6xl animate-pulse">🔐</span>
@@ -116,6 +110,99 @@ export const OwnerDashboardPage: React.FC<{ tab?: ConsoleTab }> = ({ tab }) => {
             Go to login
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  // Authentication & Verification Pending barrier
+  if (currentUser && currentUser.role === 'owner_pending') {
+    const mainVenue = ownerVenues[0];
+    const handleCancelVerification = async () => {
+      if (!mainVenue) return;
+      setIsCancelling(true);
+      const loadId = toast.loading('Withdrawing your verification application...');
+      try {
+        deleteVenue(mainVenue.id);
+        updateProfile({ role: 'customer' });
+        toast.success('Application withdrawn successfully. Your cafe registration has been canceled.', { id: loadId });
+        navigate('/explore');
+      } catch (err: any) {
+        console.error(err);
+        toast.error(err.message || 'Failed to withdraw application.', { id: loadId });
+      } finally {
+        setIsCancelling(false);
+        setShowCancelConfirm(false);
+      }
+    };
+
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-24 sm:px-6 text-center space-y-6 text-white font-sans animate-fade-in-quick">
+        <span className="text-7xl block animate-bounce">⏳</span>
+        <div className="space-y-3">
+          <h2 className="text-3xl font-display font-black tracking-tight text-white font-bold">Verification Pending Approval</h2>
+          {mainVenue && (
+            <p className="text-brand-purple font-mono font-bold text-sm uppercase tracking-widest">
+              FOR: {mainVenue.name}
+            </p>
+          )}
+          <p className="text-text-secondary text-sm max-w-lg mx-auto leading-relaxed">
+            Thank you for registering your venue on GARF! Your application is currently under review by our administration team.
+            We are verifying your gaming stations, hardware specifications, and configuration to ensure seamless reservations.
+          </p>
+          <div className="p-5 bg-[#12121A] border border-[#2a2a3e] rounded-xl max-w-md mx-auto text-left text-xs space-y-2 text-text-secondary font-mono">
+            <p className="text-white font-bold">What happens next?</p>
+            <ul className="list-disc pl-4 space-y-1">
+              <li>Our admin reviews your PC/Console specifications.</li>
+              <li>Your amenities and game library are verified.</li>
+              <li>Once verified, your venue goes live on the Explore map.</li>
+              <li>You will receive full access to this operational dashboard.</li>
+            </ul>
+          </div>
+        </div>
+
+        {showCancelConfirm ? (
+          <div className="p-5 bg-red-500/5 border border-red-500/20 rounded-2xl max-w-md mx-auto space-y-4 animate-fade-in-quick text-left">
+            <p className="text-sm font-bold text-red-400 font-display">Confirm Application Withdrawal</p>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Are you sure you want to stop the verification process? This will permanently delete your cafe listing, resources, and slots. You will have to register from scratch to list again.
+            </p>
+            <div className="flex gap-3 justify-start">
+              <button
+                onClick={handleCancelVerification}
+                disabled={isCancelling}
+                className="px-4 py-2 rounded-lg text-xs font-bold uppercase bg-red-600 hover:bg-red-700 text-white transition disabled:opacity-50 cursor-pointer"
+              >
+                {isCancelling ? 'Withdrawing...' : 'Yes, Withdraw Application'}
+              </button>
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                disabled={isCancelling}
+                className="px-4 py-2 rounded-lg text-xs font-bold uppercase bg-[#1c1c2e] hover:bg-[#25253c] border border-[#2a2a3e] text-white transition disabled:opacity-50 cursor-pointer"
+              >
+                Go Back
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="pt-2 flex flex-col sm:flex-row justify-center gap-4 max-w-md mx-auto">
+            <button
+              onClick={() => setShowCancelConfirm(true)}
+              className="px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-400 hover:bg-red-500/20 transition border border-red-500/25 cursor-pointer"
+            >
+              Cancel Verification
+            </button>
+            
+            <button
+              onClick={() => {
+                localStorage.removeItem('garf_current_user');
+                window.location.href = '/login';
+              }}
+              className="px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#1c1c2e] text-white cursor-pointer hover:bg-[#25253c] transition border border-[#2a2a3e]"
+            >
+              Logout & Switch Account
+            </button>
+          </div>
+        )}
       </div>
     );
   }
