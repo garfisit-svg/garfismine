@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { 
@@ -1212,54 +1212,353 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return [];
   });
 
-  // Write squad states to local storage on edits
+  // Full-Stack Central Database Synchronization Engine
+  const isSyncingFromServer = useRef<boolean>(false);
+  const initialLoadCompleted = useRef<boolean>(false);
+
+  const stateRefs = useRef({
+    profiles, venues, resources, slots, bookings, gamingEquipments, turfDetails, walkInSessions,
+    squadProfiles, squads, squadMembers, messages, polls, pollVotes, playerNeededPosts, playerNeededResponses,
+    dmThreads, nearbyCheckins, squadInvites, squadEvents, reviews, coinTransactions, offers, notifications, adminLogs
+  });
+
   useEffect(() => {
-    localStorage.setItem('garf_squad_profiles', JSON.stringify(squadProfiles));
+    stateRefs.current = {
+      profiles, venues, resources, slots, bookings, gamingEquipments, turfDetails, walkInSessions,
+      squadProfiles, squads, squadMembers, messages, polls, pollVotes, playerNeededPosts, playerNeededResponses,
+      dmThreads, nearbyCheckins, squadInvites, squadEvents, reviews, coinTransactions, offers, notifications, adminLogs
+    };
+  }, [
+    profiles, venues, resources, slots, bookings, gamingEquipments, turfDetails, walkInSessions,
+    squadProfiles, squads, squadMembers, messages, polls, pollVotes, playerNeededPosts, playerNeededResponses,
+    dmThreads, nearbyCheckins, squadInvites, squadEvents, reviews, coinTransactions, offers, notifications, adminLogs
+  ]);
+
+  const pushToServer = async (key: string, value: any) => {
+    if (isSyncingFromServer.current || !initialLoadCompleted.current) return;
+    try {
+      await fetch('/api/data/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: value })
+      });
+    } catch (err) {
+      console.error(`Failed to push ${key} to central server:`, err);
+    }
+  };
+
+  // Mount effect to fetch database and set up 3s background poll
+  useEffect(() => {
+    const fetchCentralData = async () => {
+      try {
+        const response = await fetch('/api/data');
+        const result = await response.json();
+        if (result.success && result.data) {
+          isSyncingFromServer.current = true;
+          const serverDb = result.data;
+
+          const mergeState = (
+            serverList: any[] | undefined,
+            localStorageKey: string,
+            setter: (val: any) => void,
+            localFallbackList: any[]
+          ) => {
+            const list = serverList || [];
+            if (list.length > 0) {
+              setter(list);
+              localStorage.setItem(localStorageKey, JSON.stringify(list));
+            } else if (localFallbackList.length > 0) {
+              setter(localFallbackList);
+            }
+          };
+
+          const getLocal = (key: string) => {
+            const saved = localStorage.getItem(key);
+            if (saved) {
+              try { return JSON.parse(saved); } catch (e) {}
+            }
+            return [];
+          };
+
+          mergeState(serverDb.profiles, 'garf_profiles', setProfiles, getLocal('garf_profiles'));
+          mergeState(serverDb.venues, 'garf_venues', rawSetVenues, getLocal('garf_venues'));
+          mergeState(serverDb.venue_resources, 'garf_resources', rawSetResources, getLocal('garf_resources'));
+          mergeState(serverDb.slots, 'garf_slots', rawSetSlots, getLocal('garf_slots'));
+          mergeState(serverDb.bookings, 'garf_bookings', rawSetBookings, getLocal('garf_bookings'));
+          
+          if (serverDb.gamingEquipments) mergeState(serverDb.gamingEquipments, 'garf_gaming_equipments', setGamingEquipments, getLocal('garf_gaming_equipments'));
+          if (serverDb.turfDetails) mergeState(serverDb.turfDetails, 'garf_turf_details', setTurfDetails, getLocal('garf_turf_details'));
+          if (serverDb.walkInSessions) mergeState(serverDb.walkInSessions, 'garf_walk_in_sessions', setWalkInSessions, getLocal('garf_walk_in_sessions'));
+          
+          if (serverDb.squadProfiles) mergeState(serverDb.squadProfiles, 'garf_squad_profiles', setSquadProfiles, getLocal('garf_squad_profiles'));
+          if (serverDb.squads) mergeState(serverDb.squads, 'garf_squads', setSquads, getLocal('garf_squads'));
+          if (serverDb.squadMembers) mergeState(serverDb.squadMembers, 'garf_squad_members', setSquadMembers, getLocal('garf_squad_members'));
+          if (serverDb.messages) mergeState(serverDb.messages, 'garf_messages', setMessages, getLocal('garf_messages'));
+          if (serverDb.polls) mergeState(serverDb.polls, 'garf_polls', setPolls, getLocal('garf_polls'));
+          if (serverDb.pollVotes) mergeState(serverDb.pollVotes, 'garf_poll_votes', setPollVotes, getLocal('garf_poll_votes'));
+          if (serverDb.playerNeededPosts) mergeState(serverDb.playerNeededPosts, 'garf_player_needed_posts', setPlayerNeededPosts, getLocal('garf_player_needed_posts'));
+          if (serverDb.playerNeededResponses) mergeState(serverDb.playerNeededResponses, 'garf_player_needed_responses', setPlayerNeededResponses, getLocal('garf_player_needed_responses'));
+          if (serverDb.dmThreads) mergeState(serverDb.dmThreads, 'garf_dm_threads', setDmThreads, getLocal('garf_dm_threads'));
+          if (serverDb.nearbyCheckins) mergeState(serverDb.nearbyCheckins, 'garf_nearby_checkins', setNearbyCheckins, getLocal('garf_nearby_checkins'));
+          if (serverDb.squadInvites) mergeState(serverDb.squadInvites, 'garf_squad_invites', setSquadInvites, getLocal('garf_squad_invites'));
+          if (serverDb.squadEvents) mergeState(serverDb.squadEvents, 'garf_squad_events', setSquadEvents, getLocal('garf_squad_events'));
+          
+          if (serverDb.reviews) mergeState(serverDb.reviews, 'garf_reviews', setReviews, getLocal('garf_reviews'));
+          if (serverDb.coinTransactions) mergeState(serverDb.coinTransactions, 'garf_coin_transactions', setCoinTransactions, getLocal('garf_coin_transactions'));
+          if (serverDb.offers) mergeState(serverDb.offers, 'garf_offers', setOffers, getLocal('garf_offers'));
+          if (serverDb.notifications) mergeState(serverDb.notifications, 'garf_notifications', setNotifications, getLocal('garf_notifications'));
+          if (serverDb.adminLogs) mergeState(serverDb.adminLogs, 'garf_admin_logs', setAdminLogs, getLocal('garf_admin_logs'));
+
+          initialLoadCompleted.current = true;
+          isSyncingFromServer.current = false;
+        }
+      } catch (err) {
+        console.error('Failed to load central server database on mount:', err);
+      }
+    };
+
+    fetchCentralData();
+
+    // Poll the central server every 3s for updates from other phones/tablets
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/data');
+        const result = await response.json();
+        if (result.success && result.data) {
+          isSyncingFromServer.current = true;
+          const serverDb = result.data;
+
+          const updateIfDifferent = (serverList: any[] | undefined, setter: (val: any) => void, currentLocalList: any[], storageKey: string) => {
+            const list = serverList || [];
+            if (JSON.stringify(list) !== JSON.stringify(currentLocalList)) {
+              setter(list);
+              localStorage.setItem(storageKey, JSON.stringify(list));
+            }
+          };
+
+          const refs = stateRefs.current;
+          updateIfDifferent(serverDb.profiles, setProfiles, refs.profiles, 'garf_profiles');
+          updateIfDifferent(serverDb.venues, rawSetVenues, refs.venues, 'garf_venues');
+          updateIfDifferent(serverDb.venue_resources, rawSetResources, refs.resources, 'garf_resources');
+          updateIfDifferent(serverDb.slots, rawSetSlots, refs.slots, 'garf_slots');
+          updateIfDifferent(serverDb.bookings, rawSetBookings, refs.bookings, 'garf_bookings');
+          
+          if (serverDb.gamingEquipments) updateIfDifferent(serverDb.gamingEquipments, setGamingEquipments, refs.gamingEquipments, 'garf_gaming_equipments');
+          if (serverDb.turfDetails) updateIfDifferent(serverDb.turfDetails, setTurfDetails, refs.turfDetails, 'garf_turf_details');
+          if (serverDb.walkInSessions) updateIfDifferent(serverDb.walkInSessions, setWalkInSessions, refs.walkInSessions, 'garf_walk_in_sessions');
+          
+          if (serverDb.squadProfiles) updateIfDifferent(serverDb.squadProfiles, setSquadProfiles, refs.squadProfiles, 'garf_squad_profiles');
+          if (serverDb.squads) updateIfDifferent(serverDb.squads, setSquads, refs.squads, 'garf_squads');
+          if (serverDb.squadMembers) updateIfDifferent(serverDb.squadMembers, setSquadMembers, refs.squadMembers, 'garf_squad_members');
+          if (serverDb.messages) updateIfDifferent(serverDb.messages, setMessages, refs.messages, 'garf_messages');
+          if (serverDb.polls) updateIfDifferent(serverDb.polls, setPolls, refs.polls, 'garf_polls');
+          if (serverDb.pollVotes) updateIfDifferent(serverDb.pollVotes, setPollVotes, refs.pollVotes, 'garf_poll_votes');
+          if (serverDb.playerNeededPosts) updateIfDifferent(serverDb.playerNeededPosts, setPlayerNeededPosts, refs.playerNeededPosts, 'garf_player_needed_posts');
+          if (serverDb.playerNeededResponses) updateIfDifferent(serverDb.playerNeededResponses, setPlayerNeededResponses, refs.playerNeededResponses, 'garf_player_needed_responses');
+          if (serverDb.dmThreads) updateIfDifferent(serverDb.dmThreads, setDmThreads, refs.dmThreads, 'garf_dm_threads');
+          if (serverDb.nearbyCheckins) updateIfDifferent(serverDb.nearbyCheckins, setNearbyCheckins, refs.nearbyCheckins, 'garf_nearby_checkins');
+          if (serverDb.squadInvites) updateIfDifferent(serverDb.squadInvites, setSquadInvites, refs.squadInvites, 'garf_squad_invites');
+          if (serverDb.squadEvents) updateIfDifferent(serverDb.squadEvents, setSquadEvents, refs.squadEvents, 'garf_squad_events');
+          
+          if (serverDb.reviews) updateIfDifferent(serverDb.reviews, setReviews, refs.reviews, 'garf_reviews');
+          if (serverDb.coinTransactions) updateIfDifferent(serverDb.coinTransactions, setCoinTransactions, refs.coinTransactions, 'garf_coin_transactions');
+          if (serverDb.offers) updateIfDifferent(serverDb.offers, setOffers, refs.offers, 'garf_offers');
+          if (serverDb.notifications) updateIfDifferent(serverDb.notifications, setNotifications, refs.notifications, 'garf_notifications');
+          if (serverDb.adminLogs) updateIfDifferent(serverDb.adminLogs, setAdminLogs, refs.adminLogs, 'garf_admin_logs');
+
+          isSyncingFromServer.current = false;
+        }
+      } catch (err) {
+        // Silent
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Sync state variables to central server in the background immediately on local changes
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_profiles', JSON.stringify(profiles));
+      pushToServer('profiles', profiles);
+    }
+  }, [profiles]);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('garf_current_user', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('garf_current_user');
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_venues', JSON.stringify(venues));
+      pushToServer('venues', venues);
+    }
+  }, [venues]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_resources', JSON.stringify(resources));
+      pushToServer('venue_resources', resources);
+    }
+  }, [resources]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_slots', JSON.stringify(slots));
+      pushToServer('slots', slots);
+    }
+  }, [slots]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_bookings', JSON.stringify(bookings));
+      pushToServer('bookings', bookings);
+    }
+  }, [bookings]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_gaming_equipments', JSON.stringify(gamingEquipments));
+      pushToServer('gamingEquipments', gamingEquipments);
+    }
+  }, [gamingEquipments]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_turf_details', JSON.stringify(turfDetails));
+      pushToServer('turfDetails', turfDetails);
+    }
+  }, [turfDetails]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_walk_in_sessions', JSON.stringify(walkInSessions));
+      pushToServer('walkInSessions', walkInSessions);
+    }
+  }, [walkInSessions]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_squad_profiles', JSON.stringify(squadProfiles));
+      pushToServer('squadProfiles', squadProfiles);
+    }
   }, [squadProfiles]);
 
   useEffect(() => {
-    localStorage.setItem('garf_squads', JSON.stringify(squads));
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_squads', JSON.stringify(squads));
+      pushToServer('squads', squads);
+    }
   }, [squads]);
 
   useEffect(() => {
-    localStorage.setItem('garf_squad_members', JSON.stringify(squadMembers));
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_squad_members', JSON.stringify(squadMembers));
+      pushToServer('squadMembers', squadMembers);
+    }
   }, [squadMembers]);
 
   useEffect(() => {
-    localStorage.setItem('garf_messages', JSON.stringify(messages));
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_messages', JSON.stringify(messages));
+      pushToServer('messages', messages);
+    }
   }, [messages]);
 
   useEffect(() => {
-    localStorage.setItem('garf_polls', JSON.stringify(polls));
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_polls', JSON.stringify(polls));
+      pushToServer('polls', polls);
+    }
   }, [polls]);
 
   useEffect(() => {
-    localStorage.setItem('garf_poll_votes', JSON.stringify(pollVotes));
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_poll_votes', JSON.stringify(pollVotes));
+      pushToServer('pollVotes', pollVotes);
+    }
   }, [pollVotes]);
 
   useEffect(() => {
-    localStorage.setItem('garf_player_needed_posts', JSON.stringify(playerNeededPosts));
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_player_needed_posts', JSON.stringify(playerNeededPosts));
+      pushToServer('playerNeededPosts', playerNeededPosts);
+    }
   }, [playerNeededPosts]);
 
   useEffect(() => {
-    localStorage.setItem('garf_player_needed_responses', JSON.stringify(playerNeededResponses));
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_player_needed_responses', JSON.stringify(playerNeededResponses));
+      pushToServer('playerNeededResponses', playerNeededResponses);
+    }
   }, [playerNeededResponses]);
 
   useEffect(() => {
-    localStorage.setItem('garf_dm_threads', JSON.stringify(dmThreads));
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_dm_threads', JSON.stringify(dmThreads));
+      pushToServer('dmThreads', dmThreads);
+    }
   }, [dmThreads]);
 
   useEffect(() => {
-    localStorage.setItem('garf_nearby_checkins', JSON.stringify(nearbyCheckins));
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_nearby_checkins', JSON.stringify(nearbyCheckins));
+      pushToServer('nearbyCheckins', nearbyCheckins);
+    }
   }, [nearbyCheckins]);
 
   useEffect(() => {
-    localStorage.setItem('garf_squad_invites', JSON.stringify(squadInvites));
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_squad_invites', JSON.stringify(squadInvites));
+      pushToServer('squadInvites', squadInvites);
+    }
   }, [squadInvites]);
 
   useEffect(() => {
-    localStorage.setItem('garf_squad_events', JSON.stringify(squadEvents));
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_squad_events', JSON.stringify(squadEvents));
+      pushToServer('squadEvents', squadEvents);
+    }
   }, [squadEvents]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_reviews', JSON.stringify(reviews));
+      pushToServer('reviews', reviews);
+    }
+  }, [reviews]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_coin_transactions', JSON.stringify(coinTransactions));
+      pushToServer('coinTransactions', coinTransactions);
+    }
+  }, [coinTransactions]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_offers', JSON.stringify(offers));
+      pushToServer('offers', offers);
+    }
+  }, [offers]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_notifications', JSON.stringify(notifications));
+      pushToServer('notifications', notifications);
+    }
+  }, [notifications]);
+
+  useEffect(() => {
+    if (initialLoadCompleted.current && !isSyncingFromServer.current) {
+      localStorage.setItem('garf_admin_logs', JSON.stringify(adminLogs));
+      pushToServer('adminLogs', adminLogs);
+    }
+  }, [adminLogs]);
 
   // Real-time synchronization across multiple browser tabs/frames using storage events
   useEffect(() => {
@@ -1327,55 +1626,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
-
-  // Write all state hook dependencies to localStorage on changes
-  useEffect(() => {
-    localStorage.setItem('garf_profiles', JSON.stringify(profiles));
-  }, [profiles]);
-
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('garf_current_user', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('garf_current_user');
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    localStorage.setItem('garf_venues', JSON.stringify(venues));
-  }, [venues]);
-
-  useEffect(() => {
-    localStorage.setItem('garf_resources', JSON.stringify(resources));
-  }, [resources]);
-
-  useEffect(() => {
-    localStorage.setItem('garf_slots', JSON.stringify(slots));
-  }, [slots]);
-
-  useEffect(() => {
-    localStorage.setItem('garf_bookings', JSON.stringify(bookings));
-  }, [bookings]);
-
-  useEffect(() => {
-    localStorage.setItem('garf_reviews', JSON.stringify(reviews));
-  }, [reviews]);
-
-  useEffect(() => {
-    localStorage.setItem('garf_coin_transactions', JSON.stringify(coinTransactions));
-  }, [coinTransactions]);
-
-  useEffect(() => {
-    localStorage.setItem('garf_offers', JSON.stringify(offers));
-  }, [offers]);
-
-  useEffect(() => {
-    localStorage.setItem('garf_notifications', JSON.stringify(notifications));
-  }, [notifications]);
-
-  useEffect(() => {
-    localStorage.setItem('garf_admin_logs', JSON.stringify(adminLogs));
-  }, [adminLogs]);
 
   // DYNAMIC SLY SLOT GENERATION (to guarantee active bookable slots exist relative to actual local date always!)
   useEffect(() => {
@@ -4649,7 +4899,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const resetAllAppData = () => {
+  const resetAllAppData = async () => {
+    try {
+      await fetch('/api/data/reset', { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to reset central server database:', err);
+    }
+
     const keys = [
       'garf_profiles',
       'garf_current_user',
