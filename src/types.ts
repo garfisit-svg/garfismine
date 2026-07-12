@@ -61,6 +61,7 @@ export interface Venue {
   verified_at: string | null;
   created_at: string;
   closed_dates?: string[];
+  status?: 'pending' | 'approved' | 'rejected';
 }
 
 export interface VenueResource {

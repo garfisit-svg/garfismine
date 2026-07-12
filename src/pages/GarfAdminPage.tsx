@@ -193,18 +193,18 @@ export const GarfAdminPage: React.FC = () => {
   // Statistics calculation helpers
   const totalUsersCount = profiles.length;
   const totalOwnersCount = profiles.filter(p => p.role === 'owner' || p.role === 'owner_pending').length;
-  const pendingApprovalsCount = venues.filter(v => !v.is_verified && !v.rejection_reason).length;
-  const approvedVenuesCount = venues.filter(v => v.is_verified).length;
+  const pendingApprovalsCount = venues.filter(v => v.status ? v.status === 'pending' : (!v.is_verified && !v.rejection_reason)).length;
+  const approvedVenuesCount = venues.filter(v => v.status ? v.status === 'approved' : v.is_verified).length;
   const totalBookingsCount = bookings.length;
   const revenueTotal = bookings.filter(b => b.booking_status === 'completed' || b.booking_status === 'confirmed').reduce((sum, item) => sum + item.final_amount, 0);
 
   // Rejected venues list for admin reference
-  const rejectedVenues = venues.filter(v => !v.is_verified && v.rejection_reason);
+  const rejectedVenues = venues.filter(v => v.status ? v.status === 'rejected' : (!v.is_verified && v.rejection_reason));
 
   // Filter listings
   const filteredPendingVenues = venues.filter(v => {
-    if (v.is_verified) return false;
-    if (v.rejection_reason) return false; // Filter out rejected ones!
+    const isPending = v.status ? v.status === 'pending' : (!v.is_verified && !v.rejection_reason);
+    if (!isPending) return false;
     const name = v.name || '';
     const city = v.city || '';
     const address = v.address || '';
@@ -215,7 +215,8 @@ export const GarfAdminPage: React.FC = () => {
   });
 
   const filteredApprovedVenues = venues.filter(v => {
-    if (!v.is_verified) return false;
+    const isApproved = v.status ? v.status === 'approved' : v.is_verified;
+    if (!isApproved) return false;
     const name = v.name || '';
     const city = v.city || '';
     const address = v.address || '';
@@ -288,7 +289,7 @@ export const GarfAdminPage: React.FC = () => {
     toggleVenueVerification(venueId);
     // Note toggleVenueVerification sets is_verified to true, but doesn't force active state.
     // Let's force verify and activate.
-    updateVenue(venueId, { is_verified: true, is_active: true, rejection_reason: null, verified_at: new Date().toISOString() });
+    updateVenue(venueId, { is_verified: true, is_active: true, rejection_reason: null, verified_at: new Date().toISOString(), status: 'approved' });
     toast.success('Gaming cafe registration verified and approved! Publicly visible immediately.');
   };
 

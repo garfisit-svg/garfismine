@@ -455,7 +455,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Load venues
       const loadVenues = async () => {
         try {
-          const { data, error } = await supabase.from('venues').select('*');
+          let query = supabase.from('gaming_cafes').select('*');
+          if (!currentUser || currentUser.role !== 'admin') {
+            if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
+              query = query.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
+            } else {
+              query = query.eq('status', 'approved');
+            }
+          }
+          const { data, error } = await query;
           if (data && !error) {
             rawSetVenues(prev => {
               const localSaved = localStorage.getItem('garf_venues');
@@ -748,10 +756,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           commission_percent: Number(venue.commission_percent),
           rejection_reason: venue.rejection_reason,
           verified_at: venue.verified_at,
-          created_at: venue.created_at
+          created_at: venue.created_at,
+          status: venue.status || (venue.is_verified ? 'approved' : 'pending')
         };
-        const { error } = await supabase.from('venues').upsert(payload, { onConflict: 'id' });
-        if (error) console.error('Failed to upsert venue to Supabase:', error.message);
+        const { error } = await supabase.from('gaming_cafes').upsert(payload, { onConflict: 'id' });
+        if (error) console.error('Failed to upsert venue/cafe to Supabase:', error.message);
       } catch (err) {
         console.error('Error executing saveVenueToSupabase:', err);
       }
@@ -894,8 +903,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const nextIds = new Set(next.map(v => v.id));
         prev.forEach(v => {
           if (!nextIds.has(v.id)) {
-            supabase.from('venues').delete().eq('id', v.id).then(({ error }) => {
-              if (error) console.error('Failed to delete venue from Supabase:', error.message);
+            supabase.from('gaming_cafes').delete().eq('id', v.id).then(({ error }) => {
+              if (error) console.error('Failed to delete venue/cafe from Supabase:', error.message);
             });
           }
         });
@@ -2015,7 +2024,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       commission_percent: 10,
       rejection_reason: null,
       verified_at: null,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      status: 'pending'
     };
 
     const newRes: VenueResource[] = resourcesData.map((res, i) => ({
@@ -2172,11 +2182,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           commission_percent: Number(newV.commission_percent),
           rejection_reason: newV.rejection_reason,
           verified_at: newV.verified_at,
-          created_at: newV.created_at
+          created_at: newV.created_at,
+          status: 'pending'
         };
-        const { error: venueError } = await supabase.from('venues').upsert(venuePayload, { onConflict: 'id' });
+        const { error: venueError } = await supabase.from('gaming_cafes').upsert(venuePayload, { onConflict: 'id' });
         if (venueError) {
-          throw new Error(`Failed to save Venue to Database: ${venueError.message}`);
+          throw new Error(`Failed to save Gaming Cafe to Database: ${venueError.message}`);
         }
 
         // 2. Save Venue Resources
@@ -2258,8 +2269,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setResources(prev => prev.filter(r => r.venue_id !== venueId));
     setSlots(prev => prev.filter(s => s.venue_id !== venueId));
     if (isSupabaseConfigured && supabase) {
-      supabase.from('venues').delete().eq('id', venueId).then(({ error }) => {
-        if (error) console.error('Failed to delete venue from Supabase:', error.message);
+      supabase.from('gaming_cafes').delete().eq('id', venueId).then(({ error }) => {
+        if (error) console.error('Failed to delete venue/cafe from Supabase:', error.message);
       });
     }
   };
@@ -2322,11 +2333,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (v.id === venueId) {
         targetOwnerId = v.owner_id;
         addNotificationSilently(v.owner_id, 'Venue Verified! 🎉', `Congratulations! Your venue "${v.name}" has been verified and is now live on GARF!`, 'owner');
-        const updated = {
+        const updated: Venue = {
           ...v,
           is_verified: true,
           is_active: true,
-          verified_at: new Date().toISOString()
+          verified_at: new Date().toISOString(),
+          status: 'approved'
         };
         if (isSupabaseConfigured && supabase) {
           saveVenueToSupabase(updated);
@@ -2397,15 +2409,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return prev;
       });
 
-      // Delete the venue entirely
-      setVenues(prev => prev.filter(item => item.id !== venueId));
-      setResources(prev => prev.filter(r => r.venue_id !== venueId));
-      setSlots(prev => prev.filter(s => s.venue_id !== venueId));
+      // Update status to 'rejected' and save rejection reason instead of deleting
+      const updatedVenue: Venue = {
+        ...v,
+        is_verified: false,
+        is_active: false,
+        rejection_reason: reason,
+        status: 'rejected'
+      };
+
+      setVenues(prev => prev.map(item => item.id === venueId ? updatedVenue : item));
 
       if (isSupabaseConfigured && supabase) {
-        supabase.from('venues').delete().eq('id', venueId).then(({ error }) => {
-          if (error) console.error('Failed to delete rejected venue from Supabase:', error.message);
-        });
+        saveVenueToSupabase(updatedVenue);
       }
     }
   };
@@ -4764,7 +4780,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (profileErr) throw new Error(`Profiles: ${profileErr.message}`);
 
       // 2. Fetch venues
-      const { data: venueList, error: venueErr } = await supabase.from('venues').select('*');
+      let venueQuery = supabase.from('gaming_cafes').select('*');
+      if (!currentUser || currentUser.role !== 'admin') {
+        if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
+          venueQuery = venueQuery.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
+        } else {
+          venueQuery = venueQuery.eq('status', 'approved');
+        }
+      }
+      const { data: venueList, error: venueErr } = await venueQuery;
       if (venueErr) throw new Error(`Venues: ${venueErr.message}`);
 
       // 3. Fetch resources

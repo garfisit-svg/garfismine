@@ -32,7 +32,7 @@ DROP TABLE IF EXISTS reviews CASCADE;
 DROP TABLE IF EXISTS bookings CASCADE;
 DROP TABLE IF EXISTS slots CASCADE;
 DROP TABLE IF EXISTS venue_resources CASCADE;
-DROP TABLE IF EXISTS venues CASCADE;
+DROP TABLE IF EXISTS gaming_cafes CASCADE;
 DROP TABLE IF EXISTS profiles CASCADE;
 
 -- 1. PROFILES Table
@@ -58,8 +58,8 @@ CREATE TABLE profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. VENUES Table
-CREATE TABLE venues (
+-- 2. GAMING_CAFES Table
+CREATE TABLE gaming_cafes (
   id TEXT PRIMARY KEY,
   owner_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
@@ -88,13 +88,14 @@ CREATE TABLE venues (
   commission_percent NUMERIC(5,2) DEFAULT 10.00 NOT NULL,
   rejection_reason TEXT,
   verified_at TIMESTAMP WITH TIME ZONE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')) NOT NULL
 );
 
 -- 3. VENUE_RESOURCES Table
 CREATE TABLE venue_resources (
   id TEXT PRIMARY KEY,
-  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('pc', 'ps5', 'xbox', 'vr', 'turf')),
   specifications TEXT,
@@ -107,7 +108,7 @@ CREATE TABLE venue_resources (
 -- 4. OFFERS Table
 CREATE TABLE offers (
   id TEXT PRIMARY KEY,
-  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   title TEXT NOT NULL,
   description TEXT,
   discount_type TEXT NOT NULL CHECK (discount_type IN ('percentage', 'flat')),
@@ -129,7 +130,7 @@ CREATE TABLE bookings (
   id TEXT PRIMARY KEY,
   booking_ref TEXT UNIQUE NOT NULL,
   customer_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   resource_id TEXT REFERENCES venue_resources(id) ON DELETE CASCADE NOT NULL,
   booking_date DATE NOT NULL,
   start_time TEXT NOT NULL,
@@ -165,7 +166,7 @@ CREATE TABLE bookings (
 -- 6. SLOTS Table
 CREATE TABLE slots (
   id TEXT PRIMARY KEY,
-  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   resource_id TEXT REFERENCES venue_resources(id) ON DELETE CASCADE NOT NULL,
   slot_date DATE NOT NULL,
   start_time TEXT NOT NULL,
@@ -184,7 +185,7 @@ CREATE TABLE reviews (
   id TEXT PRIMARY KEY,
   booking_id TEXT REFERENCES bookings(id) ON DELETE CASCADE UNIQUE NOT NULL,
   customer_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   rating INTEGER CHECK (rating BETWEEN 1 AND 5) NOT NULL,
   comment TEXT NOT NULL,
   owner_reply TEXT,
@@ -260,7 +261,7 @@ CREATE TABLE squads (
   max_members INTEGER DEFAULT 20 NOT NULL,
   is_private BOOLEAN DEFAULT FALSE NOT NULL,
   created_by TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  venue_id TEXT REFERENCES venues(id) ON DELETE SET NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE SET NULL,
   is_active BOOLEAN DEFAULT TRUE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -310,7 +311,7 @@ CREATE TABLE player_needed_posts (
   id TEXT PRIMARY KEY,
   posted_by TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   city TEXT NOT NULL,
-  venue_id TEXT REFERENCES venues(id) ON DELETE SET NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   description TEXT,
   game_or_sport TEXT NOT NULL,
@@ -372,7 +373,7 @@ CREATE TABLE dm_threads (
 CREATE TABLE nearby_checkins (
   id TEXT PRIMARY KEY,
   user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   booking_id TEXT REFERENCES bookings(id) ON DELETE SET NULL,
   checked_in_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   checked_out_at TIMESTAMP WITH TIME ZONE,
@@ -401,7 +402,7 @@ CREATE TABLE squad_events (
   title TEXT NOT NULL,
   event_date DATE NOT NULL,
   event_time TEXT NOT NULL,
-  venue_id TEXT REFERENCES venues(id) ON DELETE SET NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE SET NULL,
   game_or_sport TEXT NOT NULL,
   max_participants INTEGER DEFAULT 10 NOT NULL,
   notes TEXT,
@@ -416,7 +417,7 @@ CREATE TABLE squad_events (
 -- 23. GAMING_EQUIPMENTS Table
 CREATE TABLE gaming_equipments (
   id TEXT PRIMARY KEY,
-  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   equipment_type TEXT NOT NULL CHECK (equipment_type IN ('pc', 'ps5', 'ps4', 'xbox_series_x', 'xbox_one', 'vr_headset', 'racing_sim', 'arcade')),
   custom_name TEXT NOT NULL,
   total_quantity INTEGER DEFAULT 1 NOT NULL,
@@ -437,7 +438,7 @@ CREATE TABLE gaming_equipments (
 -- 24. TURF_DETAILS Table
 CREATE TABLE turf_details (
   id TEXT PRIMARY KEY,
-  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   turf_name TEXT NOT NULL,
   turf_type TEXT NOT NULL CHECK (turf_type IN ('football_5aside', 'football_7aside', 'football_11aside', 'cricket_box', 'cricket_full', 'badminton', 'basketball', 'volleyball', 'tennis', 'multi_sport')),
   sports_allowed TEXT[] DEFAULT '{}'::TEXT[] NOT NULL,
@@ -470,7 +471,7 @@ CREATE TABLE turf_details (
 -- 25. EQUIPMENT_SESSIONS Table
 CREATE TABLE equipment_sessions (
   id TEXT PRIMARY KEY,
-  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   equipment_id TEXT REFERENCES gaming_equipments(id) ON DELETE CASCADE NOT NULL,
   quantity_used INTEGER DEFAULT 1 NOT NULL,
   session_type TEXT NOT NULL CHECK (session_type IN ('online_booking', 'walk_in')),
@@ -486,7 +487,7 @@ CREATE TABLE equipment_sessions (
 -- 26. WALK_IN_SESSIONS Table
 CREATE TABLE walk_in_sessions (
   id TEXT PRIMARY KEY,
-  venue_id TEXT REFERENCES venues(id) ON DELETE CASCADE NOT NULL,
+  venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   equipment_id TEXT REFERENCES gaming_equipments(id) ON DELETE SET NULL,
   turf_id TEXT REFERENCES turf_details(id) ON DELETE SET NULL,
   quantity_used INTEGER DEFAULT 1 NOT NULL,
@@ -532,7 +533,7 @@ alter publication supabase_realtime add table messages;
 alter publication supabase_realtime add table slots;
 alter publication supabase_realtime add table bookings;
 alter publication supabase_realtime add table notifications;
-alter publication supabase_realtime add table venues;
+alter publication supabase_realtime add table gaming_cafes;
 alter publication supabase_realtime add table profiles;
 alter publication supabase_realtime add table venue_resources;
 
