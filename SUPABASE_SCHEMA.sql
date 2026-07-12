@@ -544,3 +544,64 @@ CREATE INDEX idx_slots_search ON slots(resource_id, slot_date);
 CREATE INDEX idx_messages_squad ON messages(squad_id) WHERE type = 'squad';
 CREATE INDEX idx_messages_dm ON messages(sender_id, receiver_id) WHERE type = 'direct';
 CREATE INDEX idx_bookings_date ON bookings(booking_date);
+
+-- =========================================================================
+--  🛡️ ROW LEVEL SECURITY POLICIES FOR VENUE_RESOURCES
+-- =========================================================================
+ALTER TABLE venue_resources ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public read access to venue_resources" ON venue_resources;
+CREATE POLICY "Allow public read access to venue_resources" ON venue_resources
+    FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Allow owners and admins to insert venue_resources" ON venue_resources;
+CREATE POLICY "Allow owners and admins to insert venue_resources" ON venue_resources
+    FOR INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM gaming_cafes
+            WHERE gaming_cafes.id = venue_resources.venue_id
+            AND gaming_cafes.owner_id = auth.uid()::text
+        ) OR EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid()::text
+            AND profiles.role = 'admin'
+        )
+    );
+
+DROP POLICY IF EXISTS "Allow owners and admins to update venue_resources" ON venue_resources;
+CREATE POLICY "Allow owners and admins to update venue_resources" ON venue_resources
+    FOR UPDATE USING (
+        EXISTS (
+            SELECT 1 FROM gaming_cafes
+            WHERE gaming_cafes.id = venue_resources.venue_id
+            AND gaming_cafes.owner_id = auth.uid()::text
+        ) OR EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid()::text
+            AND profiles.role = 'admin'
+        )
+    ) WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM gaming_cafes
+            WHERE gaming_cafes.id = venue_resources.venue_id
+            AND gaming_cafes.owner_id = auth.uid()::text
+        ) OR EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid()::text
+            AND profiles.role = 'admin'
+        )
+    );
+
+DROP POLICY IF EXISTS "Allow owners and admins to delete venue_resources" ON venue_resources;
+CREATE POLICY "Allow owners and admins to delete venue_resources" ON venue_resources
+    FOR DELETE USING (
+        EXISTS (
+            SELECT 1 FROM gaming_cafes
+            WHERE gaming_cafes.id = venue_resources.venue_id
+            AND gaming_cafes.owner_id = auth.uid()::text
+        ) OR EXISTS (
+            SELECT 1 FROM profiles
+            WHERE profiles.id = auth.uid()::text
+            AND profiles.role = 'admin'
+        )
+    );
