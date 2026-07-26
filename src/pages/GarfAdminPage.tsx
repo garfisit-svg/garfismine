@@ -198,7 +198,7 @@ export const GarfAdminPage: React.FC = () => {
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPass = adminPassword.trim();
-    if (cleanPass !== 'Garfismine@1234' && cleanPass.toLowerCase() !== 'garfadmin' && cleanPass !== 'garfisit') {
+    if (cleanPass !== 'Garfismine' && cleanPass.toLowerCase() !== 'garfismine' && cleanPass !== 'Garfismine@1234' && cleanPass.toLowerCase() !== 'garfadmin' && cleanPass !== 'garfisit') {
       toast.error('Incorrect Administrator Access Key. Access Denied.');
       return;
     }
@@ -341,7 +341,7 @@ export const GarfAdminPage: React.FC = () => {
 
             <div className="p-3.5 bg-brand-purple/5 border border-brand-purple/10 rounded-xl text-xs text-[#a3a3c2] leading-relaxed font-sans flex gap-2">
               <Info className="h-4 w-4 text-brand-purple flex-shrink-0 mt-0.5" />
-              <span>Submit secure passkey (<code className="text-brand-pink font-mono">Garfismine@1234</code>) to unlock full real-time database management.</span>
+              <span>Submit secure passkey (<code className="text-brand-pink font-mono">Garfismine</code>) to unlock full real-time database management.</span>
             </div>
 
             <button
