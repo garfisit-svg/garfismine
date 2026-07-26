@@ -449,6 +449,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadSupabaseProfiles();
   }, []);
 
+  // Restore Supabase Auth session on mount / currentUser change to keep auth.uid() populated
+  useEffect(() => {
+    const autoLoginSupabase = async () => {
+      if (isSupabaseConfigured && supabase && currentUser && currentUser.email && currentUser.password) {
+        try {
+          console.log('Restoring Supabase Auth session on mount for:', currentUser.email);
+          await supabase.auth.signInWithPassword({
+            email: currentUser.email,
+            password: currentUser.password
+          });
+        } catch (e) {
+          console.error('Failed to auto-login Supabase session on mount:', e);
+        }
+      }
+    };
+    autoLoginSupabase();
+  }, [currentUser?.id]);
+
   // Load venues, resources, slots, and bookings from Supabase on mount if active, and subscribe to real-time events
   useEffect(() => {
     if (isSupabaseConfigured && supabase) {
@@ -456,7 +474,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const loadVenues = async () => {
         try {
           let query = supabase.from('gaming_cafes').select('*');
-          if (!currentUser || currentUser.role !== 'admin') {
+          const isAdminUser = currentUser?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'garfisit@gmail.com';
+          if (!isAdminUser) {
             if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
               query = query.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
             } else {
@@ -564,7 +583,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Subscribe to real-time postgres changes
       const channels = [
         supabase.channel('public-venues-sync')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'venues' }, payload => {
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'gaming_cafes' }, payload => {
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
               const item = payload.new as Venue;
               rawSetVenues(prev => {
@@ -1814,8 +1833,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const isPreVerified = data.email?.toLowerCase().trim() === 'garfisit@gmail.com';
 
+    let userId = `user-${Math.random().toString(36).substr(2, 9)}`;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        console.log('Signing up user in Supabase Auth:', data.email);
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: data.email,
+          password: data.password || 'TemporaryPass123!',
+          options: {
+            data: {
+              full_name: data.full_name,
+              phone: data.phone
+            }
+          }
+        });
+        if (authError) {
+          console.error('Supabase Auth signUp error:', authError.message);
+        } else if (authData?.user) {
+          userId = authData.user.id;
+          console.log('Using Supabase Auth UUID for signup:', userId);
+        }
+      } catch (err) {
+        console.error('Error during Supabase Auth signUp:', err);
+      }
+    }
+
     const newProfile: Profile = {
-      id: `user-${Math.random().toString(36).substr(2, 9)}`,
+      id: userId,
       full_name: data.full_name,
       email: data.email,
       phone: data.phone,
@@ -1957,7 +2001,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updated_at: new Date().toISOString()
     };
 
-    setProfiles(prev => prev.map(p => p.id === updatedProfile.id ? updatedProfile : p));
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const emailToUse = updatedProfile.email;
+        const passwordToUse = updatedProfile.password || 'TemporaryPass123!';
+        
+        console.log('Logging in with Supabase Auth for:', emailToUse);
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: emailToUse,
+          password: passwordToUse
+        });
+        
+        if (authError) {
+          console.warn('Supabase Auth signIn failed, attempting on-the-fly signUp:', authError.message);
+          
+          // Delete old profile in Supabase first if its ID is a simulated one and email matches
+          const { data: existingDbProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', emailToUse)
+            .maybeSingle();
+            
+          if (existingDbProfile && existingDbProfile.id.startsWith('user-')) {
+            console.log('Deleting simulated profile from DB to re-create with UUID:', existingDbProfile.id);
+            await supabase.from('profiles').delete().eq('id', existingDbProfile.id);
+          }
+          
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: emailToUse,
+            password: passwordToUse,
+            options: {
+              data: {
+                full_name: updatedProfile.full_name,
+                phone: updatedProfile.phone
+              }
+            }
+          });
+          if (!signUpError && signUpData?.user) {
+            console.log('Created Supabase Auth user on-the-fly on login:', signUpData.user.id);
+            const oldId = updatedProfile.id;
+            updatedProfile.id = signUpData.user.id;
+            
+            // Delete simulated profile from local state/localStorage
+            setProfiles(prev => prev.filter(p => p.id !== oldId));
+          } else {
+            console.error('Could not sign up or sign in to Supabase Auth:', signUpError?.message || authError.message);
+          }
+        } else if (authData?.user) {
+          console.log('Signed in to Supabase Auth successfully:', authData.user.id);
+          if (updatedProfile.id !== authData.user.id) {
+            const oldId = updatedProfile.id;
+            updatedProfile.id = authData.user.id;
+            
+            // Delete simulated profile from DB if it exists with the old ID
+            if (oldId.startsWith('user-')) {
+              console.log('Cleaning up simulated profile from DB:', oldId);
+              await supabase.from('profiles').delete().eq('id', oldId);
+            }
+            
+            // Delete old simulated profile from local list
+            setProfiles(prev => prev.filter(p => p.id !== oldId));
+          }
+        }
+      } catch (err) {
+        console.error('Error in Supabase Auth alignment during logIn:', err);
+      }
+    }
+
+    setProfiles(prev => {
+      const filtered = prev.filter(p => p.id !== profile.id && p.id !== updatedProfile.id);
+      const nextProfiles = [...filtered, updatedProfile];
+      localStorage.setItem('garf_profiles', JSON.stringify(nextProfiles));
+      return nextProfiles;
+    });
+
     setCurrentUser(updatedProfile);
     localStorage.setItem('garf_current_user', JSON.stringify(updatedProfile));
     
@@ -1993,13 +2110,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     detailedTurfs?: Array<Omit<TurfDetails, 'id' | 'venue_id' | 'created_at' | 'updated_at'>>
   ) => {
     if (!currentUser) return;
-
-    // Await profile update in Supabase to 'owner_pending' before inserting the venue
-    // to strictly prevent the foreign key constraint from failing!
-    if (isSupabaseConfigured && supabase) {
-      const updatedProfile = { ...currentUser, role: 'owner_pending' as const };
-      await saveProfileToSupabase(updatedProfile);
-    }
 
     const vId = `venue-${Math.random().toString(36).substr(2, 9)}`;
     const newV: Venue = {
@@ -2039,6 +2149,150 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       created_at: new Date().toISOString()
     }));
 
+    // Generate initial slots for these new resources
+    const sHour = parseInt((newV.operating_hours_start || '09:00').split(':')[0]) || 9;
+    const eHour = parseInt((newV.operating_hours_end || '23:00').split(':')[0]) || 23;
+    const allNewSlots: Slot[] = [];
+
+    newRes.forEach(r => {
+      for (let i = 0; i < 8; i++) {
+        const dateStr = getOffsetDateString(i);
+        for (let hr = sHour; hr < eHour; hr++) {
+          const startStr = `${hr.toString().padStart(2, '0')}:00`;
+          const endStr = `${(hr + 1).toString().padStart(2, '0')}:00`;
+          allNewSlots.push({
+            id: `slot-${r.id}-${dateStr}-${hr}`,
+            venue_id: vId,
+            resource_id: r.id,
+            slot_date: dateStr,
+            start_time: startStr,
+            end_time: endStr,
+            status: 'available',
+            booking_id: null,
+            held_until: null,
+            blocked_reason: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        }
+      }
+    });
+
+    // Save all newly generated entities to Supabase FIRST in a strict transactional manner
+    if (isSupabaseConfigured && supabase) {
+      // 1. Await profile update in Supabase to 'owner_pending' before inserting the venue
+      // to strictly prevent the foreign key constraint from failing!
+      try {
+        const updatedProfile = { ...currentUser, role: 'owner_pending' as const };
+        console.log('registerVenue: Syncing updated user profile to owner_pending in Supabase...');
+        await saveProfileToSupabase(updatedProfile);
+      } catch (err: any) {
+        console.error('registerVenue: Profile save failed:', err);
+        throw new Error(`Failed to update profile to owner_pending: ${err.message}`);
+      }
+
+      try {
+        // 2. Save Venue
+        const venuePayload = {
+          id: newV.id,
+          owner_id: newV.owner_id,
+          name: newV.name,
+          type: newV.type,
+          description: newV.description,
+          address: newV.address,
+          city: newV.city,
+          state: newV.state,
+          pincode: newV.pincode,
+          phone: newV.phone,
+          email: newV.email,
+          cover_image: newV.cover_image,
+          gallery_images: newV.gallery_images || [],
+          amenities: newV.amenities || [],
+          games_available: newV.games_available || [],
+          price_per_hour: Number(newV.price_per_hour),
+          rating: Number(newV.rating) || 0,
+          total_reviews: Number(newV.total_reviews) || 0,
+          is_verified: newV.is_verified || false,
+          is_active: newV.is_active || false,
+          is_featured: newV.is_featured || false,
+          is_suspended: newV.is_suspended || false,
+          operating_hours_start: newV.operating_hours_start || '09:00',
+          operating_hours_end: newV.operating_hours_end || '23:00',
+          operating_days: newV.operating_days || [],
+          commission_percent: Number(newV.commission_percent) || 10,
+          rejection_reason: newV.rejection_reason || null,
+          verified_at: newV.verified_at || null,
+          created_at: newV.created_at || new Date().toISOString(),
+          status: 'pending'
+        };
+        
+        console.log('registerVenue: Sending gaming_cafes insert payload:', venuePayload);
+        const { data: dbVenue, error: venueError } = await supabase
+          .from('gaming_cafes')
+          .insert(venuePayload)
+          .select();
+        console.log('registerVenue: gaming_cafes insert response data:', dbVenue, 'error:', venueError);
+        
+        if (venueError) {
+          throw new Error(`Failed to save Gaming Cafe to Database: ${venueError.message}`);
+        }
+
+        // 3. Save Venue Resources
+        const resourcesPayload = newRes.map(res => ({
+          id: res.id,
+          venue_id: res.venue_id,
+          name: res.name,
+          type: res.type,
+          price_per_hour: Number(res.price_per_hour),
+          is_active: res.is_active,
+          specifications: res.specifications || '',
+          sort_order: res.sort_order,
+          created_at: res.created_at
+        }));
+        
+        console.log('registerVenue: Sending venue_resources insert payload:', resourcesPayload);
+        const { data: dbResources, error: resError } = await supabase
+          .from('venue_resources')
+          .insert(resourcesPayload)
+          .select();
+        console.log('registerVenue: venue_resources insert response data:', dbResources, 'error:', resError);
+        
+        if (resError) {
+          throw new Error(`Failed to save Venue Resources to Database: ${resError.message}`);
+        }
+
+        // 4. Save Slots in bulk
+        const slotsPayload = allNewSlots.map(slot => ({
+          id: slot.id,
+          venue_id: slot.venue_id,
+          resource_id: slot.resource_id,
+          slot_date: slot.slot_date,
+          start_time: slot.start_time,
+          end_time: slot.end_time,
+          status: slot.status,
+          booking_id: slot.booking_id || null,
+          held_until: slot.held_until || null,
+          blocked_reason: slot.blocked_reason || null,
+          created_at: slot.created_at,
+          updated_at: slot.updated_at
+        }));
+        
+        console.log('registerVenue: Sending slots insert payload count:', slotsPayload.length);
+        const { error: slotError } = await supabase
+          .from('slots')
+          .insert(slotsPayload);
+        
+        if (slotError) {
+          throw new Error(`Failed to save Slots to Database: ${slotError.message}`);
+        }
+        
+      } catch (err: any) {
+        console.error('Error in registerVenue Supabase execution:', err);
+        throw err; // Stop workflow immediately
+      }
+    }
+
+    // ONLY update local React states and local storage if DB inserts succeeded (or Supabase is offline)
     setVenues(prev => [...prev, newV]);
     setResources(prev => [...prev, ...newRes]);
 
@@ -2119,120 +2373,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // Generate initial slots for these new resources
-    const sHour = parseInt((newV.operating_hours_start || '09:00').split(':')[0]) || 9;
-    const eHour = parseInt((newV.operating_hours_end || '23:00').split(':')[0]) || 23;
-    const allNewSlots: Slot[] = [];
-
-    newRes.forEach(r => {
-      for (let i = 0; i < 8; i++) {
-        const dateStr = getOffsetDateString(i);
-        for (let hr = sHour; hr < eHour; hr++) {
-          const startStr = `${hr.toString().padStart(2, '0')}:00`;
-          const endStr = `${(hr + 1).toString().padStart(2, '0')}:00`;
-          allNewSlots.push({
-            id: `slot-${r.id}-${dateStr}-${hr}`,
-            venue_id: vId,
-            resource_id: r.id,
-            slot_date: dateStr,
-            start_time: startStr,
-            end_time: endStr,
-            status: 'available',
-            booking_id: null,
-            held_until: null,
-            blocked_reason: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        }
-      }
-    });
     setSlots(prev => [...prev, ...allNewSlots]);
 
-    // Save all newly generated entities to Supabase in a bulk & validated manner
-    if (isSupabaseConfigured && supabase) {
-      try {
-        // 1. Save Venue
-        const venuePayload = {
-          id: newV.id,
-          owner_id: newV.owner_id,
-          name: newV.name,
-          type: newV.type,
-          description: newV.description,
-          address: newV.address,
-          city: newV.city,
-          state: newV.state,
-          pincode: newV.pincode,
-          phone: newV.phone,
-          email: newV.email,
-          cover_image: newV.cover_image,
-          gallery_images: newV.gallery_images,
-          amenities: newV.amenities,
-          games_available: newV.games_available,
-          price_per_hour: Number(newV.price_per_hour),
-          rating: Number(newV.rating),
-          total_reviews: Number(newV.total_reviews),
-          is_verified: newV.is_verified,
-          is_active: newV.is_active,
-          is_featured: newV.is_featured,
-          is_suspended: newV.is_suspended,
-          operating_hours_start: newV.operating_hours_start,
-          operating_hours_end: newV.operating_hours_end,
-          operating_days: newV.operating_days,
-          commission_percent: Number(newV.commission_percent),
-          rejection_reason: newV.rejection_reason,
-          verified_at: newV.verified_at,
-          created_at: newV.created_at,
-          status: 'pending'
-        };
-        const { error: venueError } = await supabase.from('gaming_cafes').upsert(venuePayload, { onConflict: 'id' });
-        if (venueError) {
-          throw new Error(`Failed to save Gaming Cafe to Database: ${venueError.message}`);
-        }
-
-        // 2. Save Venue Resources
-        const resourcesPayload = newRes.map(res => ({
-          id: res.id,
-          venue_id: res.venue_id,
-          name: res.name,
-          type: res.type,
-          price_per_hour: Number(res.price_per_hour),
-          is_active: res.is_active,
-          specifications: res.specifications,
-          sort_order: res.sort_order,
-          created_at: res.created_at
-        }));
-        const { error: resError } = await supabase.from('venue_resources').upsert(resourcesPayload, { onConflict: 'id' });
-        if (resError) {
-          throw new Error(`Failed to save Venue Resources to Database: ${resError.message}`);
-        }
-
-        // 3. Save Slots in bulk
-        const slotsPayload = allNewSlots.map(slot => ({
-          id: slot.id,
-          venue_id: slot.venue_id,
-          resource_id: slot.resource_id,
-          slot_date: slot.slot_date,
-          start_time: slot.start_time,
-          end_time: slot.end_time,
-          status: slot.status,
-          booking_id: slot.booking_id,
-          held_until: slot.held_until,
-          blocked_reason: slot.blocked_reason,
-          created_at: slot.created_at,
-          updated_at: slot.updated_at
-        }));
-        const { error: slotError } = await supabase.from('slots').upsert(slotsPayload, { onConflict: 'id' });
-        if (slotError) {
-          throw new Error(`Failed to save Slots to Database: ${slotError.message}`);
-        }
-      } catch (err: any) {
-        console.error('Error in registerVenue Supabase execution:', err);
-        throw err;
-      }
-    }
-
-    // Update user role to Owner Pending
+    // Update user role locally
     setProfiles(prev => {
       const updated = prev.map(p => p.id === currentUser.id ? { ...p, role: 'owner_pending' as const } : p);
       localStorage.setItem('garf_profiles', JSON.stringify(updated));
@@ -4781,7 +4924,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 2. Fetch venues
       let venueQuery = supabase.from('gaming_cafes').select('*');
-      if (!currentUser || currentUser.role !== 'admin') {
+      const isAdminUser = currentUser?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'garfisit@gmail.com';
+      if (!isAdminUser) {
         if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
           venueQuery = venueQuery.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
         } else {
