@@ -2481,14 +2481,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const deleteVenue = (venueId: string) => {
+  const deleteVenue = async (venueId: string) => {
     setVenues(prev => prev.filter(v => v.id !== venueId));
     setResources(prev => prev.filter(r => r.venue_id !== venueId));
     setSlots(prev => prev.filter(s => s.venue_id !== venueId));
+    setOffers(prev => prev.filter(o => o.venue_id !== venueId));
+    setReviews(prev => prev.filter(rv => rv.venue_id !== venueId));
+    setBookings(prev => prev.filter(b => b.venue_id !== venueId));
+
     if (isSupabaseConfigured && supabase) {
-      supabase.from('gaming_cafes').delete().eq('id', venueId).then(({ error }) => {
-        if (error) console.error('Failed to delete venue/cafe from Supabase:', error.message);
-      });
+      try {
+        await supabase.from('slots').delete().eq('venue_id', venueId);
+        await supabase.from('venue_resources').delete().eq('venue_id', venueId);
+        await supabase.from('offers').delete().eq('venue_id', venueId);
+        await supabase.from('reviews').delete().eq('venue_id', venueId);
+        const { error } = await supabase.from('gaming_cafes').delete().eq('id', venueId);
+        if (error) {
+          console.error('Failed to delete venue/cafe from Supabase:', error.message);
+          throw new Error(error.message);
+        }
+      } catch (err: any) {
+        console.error('Error deleting venue from Supabase:', err);
+        throw err;
+      }
     }
   };
 

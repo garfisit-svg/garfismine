@@ -293,6 +293,29 @@ export const GarfAdminPage: React.FC = () => {
     setTargetUserForCoins(null);
   };
 
+  // Handle Delete Confirmation
+  const handleConfirmDelete = async () => {
+    if (!confirmDeleteId) return;
+
+    if (confirmDeleteType === 'venue') {
+      const targetVenue = venues.find(v => v.id === confirmDeleteId);
+      const vName = targetVenue?.name || 'Gaming Cafe';
+      const load = toast.loading(`Deleting ${vName}...`);
+
+      try {
+        await deleteVenue(confirmDeleteId);
+        adminLogs.addLog(`Deleted venue entirely: ${vName} (${confirmDeleteId})`, 'warning');
+        toast.success(`${vName} has been permanently deleted!`, { id: load });
+        await syncDatabase(true);
+      } catch (err: any) {
+        console.error('Delete venue error:', err);
+        toast.error(`Delete failed: ${err?.message || 'Unknown error'}`, { id: load });
+      }
+    }
+    setConfirmDeleteId(null);
+    setConfirmDeleteType(null);
+  };
+
   if (supabaseLoading) {
     return (
       <div className="min-h-[80vh] flex flex-col justify-center items-center text-white font-sans gap-4">
@@ -692,10 +715,22 @@ export const GarfAdminPage: React.FC = () => {
                               setRejectingVenueId(v.id);
                               setRejectModalOpen(true);
                             }}
-                            className="px-4 py-3 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition"
+                            className="px-4 py-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition"
                           >
                             <X className="h-4 w-4" />
                             <span>Reject Submission</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setConfirmDeleteId(v.id);
+                              setConfirmDeleteType('venue');
+                            }}
+                            className="px-4 py-3 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer transition"
+                            title="Delete Venue Entirely"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span>Delete Entirely</span>
                           </button>
                         </div>
                       </div>
@@ -1119,6 +1154,50 @@ export const GarfAdminPage: React.FC = () => {
                 className="flex-1 py-2.5 bg-amber-500 text-black rounded-xl text-xs font-bold uppercase shadow-lg hover:bg-amber-400"
               >
                 Grant Coins
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* DELETE CONFIRMATION MODAL */}
+      {confirmDeleteId && confirmDeleteType === 'venue' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#12121A] border border-[#232338] rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20">
+                <Trash2 className="h-6 w-6 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white uppercase tracking-wider">Delete Gaming Cafe</h3>
+                <p className="text-xs text-text-secondary">Permanent removal from database</p>
+              </div>
+            </div>
+
+            <div className="bg-[#161622] p-4 rounded-2xl border border-[#2a2a3e] space-y-2">
+              <p className="text-xs text-text-secondary">
+                Are you sure you want to permanently delete <span className="text-white font-bold">{venues.find(v => v.id === confirmDeleteId)?.name || 'this venue'}</span>?
+              </p>
+              <p className="text-[11px] text-red-400/80 font-mono">
+                ⚠️ All associated resources, slots, offers, and reviews for this venue will be deleted entirely.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setConfirmDeleteId(null);
+                  setConfirmDeleteType(null);
+                }}
+                className="flex-1 py-3 bg-white/5 border border-white/10 text-white hover:bg-white/10 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-red-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Delete Entirely</span>
               </button>
             </div>
           </div>
