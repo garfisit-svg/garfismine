@@ -2199,15 +2199,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       owner_id: currentUser.id,
       rating: 0,
       total_reviews: 0,
-      is_verified: false,
-      is_active: false,
+      is_verified: true,
+      is_active: true,
       is_featured: false,
       is_suspended: false,
       commission_percent: 10,
       rejection_reason: null,
-      verified_at: null,
+      verified_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
-      status: 'pending'
+      status: 'approved'
     };
 
     const newRes: VenueResource[] = resourcesData.map((res, i) => ({
@@ -2283,8 +2283,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           price_per_hour: Number(newV.price_per_hour),
           rating: Number(newV.rating) || 0,
           total_reviews: Number(newV.total_reviews) || 0,
-          is_verified: newV.is_verified || false,
-          is_active: newV.is_active || false,
+          is_verified: newV.is_verified ?? true,
+          is_active: newV.is_active ?? true,
           is_featured: newV.is_featured || false,
           is_suspended: newV.is_suspended || false,
           operating_hours_start: newV.operating_hours_start || '09:00',
@@ -2292,9 +2292,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           operating_days: newV.operating_days || [],
           commission_percent: Number(newV.commission_percent) || 10,
           rejection_reason: newV.rejection_reason || null,
-          verified_at: newV.verified_at || null,
+          verified_at: newV.verified_at || new Date().toISOString(),
           created_at: newV.created_at || new Date().toISOString(),
-          status: 'pending'
+          status: newV.status || 'approved'
         };
         
         console.log('registerVenue: Sending gaming_cafes upsert payload:', venuePayload);
@@ -2522,12 +2522,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!finalVenueId) return;
 
     const newR: VenueResource = {
+      is_active: true,
       ...finalResource,
       id: `res-${finalVenueId}-${Math.random().toString(36).substr(2, 5)}`,
       venue_id: finalVenueId,
       created_at: new Date().toISOString()
     };
     setResources(prev => [...prev, newR]);
+
+    // Ensure the parent venue is verified & active so the user panel displays it
+    setVenues(prev => prev.map(v => {
+      if (v.id === finalVenueId && (!v.is_active || v.status === 'pending')) {
+        const up = { ...v, is_active: true, is_verified: true, status: 'approved' as const };
+        if (isSupabaseConfigured && supabase) saveVenueToSupabase(up);
+        return up;
+      }
+      return v;
+    }));
+
+    // Sync gamingEquipments state
+    setGamingEquipments(prev => {
+      if (prev.some(eq => eq.id === newR.id)) return prev;
+      return [...prev, {
+        id: newR.id,
+        venue_id: finalVenueId,
+        equipment_type: newR.type === 'pc' ? 'pc' : 'ps5',
+        custom_name: newR.name,
+        total_quantity: 1,
+        available_quantity: 1,
+        specifications: newR.specifications || 'Standard gaming node specs',
+        price_per_hour: newR.price_per_hour,
+        per_head_or_per_station: 'per_station',
+        min_booking_hours: 1,
+        games_available: ['valorant', 'csgo', 'gta5'],
+        accessories_included: ['Headphones', 'Mousepad'],
+        is_active: true,
+        photos: [],
+        sort_order: newR.sort_order || 1,
+        created_at: newR.created_at,
+        updated_at: newR.created_at
+      }];
+    });
+
     setTimeout(() => {
       generateSlotsForNext7Days(newR.id);
     }, 50);
@@ -3779,6 +3815,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
 
     setVenues(prev => [...prev, newV]);
+    
+    // Create matching VenueResource objects so stations show up in user panel
+    const createdRes: VenueResource[] = [];
+    instantiatedEquipments.forEach((eq, idx) => {
+      const res: VenueResource = {
+        id: eq.id,
+        venue_id: vId,
+        name: eq.custom_name || `Gaming Station #${idx + 1}`,
+        type: eq.equipment_type === 'pc' ? 'pc' : 'ps5',
+        price_per_hour: eq.price_per_hour || venueData.price_per_hour || 120,
+        is_active: true,
+        specifications: eq.specifications || 'High performance gaming node',
+        sort_order: idx + 1,
+        created_at: nowStr
+      };
+      createdRes.push(res);
+    });
+
+    instantiatedTurfs.forEach((tf, idx) => {
+      const res: VenueResource = {
+        id: tf.id,
+        venue_id: vId,
+        name: tf.turf_name || `Turf Pitch #${idx + 1}`,
+        type: 'turf',
+        price_per_hour: tf.hourly_rate || venueData.price_per_hour || 1000,
+        is_active: true,
+        specifications: `${tf.turf_type?.toUpperCase() || 'MULTI-SPORT'} - ${tf.dimensions || 'Standard Turf'}`,
+        sort_order: createdRes.length + idx + 1,
+        created_at: nowStr
+      };
+      createdRes.push(res);
+    });
+
+    if (createdRes.length > 0) {
+      setResources(prev => [...prev, ...createdRes]);
+      setTimeout(() => {
+        createdRes.forEach(r => generateSlotsForNext7Days(r.id));
+      }, 50);
+    }
     
     if (instantiatedEquipments.length > 0) {
       setGamingEquipments(prev => [...prev, ...instantiatedEquipments]);
