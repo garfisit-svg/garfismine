@@ -14,7 +14,7 @@ export const BookingFlowPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   
   const { 
-    venues, resources, slots, currentUser, offers, createBookingHold, confirmOnlineBooking, platformFee, bookings, profiles, addResource, generateSlotsForNext7Days
+    venues, resources, slots, currentUser, offers, createBookingHold, confirmOnlineBooking, platformFee, bookings, profiles, generateSlotsForNext7Days
   } = useApp();
 
   const venue = venues.find(v => v.id === venueId);
@@ -362,42 +362,16 @@ export const BookingFlowPage: React.FC = () => {
               <span className="text-xs uppercase font-mono text-text-secondary tracking-widest font-bold block">2. CHOOSE STATION / COUPLING RIG</span>
               
               {venueResources.length === 0 ? (
-                <div className="bg-[#12121A] border border-brand-purple/30 p-6 rounded-2xl text-center space-y-4">
+                <div className="bg-[#12121A] border border-[#232338] p-6 rounded-2xl text-center space-y-2">
                   <div className="p-3 bg-brand-purple/10 text-brand-purple rounded-xl w-fit mx-auto">
                     <Cpu className="h-6 w-6" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-white text-base">No Gaming Stations Listed For This Arena</h4>
-                    <p className="text-xs text-text-secondary mt-1 max-w-md mx-auto">
-                      This gaming arena does not have active station rigs configured in the layout registry yet. Click below to instantly auto-provision standard gaming PC rigs and console stations for this arena.
+                    <h4 className="font-bold text-white text-base">No Gaming Stations Available</h4>
+                    <p className="text-xs text-text-secondary mt-1 max-w-md mx-auto font-mono">
+                      This gaming arena does not have active station rigs or slots configured by the venue owner yet.
                     </p>
                   </div>
-                  <button
-                    onClick={() => {
-                      if (!venue) return;
-                      addResource(venue.id, {
-                        name: 'Gaming PC Station #1 (RTX 4070)',
-                        type: 'pc',
-                        specifications: 'Intel i7 14700F, RTX 4070, 32GB DDR5 RAM, 240Hz Gaming Display',
-                        price_per_hour: venue.price_per_hour || 120,
-                        is_active: true,
-                        sort_order: 1
-                      });
-                      addResource(venue.id, {
-                        name: 'PlayStation 5 Console Station #1',
-                        type: 'ps5',
-                        specifications: 'PlayStation 5 Console, DualSense Controller, 4K HDR OLED TV',
-                        price_per_hour: (venue.price_per_hour || 120) + 30,
-                        is_active: true,
-                        sort_order: 2
-                      });
-                      toast.success('Default gaming stations auto-provisioned! Select your station below.');
-                    }}
-                    className="py-3 px-6 bg-brand-purple hover:bg-brand-purple/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-brand-purple/20 transition cursor-pointer flex items-center justify-center gap-2 mx-auto"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    <span>Auto-Provision Default Gaming Stations</span>
-                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
