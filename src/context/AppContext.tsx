@@ -739,11 +739,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             .upsert(fallbackPayload, { onConflict: 'id' });
             
           if (fallbackError) {
-            console.error('Failed to upsert profile in fallback mode:', fallbackError.message);
+            console.warn('Profile sync notice in fallback mode:', fallbackError.message);
           }
         }
       } catch (err) {
-        console.error('Error executing saveProfileToSupabase:', err);
+        console.warn('Error executing saveProfileToSupabase:', err);
       }
     }
   };
@@ -784,9 +784,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           status: venue.status || (venue.is_verified ? 'approved' : 'pending')
         };
         const { error } = await supabase.from('gaming_cafes').upsert(payload, { onConflict: 'id' });
-        if (error) console.error('Failed to upsert venue/cafe to Supabase:', error.message);
+        if (error) console.warn('Supabase venue upsert notice:', error.message);
       } catch (err) {
-        console.error('Error executing saveVenueToSupabase:', err);
+        console.warn('Error executing saveVenueToSupabase:', err);
       }
     }
   };
@@ -806,9 +806,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           created_at: resource.created_at
         };
         const { error } = await supabase.from('venue_resources').upsert(payload, { onConflict: 'id' });
-        if (error) console.error('Failed to upsert resource to Supabase:', error.message);
+        if (error) console.warn('Supabase resource upsert notice:', error.message);
       } catch (err) {
-        console.error('Error executing saveResourceToSupabase:', err);
+        console.warn('Error executing saveResourceToSupabase:', err);
       }
     }
   };
@@ -831,9 +831,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updated_at: slot.updated_at
         };
         const { error } = await supabase.from('slots').upsert(payload, { onConflict: 'id' });
-        if (error) console.error('Failed to upsert slot to Supabase:', error.message);
+        if (error) console.warn('Supabase slot upsert notice:', error.message);
       } catch (err) {
-        console.error('Error executing saveSlotToSupabase:', err);
+        console.warn('Error executing saveSlotToSupabase:', err);
       }
     }
   };
@@ -878,9 +878,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updated_at: booking.updated_at
         };
         const { error } = await supabase.from('bookings').upsert(payload, { onConflict: 'id' });
-        if (error) console.error('Failed to upsert booking to Supabase:', error.message);
+        if (error) console.warn('Supabase booking upsert notice:', error.message);
       } catch (err) {
-        console.error('Error executing saveBookingToSupabase:', err);
+        console.warn('Error executing saveBookingToSupabase:', err);
       }
     }
   };
