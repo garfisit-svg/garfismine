@@ -813,6 +813,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const saveResourcesToSupabaseBulk = async (resourcesList: VenueResource[]) => {
+    if (isSupabaseConfigured && supabase && resourcesList.length > 0) {
+      try {
+        const payload = resourcesList.map(resource => ({
+          id: resource.id,
+          venue_id: resource.venue_id,
+          name: resource.name,
+          type: resource.type,
+          price_per_hour: Number(resource.price_per_hour),
+          is_active: resource.is_active,
+          specifications: resource.specifications || '',
+          sort_order: resource.sort_order,
+          created_at: resource.created_at
+        }));
+        const { error } = await supabase.from('venue_resources').upsert(payload, { onConflict: 'id' });
+        if (error) {
+          console.warn('Supabase bulk resources notice:', error.message);
+        }
+      } catch (err) {
+        console.warn('Error executing saveResourcesToSupabaseBulk:', err);
+      }
+    }
+  };
+
   const saveSlotToSupabase = async (slot: Slot) => {
     if (isSupabaseConfigured && supabase) {
       try {
@@ -834,6 +858,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (error) console.warn('Supabase slot upsert notice:', error.message);
       } catch (err) {
         console.warn('Error executing saveSlotToSupabase:', err);
+      }
+    }
+  };
+
+  const saveSlotsToSupabaseBulk = async (slotsList: Slot[]) => {
+    if (isSupabaseConfigured && supabase && slotsList.length > 0) {
+      try {
+        const chunkSize = 50;
+        for (let i = 0; i < slotsList.length; i += chunkSize) {
+          const chunk = slotsList.slice(i, i + chunkSize);
+          const payload = chunk.map(slot => ({
+            id: slot.id,
+            venue_id: slot.venue_id,
+            resource_id: slot.resource_id,
+            slot_date: slot.slot_date,
+            start_time: slot.start_time,
+            end_time: slot.end_time,
+            status: slot.status,
+            booking_id: slot.booking_id || null,
+            held_until: slot.held_until || null,
+            blocked_reason: slot.blocked_reason || null,
+            created_at: slot.created_at,
+            updated_at: slot.updated_at
+          }));
+          const { error } = await supabase.from('slots').upsert(payload, { onConflict: 'id' });
+          if (error) {
+            console.warn('Supabase bulk slots notice:', error.message);
+            // If Row-Level Security blocks anon key writes, break loop to prevent console log flooding
+            if (error.message?.includes('row-level security') || error.message?.includes('401') || error.message?.includes('Unauthorized')) {
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error executing saveSlotsToSupabaseBulk:', err);
       }
     }
   };
@@ -942,12 +1001,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const next = typeof val === 'function' ? val(prev) : val;
       if (isSupabaseConfigured && supabase) {
         const prevMap = new Map(prev.map(r => [r.id, r]));
+        const changed: VenueResource[] = [];
         next.forEach(r => {
           const p = prevMap.get(r.id);
           if (!p || JSON.stringify(p) !== JSON.stringify(r)) {
-            saveResourceToSupabase(r);
+            changed.push(r);
           }
         });
+        if (changed.length > 0) {
+          saveResourcesToSupabaseBulk(changed);
+        }
         const nextIds = new Set(next.map(r => r.id));
         prev.forEach(r => {
           if (!nextIds.has(r.id)) {
@@ -966,12 +1029,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const next = typeof val === 'function' ? val(prev) : val;
       if (isSupabaseConfigured && supabase) {
         const prevMap = new Map(prev.map(s => [s.id, s]));
+        const changed: Slot[] = [];
         next.forEach(s => {
           const p = prevMap.get(s.id);
           if (!p || JSON.stringify(p) !== JSON.stringify(s)) {
-            saveSlotToSupabase(s);
+            changed.push(s);
           }
         });
+        if (changed.length > 0) {
+          saveSlotsToSupabaseBulk(changed);
+        }
         const nextIds = new Set(next.map(s => s.id));
         prev.forEach(s => {
           if (!nextIds.has(s.id)) {

@@ -548,6 +548,9 @@ CREATE INDEX idx_bookings_date ON bookings(booking_date);
 -- =========================================================================
 --  🛡️ ROW LEVEL SECURITY POLICIES FOR ALL APP TABLES
 -- =========================================================================
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow full access to profiles" ON profiles;
 CREATE POLICY "Allow full access to profiles" ON profiles FOR ALL USING (true) WITH CHECK (true);
