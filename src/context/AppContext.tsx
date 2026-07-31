@@ -2528,6 +2528,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       created_at: new Date().toISOString()
     };
     setResources(prev => [...prev, newR]);
+    setTimeout(() => {
+      generateSlotsForNext7Days(newR.id);
+    }, 50);
   };
 
   const updateResource = (resourceId: string, resourceData: Partial<VenueResource>) => {

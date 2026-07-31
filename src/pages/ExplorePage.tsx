@@ -118,7 +118,7 @@ export const ExplorePage: React.FC = () => {
 
     // Type Filter (By Station Preference: pc, ps5, vr, etc.)
     if (selectedType !== 'All') {
-      const venueResources = resources?.filter(r => r.venue_id === v.id && r.is_active) || [];
+      const venueResources = resources?.filter(r => r.venue_id === v.id && r.is_active !== false) || [];
       const hasMatchingResource = venueResources.some(r => r.type === selectedType || (selectedType === 'ps5' && r.type === 'xbox'));
       if (!hasMatchingResource) {
         return false;

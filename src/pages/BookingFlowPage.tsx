@@ -14,11 +14,11 @@ export const BookingFlowPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   
   const { 
-    venues, resources, slots, currentUser, offers, createBookingHold, confirmOnlineBooking, platformFee, bookings, profiles
+    venues, resources, slots, currentUser, offers, createBookingHold, confirmOnlineBooking, platformFee, bookings, profiles, addResource, generateSlotsForNext7Days
   } = useApp();
 
   const venue = venues.find(v => v.id === venueId);
-  const venueResources = resources.filter(r => r.venue_id === venueId && r.is_active);
+  const venueResources = resources.filter(r => r.venue_id === venueId && r.is_active !== false);
 
   const ownerProfile = React.useMemo(() => {
     if (!venue) return null;
@@ -43,8 +43,37 @@ export const BookingFlowPage: React.FC = () => {
     if (rId) {
       return venueResources.find(item => item.id === rId) || null;
     }
-    return null;
+    return venueResources.length > 0 ? venueResources[0] : null;
   });
+
+  // Auto-sync / Auto-select resource when venueResources load or query params change
+  useEffect(() => {
+    if (venueResources.length > 0) {
+      const rId = searchParams.get('resourceId');
+      if (rId) {
+        const matched = venueResources.find(item => item.id === rId);
+        if (matched) {
+          setSelectedResource(matched);
+          return;
+        }
+      }
+      if (!selectedResource || !venueResources.some(r => r.id === selectedResource.id)) {
+        setSelectedResource(venueResources[0]);
+      }
+    } else {
+      setSelectedResource(null);
+    }
+  }, [venueResources, searchParams]);
+
+  // Ensure slots exist for selected resource and date
+  useEffect(() => {
+    if (selectedResource && generateSlotsForNext7Days) {
+      const hasSlots = slots.some(s => s.resource_id === selectedResource.id && s.slot_date === selectedDate);
+      if (!hasSlots) {
+        generateSlotsForNext7Days(selectedResource.id);
+      }
+    }
+  }, [selectedResource, selectedDate, slots, generateSlotsForNext7Days]);
   const [selectedTimes, setSelectedTimes] = useState<string[]>([]); // list of start times, e.g. ["10:00", "11:00"]
 
   // Step 2 Core State
@@ -331,33 +360,74 @@ export const BookingFlowPage: React.FC = () => {
             {/* B. RESOURCE SELECTOR */}
             <div className="space-y-4">
               <span className="text-xs uppercase font-mono text-text-secondary tracking-widest font-bold block">2. CHOOSE STATION / COUPLING RIG</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {venueResources.map(res => {
-                  const isSel = selectedResource?.id === res.id;
-                  return (
-                    <button
-                      key={res.id}
-                      onClick={() => { setSelectedResource(res); setSelectedTimes([]); }}
-                      className={`text-left p-5 rounded-2xl bg-[#12121A] border transition flex flex-col justify-between gap-4 w-full cursor-pointer hover:bg-[#161622] ${isSel ? 'border-brand-purple glow-purple bg-brand-purple/5' : 'border-[#2a2a3e]'}`}
-                    >
-                      <div className="space-y-1.5 w-full">
-                        <div className="flex items-center gap-2 text-brand-purple">
-                          {res.type === 'pc' ? <Cpu className="h-5 w-5" /> : <Tv className="h-5 w-5" />}
-                          <span className="font-bold text-base text-white">{res.name}</span>
+              
+              {venueResources.length === 0 ? (
+                <div className="bg-[#12121A] border border-brand-purple/30 p-6 rounded-2xl text-center space-y-4">
+                  <div className="p-3 bg-brand-purple/10 text-brand-purple rounded-xl w-fit mx-auto">
+                    <Cpu className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-base">No Gaming Stations Listed For This Arena</h4>
+                    <p className="text-xs text-text-secondary mt-1 max-w-md mx-auto">
+                      This gaming arena does not have active station rigs configured in the layout registry yet. Click below to instantly auto-provision standard gaming PC rigs and console stations for this arena.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!venue) return;
+                      addResource(venue.id, {
+                        name: 'Gaming PC Station #1 (RTX 4070)',
+                        type: 'pc',
+                        specifications: 'Intel i7 14700F, RTX 4070, 32GB DDR5 RAM, 240Hz Gaming Display',
+                        price_per_hour: venue.price_per_hour || 120,
+                        is_active: true,
+                        sort_order: 1
+                      });
+                      addResource(venue.id, {
+                        name: 'PlayStation 5 Console Station #1',
+                        type: 'ps5',
+                        specifications: 'PlayStation 5 Console, DualSense Controller, 4K HDR OLED TV',
+                        price_per_hour: (venue.price_per_hour || 120) + 30,
+                        is_active: true,
+                        sort_order: 2
+                      });
+                      toast.success('Default gaming stations auto-provisioned! Select your station below.');
+                    }}
+                    className="py-3 px-6 bg-brand-purple hover:bg-brand-purple/90 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-brand-purple/20 transition cursor-pointer flex items-center justify-center gap-2 mx-auto"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    <span>Auto-Provision Default Gaming Stations</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {venueResources.map(res => {
+                    const isSel = selectedResource?.id === res.id;
+                    return (
+                      <button
+                        key={res.id}
+                        onClick={() => { setSelectedResource(res); setSelectedTimes([]); }}
+                        className={`text-left p-5 rounded-2xl bg-[#12121A] border transition flex flex-col justify-between gap-4 w-full cursor-pointer hover:bg-[#161622] ${isSel ? 'border-brand-purple glow-purple bg-brand-purple/5' : 'border-[#2a2a3e]'}`}
+                      >
+                        <div className="space-y-1.5 w-full">
+                          <div className="flex items-center gap-2 text-brand-purple">
+                            {res.type === 'pc' ? <Cpu className="h-5 w-5" /> : <Tv className="h-5 w-5" />}
+                            <span className="font-bold text-base text-white">{res.name}</span>
+                          </div>
+                          <p className="text-xs text-text-secondary leading-relaxed font-mono truncate-3-lines">
+                            {res.specifications || 'Standard elite-class gameplay configurations.'}
+                          </p>
                         </div>
-                        <p className="text-xs text-text-secondary leading-relaxed font-mono truncate-3-lines">
-                          {res.specifications || 'Standard elite-class gameplay configurations.'}
-                        </p>
-                      </div>
 
-                      <div className="flex justify-between items-end w-full border-t border-border-dark/40 pt-3">
-                        <span className="text-[10px] text-text-secondary font-mono">RATE PER HOUR</span>
-                        <p className="text-lg font-black font-mono text-white">₹{res.price_per_hour}/hr</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                        <div className="flex justify-between items-end w-full border-t border-border-dark/40 pt-3">
+                          <span className="text-[10px] text-text-secondary font-mono">RATE PER HOUR</span>
+                          <p className="text-lg font-black font-mono text-white">₹{res.price_per_hour}/hr</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* C. TIME SLOT GRID */}

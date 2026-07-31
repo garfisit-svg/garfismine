@@ -15,7 +15,7 @@ export const VenueDetailPage: React.FC = () => {
 
   // Find venue
   const venue = venues.find(v => v.id === id);
-  const venueResources = resources.filter(r => r.venue_id === id && r.is_active);
+  const venueResources = resources.filter(r => r.venue_id === id && r.is_active !== false);
   const venueOffers = offers.filter(o => o.venue_id === id && o.is_active);
   const venueReviews = reviews.filter(r => r.venue_id === id);
 

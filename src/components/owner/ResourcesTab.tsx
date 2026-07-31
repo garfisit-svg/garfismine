@@ -74,7 +74,7 @@ export const ResourcesTab: React.FC<ResourcesTabProps> = ({ venue }) => {
   // filter
   const currentVenueResources = useMemo(() => {
     if (!venue) return [];
-    return resources.filter(r => r.venue_id === venue.id && r.is_active);
+    return resources.filter(r => r.venue_id === venue.id && r.is_active !== false);
   }, [venue, resources]);
 
   const handleOpenAdd = () => {
