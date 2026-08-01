@@ -1342,17 +1342,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     dmThreads, nearbyCheckins, squadInvites, squadEvents, reviews, coinTransactions, offers, notifications, adminLogs
   ]);
 
-  const pushToServer = async (key: string, value: any) => {
+  const pushTimeouts = useRef<{ [key: string]: any }>({});
+
+  const pushToServer = (key: string, value: any) => {
     if (isSyncingFromServer.current || !initialLoadCompleted.current) return;
-    try {
-      await fetch('/api/data/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [key]: value })
-      });
-    } catch (err) {
-      console.error(`Failed to push ${key} to central server:`, err);
+    if (pushTimeouts.current[key]) {
+      clearTimeout(pushTimeouts.current[key]);
     }
+    pushTimeouts.current[key] = setTimeout(async () => {
+      try {
+        await fetch('/api/data/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [key]: value })
+        });
+      } catch (err) {
+        console.warn(`Central server push notice for ${key}:`, err);
+      }
+    }, 300);
   };
 
   // Mount effect to fetch database and set up 3s background poll
@@ -2207,15 +2214,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       owner_id: currentUser.id,
       rating: 0,
       total_reviews: 0,
-      is_verified: true,
-      is_active: true,
+      is_verified: false,
+      is_active: false,
       is_featured: false,
       is_suspended: false,
       commission_percent: 10,
       rejection_reason: null,
-      verified_at: new Date().toISOString(),
+      verified_at: null,
       created_at: new Date().toISOString(),
-      status: 'approved'
+      status: 'pending'
     };
 
     const newRes: VenueResource[] = resourcesData.map((res, i) => ({
@@ -2291,8 +2298,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           price_per_hour: Number(newV.price_per_hour),
           rating: Number(newV.rating) || 0,
           total_reviews: Number(newV.total_reviews) || 0,
-          is_verified: newV.is_verified ?? true,
-          is_active: newV.is_active ?? true,
+          is_verified: newV.is_verified ?? false,
+          is_active: newV.is_active ?? false,
           is_featured: newV.is_featured || false,
           is_suspended: newV.is_suspended || false,
           operating_hours_start: newV.operating_hours_start || '09:00',
@@ -2300,9 +2307,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           operating_days: newV.operating_days || [],
           commission_percent: Number(newV.commission_percent) || 10,
           rejection_reason: newV.rejection_reason || null,
-          verified_at: newV.verified_at || new Date().toISOString(),
+          verified_at: newV.verified_at || null,
           created_at: newV.created_at || new Date().toISOString(),
-          status: newV.status || 'approved'
+          status: newV.status || 'pending'
         };
         
         console.log('registerVenue: Sending gaming_cafes upsert payload:', venuePayload);
@@ -2490,29 +2497,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteVenue = async (venueId: string) => {
-    setVenues(prev => prev.filter(v => v.id !== venueId));
-    setResources(prev => prev.filter(r => r.venue_id !== venueId));
-    setSlots(prev => prev.filter(s => s.venue_id !== venueId));
-    setOffers(prev => prev.filter(o => o.venue_id !== venueId));
-    setReviews(prev => prev.filter(rv => rv.venue_id !== venueId));
-    setBookings(prev => prev.filter(b => b.venue_id !== venueId));
-
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('slots').delete().eq('venue_id', venueId);
         await supabase.from('venue_resources').delete().eq('venue_id', venueId);
         await supabase.from('offers').delete().eq('venue_id', venueId);
         await supabase.from('reviews').delete().eq('venue_id', venueId);
+        await supabase.from('bookings').delete().eq('venue_id', venueId);
         const { error } = await supabase.from('gaming_cafes').delete().eq('id', venueId);
         if (error) {
-          console.error('Failed to delete venue/cafe from Supabase:', error.message);
-          throw new Error(error.message);
+          console.warn('Failed to delete venue/cafe from Supabase:', error.message);
         }
       } catch (err: any) {
-        console.error('Error deleting venue from Supabase:', err);
-        throw err;
+        console.warn('Error deleting venue from Supabase:', err);
       }
     }
+
+    rawSetSlots(prev => prev.filter(s => s.venue_id !== venueId));
+    rawSetResources(prev => prev.filter(r => r.venue_id !== venueId));
+    setOffers(prev => prev.filter(o => o.venue_id !== venueId));
+    setReviews(prev => prev.filter(rv => rv.venue_id !== venueId));
+    rawSetBookings(prev => prev.filter(b => b.venue_id !== venueId));
+    rawSetVenues(prev => prev.filter(v => v.id !== venueId));
   };
 
   const addResource = (venueIdOrObj: any, resource?: Omit<VenueResource, 'id' | 'venue_id' | 'created_at'>) => {
@@ -2537,16 +2543,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       created_at: new Date().toISOString()
     };
     setResources(prev => [...prev, newR]);
-
-    // Ensure the parent venue is verified & active so the user panel displays it
-    setVenues(prev => prev.map(v => {
-      if (v.id === finalVenueId && (!v.is_active || v.status === 'pending')) {
-        const up = { ...v, is_active: true, is_verified: true, status: 'approved' as const };
-        if (isSupabaseConfigured && supabase) saveVenueToSupabase(up);
-        return up;
-      }
-      return v;
-    }));
 
     // Sync gamingEquipments state
     setGamingEquipments(prev => {
@@ -2581,8 +2577,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setResources(prev => prev.map(r => r.id === resourceId ? { ...r, ...resourceData } : r));
   };
 
-  const deleteResource = (resourceId: string) => {
-    setResources(prev => prev.filter(r => r.id !== resourceId));
+  const deleteResource = async (resourceId: string) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('slots').delete().eq('resource_id', resourceId);
+        const { error } = await supabase.from('venue_resources').delete().eq('id', resourceId);
+        if (error) console.warn('Supabase resource delete notice:', error.message);
+      } catch (err) {
+        console.warn('Error deleting resource from Supabase:', err);
+      }
+    }
+
+    rawSetSlots(prev => prev.filter(s => s.resource_id !== resourceId));
+    rawSetResources(prev => prev.filter(r => r.id !== resourceId));
   };
 
   const createOffer = (offerData: Omit<Offer, 'id' | 'created_at' | 'usage_count'>) => {
@@ -3796,14 +3803,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       owner_id: currentUser.id,
       rating: 0,
       total_reviews: 0,
-      is_verified: true,
-      is_active: true,
+      is_verified: false,
+      is_active: false,
       is_featured: false,
       is_suspended: false,
       commission_percent: 10,
       rejection_reason: null,
       verified_at: null,
-      created_at: nowStr
+      created_at: nowStr,
+      status: 'pending'
     };
 
     const instantiatedEquipments: GamingEquipment[] = equipments.map((eq, idx) => ({

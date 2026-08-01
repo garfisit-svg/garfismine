@@ -176,7 +176,7 @@ export const OwnerRegisterPage: React.FC = () => {
 
       await registerVenue(venueData, resourcesData);
       
-      toast.success('🎉 Register successful! Arena is live and verified.', { duration: 6000 });
+      toast.success('🎉 Registration submitted! Your cafe is under review by Garf Admin for approval.', { duration: 6000 });
       navigate('/owner-dashboard');
     } catch (err: any) {
       toast.error(err.message || 'Failed to submit registration form');
