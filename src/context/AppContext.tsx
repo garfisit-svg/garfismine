@@ -984,13 +984,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
         const nextIds = new Set(next.map(v => v.id));
-        prev.forEach(v => {
-          if (!nextIds.has(v.id)) {
-            supabase.from('gaming_cafes').delete().eq('id', v.id).then(({ error }) => {
+        const deletedIds = prev.filter(v => !nextIds.has(v.id)).map(v => v.id);
+        if (deletedIds.length > 0) {
+          for (let i = 0; i < deletedIds.length; i += 50) {
+            const chunk = deletedIds.slice(i, i + 50);
+            supabase.from('gaming_cafes').delete().in('id', chunk).then(({ error }) => {
               if (error) console.error('Failed to delete venue/cafe from Supabase:', error.message);
             });
           }
-        });
+        }
       }
       return next;
     });
@@ -1012,13 +1014,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           saveResourcesToSupabaseBulk(changed);
         }
         const nextIds = new Set(next.map(r => r.id));
-        prev.forEach(r => {
-          if (!nextIds.has(r.id)) {
-            supabase.from('venue_resources').delete().eq('id', r.id).then(({ error }) => {
+        const deletedIds = prev.filter(r => !nextIds.has(r.id)).map(r => r.id);
+        if (deletedIds.length > 0) {
+          for (let i = 0; i < deletedIds.length; i += 50) {
+            const chunk = deletedIds.slice(i, i + 50);
+            supabase.from('venue_resources').delete().in('id', chunk).then(({ error }) => {
               if (error) console.error('Failed to delete resource from Supabase:', error.message);
             });
           }
-        });
+        }
       }
       return next;
     });
@@ -1040,13 +1044,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           saveSlotsToSupabaseBulk(changed);
         }
         const nextIds = new Set(next.map(s => s.id));
-        prev.forEach(s => {
-          if (!nextIds.has(s.id)) {
-            supabase.from('slots').delete().eq('id', s.id).then(({ error }) => {
-              if (error) console.error('Failed to delete slot from Supabase:', error.message);
+        const deletedIds = prev.filter(s => !nextIds.has(s.id)).map(s => s.id);
+        if (deletedIds.length > 0) {
+          for (let i = 0; i < deletedIds.length; i += 100) {
+            const chunk = deletedIds.slice(i, i + 100);
+            supabase.from('slots').delete().in('id', chunk).then(({ error }) => {
+              if (error) console.error('Failed to delete slots chunk from Supabase:', error.message);
             });
           }
-        });
+        }
       }
       return next;
     });
@@ -1064,13 +1070,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         });
         const nextIds = new Set(next.map(b => b.id));
-        prev.forEach(b => {
-          if (!nextIds.has(b.id)) {
-            supabase.from('bookings').delete().eq('id', b.id).then(({ error }) => {
+        const deletedIds = prev.filter(b => !nextIds.has(b.id)).map(b => b.id);
+        if (deletedIds.length > 0) {
+          for (let i = 0; i < deletedIds.length; i += 50) {
+            const chunk = deletedIds.slice(i, i + 50);
+            supabase.from('bookings').delete().in('id', chunk).then(({ error }) => {
               if (error) console.error('Failed to delete booking from Supabase:', error.message);
             });
           }
-        });
+        }
       }
       return next;
     });
