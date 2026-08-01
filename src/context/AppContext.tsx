@@ -988,9 +988,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (deletedIds.length > 0) {
           for (let i = 0; i < deletedIds.length; i += 50) {
             const chunk = deletedIds.slice(i, i + 50);
-            supabase.from('gaming_cafes').delete().in('id', chunk).then(({ error }) => {
-              if (error) console.error('Failed to delete venue/cafe from Supabase:', error.message);
-            });
+            (async () => {
+              try {
+                const { error } = await supabase.from('gaming_cafes').delete().in('id', chunk);
+                if (error) console.warn('Supabase venue delete notice:', error.message);
+              } catch (err: any) {
+                console.warn('Network notice deleting venue from Supabase:', err?.message || err);
+              }
+            })();
           }
         }
       }
@@ -1018,9 +1023,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (deletedIds.length > 0) {
           for (let i = 0; i < deletedIds.length; i += 50) {
             const chunk = deletedIds.slice(i, i + 50);
-            supabase.from('venue_resources').delete().in('id', chunk).then(({ error }) => {
-              if (error) console.error('Failed to delete resource from Supabase:', error.message);
-            });
+            (async () => {
+              try {
+                const { error } = await supabase.from('venue_resources').delete().in('id', chunk);
+                if (error) console.warn('Supabase resource delete notice:', error.message);
+              } catch (err: any) {
+                console.warn('Network notice deleting resource from Supabase:', err?.message || err);
+              }
+            })();
           }
         }
       }
@@ -1048,9 +1058,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (deletedIds.length > 0) {
           for (let i = 0; i < deletedIds.length; i += 100) {
             const chunk = deletedIds.slice(i, i + 100);
-            supabase.from('slots').delete().in('id', chunk).then(({ error }) => {
-              if (error) console.error('Failed to delete slots chunk from Supabase:', error.message);
-            });
+            (async () => {
+              try {
+                const { error } = await supabase.from('slots').delete().in('id', chunk);
+                if (error) console.warn('Supabase slots delete notice:', error.message);
+              } catch (err: any) {
+                console.warn('Network notice deleting slots from Supabase:', err?.message || err);
+              }
+            })();
           }
         }
       }
@@ -1074,9 +1089,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (deletedIds.length > 0) {
           for (let i = 0; i < deletedIds.length; i += 50) {
             const chunk = deletedIds.slice(i, i + 50);
-            supabase.from('bookings').delete().in('id', chunk).then(({ error }) => {
-              if (error) console.error('Failed to delete booking from Supabase:', error.message);
-            });
+            (async () => {
+              try {
+                const { error } = await supabase.from('bookings').delete().in('id', chunk);
+                if (error) console.warn('Supabase booking delete notice:', error.message);
+              } catch (err: any) {
+                console.warn('Network notice deleting booking from Supabase:', err?.message || err);
+              }
+            })();
           }
         }
       }
@@ -1098,9 +1118,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const nextIds = new Set((next || []).map(p => p.id));
         (prev || []).forEach(p => {
           if (!nextIds.has(p.id)) {
-            supabase.from('profiles').delete().eq('id', p.id).then(({ error }) => {
-              if (error) console.error('Failed to delete profile from Supabase:', error.message);
-            });
+            (async () => {
+              try {
+                const { error } = await supabase.from('profiles').delete().eq('id', p.id);
+                if (error) console.warn('Supabase profile delete notice:', error.message);
+              } catch (err: any) {
+                console.warn('Network notice deleting profile from Supabase:', err?.message || err);
+              }
+            })();
           }
         });
       }
@@ -1342,24 +1367,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     dmThreads, nearbyCheckins, squadInvites, squadEvents, reviews, coinTransactions, offers, notifications, adminLogs
   ]);
 
-  const pushTimeouts = useRef<{ [key: string]: any }>({});
+  const pendingUpdates = useRef<{ [key: string]: any }>({});
+  const flushTimeout = useRef<any>(null);
+  const isPushing = useRef<boolean>(false);
+
+  const processPushQueue = async () => {
+    if (isPushing.current) return;
+    const keys = Object.keys(pendingUpdates.current);
+    if (keys.length === 0) return;
+
+    isPushing.current = true;
+    const batch = { ...pendingUpdates.current };
+    pendingUpdates.current = {};
+
+    try {
+      await fetch('/api/data/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(batch)
+      });
+    } catch (err) {
+      console.warn('Central server batch sync notice:', err);
+    } finally {
+      isPushing.current = false;
+      // If new updates accumulated while pushing, flush again
+      if (Object.keys(pendingUpdates.current).length > 0) {
+        processPushQueue();
+      }
+    }
+  };
 
   const pushToServer = (key: string, value: any) => {
     if (isSyncingFromServer.current || !initialLoadCompleted.current) return;
-    if (pushTimeouts.current[key]) {
-      clearTimeout(pushTimeouts.current[key]);
+    pendingUpdates.current[key] = value;
+
+    if (flushTimeout.current) {
+      clearTimeout(flushTimeout.current);
     }
-    pushTimeouts.current[key] = setTimeout(async () => {
-      try {
-        await fetch('/api/data/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [key]: value })
-        });
-      } catch (err) {
-        console.warn(`Central server push notice for ${key}:`, err);
-      }
-    }, 300);
+    flushTimeout.current = setTimeout(() => {
+      processPushQueue();
+    }, 500);
   };
 
   // Mount effect to fetch database and set up 3s background poll
