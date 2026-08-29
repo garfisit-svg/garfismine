@@ -1414,8 +1414,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const fetchCentralData = async () => {
       try {
         const response = await fetch('/api/data');
+        if (!response.ok) {
+          initialLoadCompleted.current = true;
+          return;
+        }
         const result = await response.json();
-        if (result.success && result.data) {
+        if (result && result.success && result.data) {
           isSyncingFromServer.current = true;
           const serverDb = result.data;
 
@@ -1471,11 +1475,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (serverDb.notifications) mergeState(serverDb.notifications, 'garf_notifications', setNotifications, getLocal('garf_notifications'));
           if (serverDb.adminLogs) mergeState(serverDb.adminLogs, 'garf_admin_logs', setAdminLogs, getLocal('garf_admin_logs'));
 
-          initialLoadCompleted.current = true;
           isSyncingFromServer.current = false;
         }
       } catch (err) {
-        console.error('Failed to load central server database on mount:', err);
+        console.warn('Central server database not reachable on mount, using local fallback:', err);
+      } finally {
+        initialLoadCompleted.current = true;
+        isSyncingFromServer.current = false;
       }
     };
 
@@ -1485,8 +1491,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const interval = setInterval(async () => {
       try {
         const response = await fetch('/api/data');
+        if (!response.ok) return;
         const result = await response.json();
-        if (result.success && result.data) {
+        if (result && result.success && result.data) {
           isSyncingFromServer.current = true;
           const serverDb = result.data;
 
@@ -5301,7 +5308,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await fetch('/api/data/reset', { method: 'POST' });
     } catch (err) {
-      console.error('Failed to reset central server database:', err);
+      console.warn('Notice resetting central server database:', err);
     }
 
     const keys = [
