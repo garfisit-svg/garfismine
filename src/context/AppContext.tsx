@@ -45,7 +45,7 @@ interface AppContextType {
   logOut: () => void;
   logoutUser: () => void;
   updateProfile: (profileData: Partial<Profile>) => void;
-  deleteAccount: () => void;
+  deleteAccount: () => Promise<void>;
   verifyEmailToken: (token: string) => Promise<{ success: boolean; message: string }>;
   sendPasswordResetEmail: (email: string) => Promise<{ success: boolean; message: string; token?: string }>;
   resetPasswordWithToken: (token: string, newPass: string) => Promise<{ success: boolean; message: string }>;
@@ -410,9 +410,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           const { data, error } = await supabase.from('profiles').select('*');
           if (data && !error) {
-            // Merge database profiles with local ones. Database profiles take priority!
-            const dbProfilesMap = new Map(data.map((p: any) => [p.id, p]));
-            
+            // Map DB profiles by ID and normalized email
+            const dbProfilesById = new Map<string, any>();
+            const dbProfilesByEmail = new Map<string, any>();
+            data.forEach((p: any) => {
+              if (p && p.id) {
+                dbProfilesById.set(p.id, p);
+                if (p.email) {
+                  dbProfilesByEmail.set(p.email.toLowerCase().trim(), p);
+                }
+              }
+            });
+
             // Local profiles
             const localSaved = localStorage.getItem('garf_profiles');
             let localProfiles: Profile[] = [];
@@ -424,28 +433,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             }
 
-            // Combine both, letting database items overwrite local ones of the same ID
             const combinedMap = new Map<string, Profile>();
+
+            // 1. Keep non-conflicting local profiles (e.g. offline created users that don't collide with DB)
             localProfiles.forEach(p => {
               if (p && p.id) {
-                combinedMap.set(p.id, p);
+                const normEmail = p.email ? p.email.toLowerCase().trim() : '';
+                if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
+                  combinedMap.set(p.id, p);
+                }
               }
             });
             
+            // 2. Add all authoritative DB profiles
             data.forEach((p: any) => {
               if (p && p.id) {
-                const existing = combinedMap.get(p.id);
+                const normEmail = p.email ? p.email.toLowerCase().trim() : '';
+                const matchingLocal = localProfiles.find(lp => lp && (lp.id === p.id || (normEmail && lp.email?.toLowerCase().trim() === normEmail)));
                 combinedMap.set(p.id, {
-                  ...existing,
+                  ...matchingLocal,
                   ...p,
-                  emailVerified: p.emailVerified ?? existing?.emailVerified ?? true
+                  id: p.id,
+                  emailVerified: p.emailVerified ?? matchingLocal?.emailVerified ?? true
                 });
               }
             });
 
             const mergedList = Array.from(combinedMap.values());
-            setProfiles(mergedList);
+            rawSetProfiles(mergedList);
             localStorage.setItem('garf_profiles', JSON.stringify(mergedList));
+
+            // Align currentUser if they were logged in under a mock ID that now has a DB UUID
+            if (currentUser && currentUser.email) {
+              const currentEmail = currentUser.email.toLowerCase().trim();
+              const dbMatch = dbProfilesByEmail.get(currentEmail);
+              if (dbMatch && currentUser.id !== dbMatch.id) {
+                const alignedUser = { ...currentUser, ...dbMatch, id: dbMatch.id };
+                setCurrentUser(alignedUser);
+                localStorage.setItem('garf_current_user', JSON.stringify(alignedUser));
+              }
+            }
           }
         } catch (err) {
           console.error('Failed to sync profiles from Supabase:', err);
@@ -704,6 +731,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveProfileToSupabase = async (profile: Profile) => {
     if (isSupabaseConfigured && supabase) {
       try {
+        const cleanEmail = profile.email ? profile.email.toLowerCase().trim() : '';
         const payload: any = {
           id: profile.id,
           full_name: profile.full_name || 'User',
@@ -730,23 +758,118 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           payload.resetTokenExpires = profile.resetTokenExpires;
         }
 
-        const { error } = await supabase
-          .from('profiles')
-          .upsert(payload, { onConflict: 'id' });
-          
-        if (error) {
-          console.warn('Supabase profile upsert warning (trying fallback query without reset/password columns):', error.message);
+        // 1. Check if a profile with this email or ID already exists in Supabase
+        let existingByEmail: any = null;
+        let existingById: any = null;
+
+        if (cleanEmail) {
+          try {
+            const { data } = await supabase
+              .from('profiles')
+              .select('id, email')
+              .ilike('email', cleanEmail)
+              .limit(1);
+            if (data && data.length > 0) {
+              existingByEmail = data[0];
+            }
+          } catch (e) {
+            // ignore query failure
+          }
+        }
+
+        if (profile.id) {
+          try {
+            const { data } = await supabase
+              .from('profiles')
+              .select('id, email')
+              .eq('id', profile.id)
+              .limit(1);
+            if (data && data.length > 0) {
+              existingById = data[0];
+            }
+          } catch (e) {
+            // ignore query failure
+          }
+        }
+
+        // 2. If a profile already exists by email (even if ID is different, e.g. Auth UUID vs mock ID)
+        if (existingByEmail) {
+          const targetId = existingByEmail.id;
+          const updatePayload = { ...payload };
+          delete updatePayload.id; // Keep authoritative DB primary key
+
+          const { error: updateErr } = await supabase
+            .from('profiles')
+            .update(updatePayload)
+            .eq('id', targetId);
+
+          if (updateErr) {
+            const fallbackUpdate = { ...updatePayload };
+            delete fallbackUpdate.password;
+            delete fallbackUpdate.resetToken;
+            delete fallbackUpdate.resetTokenExpires;
+            await supabase.from('profiles').update(fallbackUpdate).eq('id', targetId);
+          }
+
+          // Align local profile ID to canonical DB UUID
+          if (profile.id !== targetId) {
+            rawSetProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, id: targetId } : p));
+            if (currentUser?.id === profile.id) {
+              const updatedUser = { ...currentUser, id: targetId };
+              setCurrentUser(updatedUser);
+              localStorage.setItem('garf_current_user', JSON.stringify(updatedUser));
+            }
+          }
+          return;
+        }
+
+        // 3. If a profile exists by ID
+        if (existingById) {
+          const updatePayload = { ...payload };
+          delete updatePayload.id;
+
+          const { error: updateErr } = await supabase
+            .from('profiles')
+            .update(updatePayload)
+            .eq('id', profile.id);
+
+          if (updateErr) {
+            const fallbackUpdate = { ...updatePayload };
+            delete fallbackUpdate.password;
+            delete fallbackUpdate.resetToken;
+            delete fallbackUpdate.resetTokenExpires;
+            await supabase.from('profiles').update(fallbackUpdate).eq('id', profile.id);
+          }
+          return;
+        }
+
+        // 4. If neither exists, insert safely
+        const { error: insertErr } = await supabase.from('profiles').insert(payload);
+        if (insertErr) {
+          const isEmailConflict = insertErr.message?.includes('profiles_email_key') || insertErr.message?.includes('duplicate key');
+          if (isEmailConflict && cleanEmail) {
+            const cleanUpdate = { ...payload };
+            delete cleanUpdate.id;
+            delete cleanUpdate.password;
+            delete cleanUpdate.resetToken;
+            delete cleanUpdate.resetTokenExpires;
+            await supabase.from('profiles').update(cleanUpdate).ilike('email', cleanEmail);
+            return;
+          }
+
           const fallbackPayload = { ...payload };
           delete fallbackPayload.password;
           delete fallbackPayload.resetToken;
           delete fallbackPayload.resetTokenExpires;
-          
-          const { error: fallbackError } = await supabase
-            .from('profiles')
-            .upsert(fallbackPayload, { onConflict: 'id' });
-            
-          if (fallbackError) {
-            console.warn('Profile sync notice in fallback mode:', fallbackError.message);
+
+          const { error: fallbackInsertErr } = await supabase.from('profiles').insert(fallbackPayload);
+          if (fallbackInsertErr) {
+            const isFbEmailConflict = fallbackInsertErr.message?.includes('profiles_email_key') || fallbackInsertErr.message?.includes('duplicate key');
+            if (isFbEmailConflict && cleanEmail) {
+              const cleanUpdate = { ...fallbackPayload };
+              delete cleanUpdate.id;
+              await supabase.from('profiles').update(cleanUpdate).ilike('email', cleanEmail);
+            }
           }
         }
       } catch (err) {
@@ -990,21 +1113,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             saveVenueToSupabase(v);
           }
         });
-        const nextIds = new Set(next.map(v => v.id));
-        const deletedIds = prev.filter(v => !nextIds.has(v.id)).map(v => v.id);
-        if (deletedIds.length > 0) {
-          for (let i = 0; i < deletedIds.length; i += 50) {
-            const chunk = deletedIds.slice(i, i + 50);
-            (async () => {
-              try {
-                const { error } = await supabase.from('gaming_cafes').delete().in('id', chunk);
-                if (error) console.warn('Supabase venue delete notice:', error.message);
-              } catch (err: any) {
-                console.warn('Network notice deleting venue from Supabase:', err?.message || err);
-              }
-            })();
-          }
-        }
       }
       return next;
     });
@@ -1025,21 +1133,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (changed.length > 0) {
           saveResourcesToSupabaseBulk(changed);
         }
-        const nextIds = new Set(next.map(r => r.id));
-        const deletedIds = prev.filter(r => !nextIds.has(r.id)).map(r => r.id);
-        if (deletedIds.length > 0) {
-          for (let i = 0; i < deletedIds.length; i += 50) {
-            const chunk = deletedIds.slice(i, i + 50);
-            (async () => {
-              try {
-                const { error } = await supabase.from('venue_resources').delete().in('id', chunk);
-                if (error) console.warn('Supabase resource delete notice:', error.message);
-              } catch (err: any) {
-                console.warn('Network notice deleting resource from Supabase:', err?.message || err);
-              }
-            })();
-          }
-        }
       }
       return next;
     });
@@ -1059,21 +1152,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         if (changed.length > 0) {
           saveSlotsToSupabaseBulk(changed);
-        }
-        const nextIds = new Set(next.map(s => s.id));
-        const deletedIds = prev.filter(s => !nextIds.has(s.id)).map(s => s.id);
-        if (deletedIds.length > 0) {
-          for (let i = 0; i < deletedIds.length; i += 100) {
-            const chunk = deletedIds.slice(i, i + 100);
-            (async () => {
-              try {
-                const { error } = await supabase.from('slots').delete().in('id', chunk);
-                if (error) console.warn('Supabase slots delete notice:', error.message);
-              } catch (err: any) {
-                console.warn('Network notice deleting slots from Supabase:', err?.message || err);
-              }
-            })();
-          }
         }
       }
       return next;
@@ -1124,7 +1202,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         const nextIds = new Set((next || []).map(p => p.id));
         (prev || []).forEach(p => {
-          if (!nextIds.has(p.id)) {
+          if (!nextIds.has(p.id) && !p.id.startsWith('user-') && !p.id.startsWith('mock-')) {
             (async () => {
               try {
                 const { error } = await supabase.from('profiles').delete().eq('id', p.id);
@@ -1224,41 +1302,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('garf_turf_bookings', JSON.stringify(turfBookings));
   }, [turfBookings]);
 
-  // Backward compatibility projection syncing logic
+  // Keep gamingEquipments and turfDetails in sync with resources (one-way projection from resources)
   useEffect(() => {
-    const newResList: VenueResource[] = [];
-    gamingEquipments.forEach(eq => {
-      newResList.push({
-        id: eq.id,
-        venue_id: eq.venue_id,
-        name: eq.custom_name,
-        type: eq.equipment_type === 'pc' ? 'pc' : (eq.equipment_type === 'vr_headset' ? 'vr' : (eq.equipment_type.includes('xbox') ? 'xbox' : 'ps5')),
-        specifications: eq.specifications,
-        price_per_hour: eq.price_per_hour,
-        is_active: eq.is_active,
-        sort_order: eq.sort_order,
-        created_at: eq.created_at
+    if (!resources || resources.length === 0) return;
+    
+    // Sync gaming equipments
+    setGamingEquipments(prev => {
+      const existingMap = new Map(prev.map(e => [e.id, e]));
+      let hasChanges = false;
+      const nextEquipments = [...prev];
+
+      resources.forEach(r => {
+        if (r.type !== 'turf') {
+          const existing = existingMap.get(r.id);
+          if (!existing) {
+            hasChanges = true;
+            nextEquipments.push({
+              id: r.id,
+              venue_id: r.venue_id,
+              equipment_type: r.type === 'pc' ? 'pc' : (r.type === 'vr' ? 'vr_headset' : (r.type === 'xbox' ? 'xbox_series_x' : 'ps5')),
+              custom_name: r.name,
+              total_quantity: 1,
+              available_quantity: 1,
+              specifications: r.specifications || 'Standard specifications',
+              price_per_hour: r.price_per_hour,
+              per_head_or_per_station: 'per_station',
+              min_booking_hours: 1,
+              games_available: ['valorant', 'csgo', 'gta5'],
+              accessories_included: ['Headphones', 'Controller'],
+              is_active: r.is_active !== false,
+              photos: [],
+              sort_order: r.sort_order || 1,
+              created_at: r.created_at || new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
       });
+
+      return hasChanges ? nextEquipments : prev;
     });
-    turfDetails.forEach(turf => {
-      newResList.push({
-        id: turf.id,
-        venue_id: turf.venue_id,
-        name: turf.turf_name,
-        type: 'turf',
-        specifications: turf.dimensions || 'Standard',
-        price_per_hour: turf.hourly_rate,
-        is_active: turf.is_active,
-        sort_order: turf.sort_order,
-        created_at: turf.created_at
+
+    // Sync turf details
+    setTurfDetails(prev => {
+      const existingMap = new Map(prev.map(t => [t.id, t]));
+      let hasChanges = false;
+      const nextTurfs = [...prev];
+
+      resources.forEach(r => {
+        if (r.type === 'turf') {
+          const existing = existingMap.get(r.id);
+          if (!existing) {
+            hasChanges = true;
+            nextTurfs.push({
+              id: r.id,
+              venue_id: r.venue_id,
+              turf_name: r.name,
+              turf_type: 'football_7aside',
+              sports_allowed: ['football', 'cricket'],
+              surface_type: 'synthetic_turf',
+              dimensions: r.specifications || 'Standard dimensions',
+              capacity_per_team: 7,
+              total_capacity: 14,
+              has_flood_lights: true,
+              has_changing_room: true,
+              has_equipment_rental: true,
+              equipment_rental_details: 'Standard equipment included',
+              hourly_rate: r.price_per_hour,
+              weekend_rate: null,
+              peak_hour_rate: null,
+              peak_hours_start: null,
+              peak_hours_end: null,
+              advance_booking_discount: null,
+              advance_booking_min_hours: 1,
+              per_head_rate: null,
+              min_booking_hours: 1,
+              requires_full_payment: false,
+              is_active: r.is_active !== false,
+              photos: [],
+              sort_order: r.sort_order || 1,
+              created_at: r.created_at || new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
       });
+
+      return hasChanges ? nextTurfs : prev;
     });
-    const currentSerialized = JSON.stringify(resources);
-    const newSerialized = JSON.stringify(newResList);
-    if (currentSerialized !== newSerialized) {
-      setResources(newResList);
-    }
-  }, [gamingEquipments, turfDetails, resources]);
+  }, [resources]);
 
   // ==========================================
   // Admin custom setting coins
@@ -1453,7 +1585,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return [];
           };
 
-          mergeState(serverDb.profiles, 'garf_profiles', setProfiles, getLocal('garf_profiles'));
+          mergeState(serverDb.profiles, 'garf_profiles', rawSetProfiles, getLocal('garf_profiles'));
           mergeState(serverDb.venues, 'garf_venues', rawSetVenues, getLocal('garf_venues'));
           mergeState(serverDb.venue_resources, 'garf_resources', rawSetResources, getLocal('garf_resources'));
           mergeState(serverDb.slots, 'garf_slots', rawSetSlots, getLocal('garf_slots'));
@@ -1513,7 +1645,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
 
           const refs = stateRefs.current;
-          updateIfDifferent(serverDb.profiles, setProfiles, refs.profiles, 'garf_profiles');
+          updateIfDifferent(serverDb.profiles, rawSetProfiles, refs.profiles, 'garf_profiles');
           updateIfDifferent(serverDb.venues, rawSetVenues, refs.venues, 'garf_venues');
           updateIfDifferent(serverDb.venue_resources, rawSetResources, refs.resources, 'garf_resources');
           updateIfDifferent(serverDb.slots, rawSetSlots, refs.slots, 'garf_slots');
@@ -2243,10 +2375,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUser(prev => prev ? { ...prev, ...profileData, updated_at: new Date().toISOString() } : null);
   };
 
-  const deleteAccount = () => {
+  const deleteAccount = async () => {
     if (!currentUser) return;
     const uid = currentUser.id;
-    setProfiles(prev => prev.filter(p => p.id !== uid));
+    const userEmail = currentUser.email ? currentUser.email.toLowerCase().trim() : '';
+
+    // 1. If owner, delete all venues owned by this user
+    const ownedVenues = venues.filter(v => v.owner_id === uid);
+    for (const v of ownedVenues) {
+      await deleteVenue(v.id);
+    }
+
+    // 2. Remove user bookings, reviews, notifications from local state
+    rawSetBookings(prev => prev.filter(b => b.user_id !== uid));
+    setReviews(prev => prev.filter(rv => rv.user_id !== uid));
+    setNotifications(prev => prev.filter(n => n.user_id !== uid));
+
+    // 3. Delete user profile from Supabase and sign out
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('profiles').delete().eq('id', uid);
+        if (userEmail) {
+          await supabase.from('profiles').delete().ilike('email', userEmail);
+        }
+        await supabase.auth.signOut();
+      } catch (err: any) {
+        console.warn('Notice during Supabase account deletion:', err?.message || err);
+      }
+    }
+
+    // 4. Remove profile from local state and localStorage
+    rawSetProfiles(prev => prev.filter(p => p.id !== uid && (!userEmail || p.email?.toLowerCase().trim() !== userEmail)));
+    const localProfs = localStorage.getItem('garf_profiles');
+    if (localProfs) {
+      try {
+        const parsed = JSON.parse(localProfs);
+        const filtered = parsed.filter((p: any) => p.id !== uid && (!userEmail || p.email?.toLowerCase().trim() !== userEmail));
+        localStorage.setItem('garf_profiles', JSON.stringify(filtered));
+      } catch (e) {}
+    }
+
+    // 5. Finalize logout and session cleanup
     logOut();
   };
 
@@ -2443,8 +2612,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Always update local React states and local storage so venue immediately appears in state and Garf Admin Panel!
-    setVenues(prev => [...prev, newV]);
-    setResources(prev => [...prev, ...newRes]);
+    setVenues(prev => {
+      const updated = [...prev.filter(v => v.id !== newV.id), newV];
+      localStorage.setItem('garf_venues', JSON.stringify(updated));
+      return updated;
+    });
+    setResources(prev => {
+      const prevFiltered = prev.filter(r => !newRes.some(nr => nr.id === r.id));
+      const updated = [...prevFiltered, ...newRes];
+      localStorage.setItem('garf_resources', JSON.stringify(updated));
+      return updated;
+    });
 
     if (newV.type === 'gaming_cafe') {
       if (detailedEquipments && detailedEquipments.length > 0) {
@@ -5413,19 +5591,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (localSaved) {
           try { localProfs = JSON.parse(localSaved); } catch(e) {}
         }
+
+        const dbProfilesById = new Map<string, any>();
+        const dbProfilesByEmail = new Map<string, any>();
+        profileList.forEach((p: any) => {
+          if (p && p.id) {
+            dbProfilesById.set(p.id, p);
+            if (p.email) {
+              dbProfilesByEmail.set(p.email.toLowerCase().trim(), p);
+            }
+          }
+        });
+
         const mergedMap = new Map<string, Profile>();
-        localProfs.forEach(p => { if (p && p.id) mergedMap.set(p.id, p); });
-        profileList.forEach((p: any) => { if (p && p.id) mergedMap.set(p.id, p); });
+        localProfs.forEach(p => {
+          if (p && p.id) {
+            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
+            if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
+              mergedMap.set(p.id, p);
+            }
+          }
+        });
+        profileList.forEach((p: any) => {
+          if (p && p.id) {
+            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
+            const matchingLocal = localProfs.find(lp => lp && (lp.id === p.id || (normEmail && lp.email?.toLowerCase().trim() === normEmail)));
+            mergedMap.set(p.id, {
+              ...matchingLocal,
+              ...p,
+              id: p.id,
+              emailVerified: p.emailVerified ?? matchingLocal?.emailVerified ?? true
+            });
+          }
+        });
         const merged = Array.from(mergedMap.values());
         
-        setProfiles(merged);
+        rawSetProfiles(merged);
         localStorage.setItem('garf_profiles', JSON.stringify(merged));
 
-        // Self-heal: upload local-only profiles to Supabase
-        const dbIds = new Set(profileList.map((p: any) => p.id));
+        // Self-heal: upload local-only, non-simulated profiles that don't collide with DB
         localProfs.forEach(p => {
-          if (p && p.id && !dbIds.has(p.id)) {
-            saveProfileToSupabase(p);
+          if (p && p.id) {
+            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
+            if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
+              if (!p.id.startsWith('user-') && !p.id.startsWith('mock-')) {
+                saveProfileToSupabase(p);
+              }
+            }
           }
         });
       }

@@ -9,9 +9,15 @@ interface SettingsTabProps {
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
-  const { currentUser, updateProfile, updateVenue, deleteVenue } = useApp();
+  const { currentUser, updateProfile, updateVenue, deleteVenue, deleteAccount } = useApp();
 
   const [activeSegment, setActiveSegment] = useState<'profile' | 'hours' | 'bank' | 'closed-dates' | 'danger'>('profile');
+
+  // Danger zone confirmation states
+  const [confirmDeleteVenueText, setConfirmDeleteVenueText] = useState('');
+  const [confirmDeleteAccText, setConfirmDeleteAccText] = useState('');
+  const [isDeletingAcc, setIsDeletingAcc] = useState(false);
+  const [isDeletingVenue, setIsDeletingVenue] = useState(false);
 
   // Input states (initialized from venue info if exists)
   const [venueName, setVenueName] = useState(venue?.name || '');
@@ -410,50 +416,140 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ venue }) => {
           )}
 
           {activeSegment === 'danger' && (
-            <div className="space-y-6">
-              <h5 className="font-bold text-red-500 text-base font-display flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-red-500" />
-                <span>Danger Zone: Deletion & Teardown</span>
-              </h5>
-              
-              {!venue ? (
-                <p className="text-text-secondary">No active venue found to delete.</p>
-              ) : (
-                <div className="space-y-4">
-                  <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl space-y-2 leading-relaxed">
-                    <p className="font-bold">⚠️ Warning: Permanent Action!</p>
-                    <p>
-                      You are about to permanently delete the arena <strong>"{venue.name}"</strong>. This will instantly remove:
-                    </p>
-                    <ul className="list-disc pl-5 space-y-1 text-xs">
-                      <li>The venue listing from player browse and explore pages.</li>
-                      <li>All associated gaming resources, consoles, and equipment slots.</li>
-                      <li>Any active coupon codes or offers linked to this arena.</li>
-                    </ul>
-                    <p className="font-semibold text-[11px] uppercase tracking-wider mt-2">
-                      This action cannot be undone. All active player holds will be canceled.
-                    </p>
-                  </div>
+            <div className="space-y-8">
+              <div>
+                <h5 className="font-bold text-red-500 text-base font-display flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-red-500" />
+                  <span>Danger Zone: Deletions & Teardown</span>
+                </h5>
+                <p className="text-xs text-text-secondary mt-1">
+                  Manage irreversible deletion actions for your individual venue listings or your entire owner account.
+                </p>
+              </div>
 
-                  <div className="pt-2 flex justify-start">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (confirm(`Are you absolutely sure you want to delete "${venue.name}"? This action is permanent and irreversible!`)) {
-                          deleteVenue(venue.id);
-                          toast.success('Venue and all slots successfully deleted! 🗑️');
-                          // Redirect/reset tab or force refresh
-                          setActiveSegment('profile');
-                        }
-                      }}
-                      className="px-5 py-3 bg-red-600 hover:bg-red-500 text-white font-bold uppercase rounded-lg text-xs cursor-pointer transition flex items-center gap-1.5 shadow-lg shadow-red-600/10"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span>Permanently Delete "{venue.name}"</span>
-                    </button>
+              {/* OPTION 1: DELETE VENUE LISTING ONLY */}
+              {venue && (
+                <div className="p-5 bg-red-500/5 border border-red-500/20 rounded-2xl space-y-4">
+                  <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
+                    <Building className="h-4 w-4" />
+                    <span>Option A: Delete Venue Listing ("{venue.name}")</span>
+                  </div>
+                  
+                  <p className="text-xs text-text-secondary leading-relaxed">
+                    This will permanently remove the arena <strong>"{venue.name}"</strong>, its station resources, slots, and active offers. Your owner account will remain active.
+                  </p>
+
+                  <div className="space-y-3 pt-1">
+                    <label className="block text-[10px] uppercase font-bold text-text-secondary">
+                      Type <span className="text-red-400 font-mono">DELETE</span> to confirm venue removal:
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <input
+                        type="text"
+                        placeholder="DELETE"
+                        className="bg-[#12121A] border border-[#2a2a3e] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 font-mono sm:w-64"
+                        value={confirmDeleteVenueText}
+                        onChange={e => setConfirmDeleteVenueText(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        disabled={confirmDeleteVenueText !== 'DELETE' || isDeletingVenue}
+                        onClick={async () => {
+                          if (confirmDeleteVenueText !== 'DELETE') {
+                            toast.error('Type DELETE in uppercase to confirm!');
+                            return;
+                          }
+                          setIsDeletingVenue(true);
+                          const loadToast = toast.loading(`Deleting ${venue.name}...`);
+                          try {
+                            await deleteVenue(venue.id);
+                            toast.success(`"${venue.name}" deleted successfully!`, { id: loadToast });
+                            setConfirmDeleteVenueText('');
+                            setActiveSegment('profile');
+                          } catch (err: any) {
+                            toast.error('Failed to delete venue: ' + (err?.message || 'Unknown error'), { id: loadToast });
+                          } finally {
+                            setIsDeletingVenue(false);
+                          }
+                        }}
+                        className={`px-4 py-2 font-bold uppercase rounded-lg text-xs transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          confirmDeleteVenueText === 'DELETE' && !isDeletingVenue
+                            ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20'
+                            : 'bg-red-950/40 text-red-400/40 cursor-not-allowed border border-red-900/30'
+                        }`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>{isDeletingVenue ? 'Deleting Venue...' : `Delete "${venue.name}"`}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
+
+              {/* OPTION 2: PERMANENTLY DELETE OWNER ACCOUNT */}
+              <div className="p-5 bg-red-950/20 border border-red-500/30 rounded-2xl space-y-4">
+                <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
+                  <Trash2 className="h-4 w-4" />
+                  <span>Option B: Permanently Delete Owner Account</span>
+                </div>
+
+                <div className="space-y-2 text-xs text-text-secondary leading-relaxed">
+                  <p className="font-semibold text-red-300">
+                    ⚠️ Irreversible Warning: Complete Account Teardown
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Permanently closes your owner profile and login credentials.</li>
+                    <li>Deletes all your owned venues, gaming stations, turf setups, and bookable slots.</li>
+                    <li>Cancels all active bookings and removes historical data.</li>
+                  </ul>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <label className="block text-[10px] uppercase font-bold text-text-secondary">
+                    Type <span className="text-red-400 font-mono">DELETE ACCOUNT</span> to confirm full account closure:
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="text"
+                      placeholder="DELETE ACCOUNT"
+                      className="bg-[#12121A] border border-[#2a2a3e] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 font-mono sm:w-64"
+                      value={confirmDeleteAccText}
+                      onChange={e => setConfirmDeleteAccText(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      disabled={confirmDeleteAccText !== 'DELETE ACCOUNT' || isDeletingAcc}
+                      onClick={async () => {
+                        if (confirmDeleteAccText !== 'DELETE ACCOUNT') {
+                          toast.error('Type DELETE ACCOUNT in uppercase to confirm!');
+                          return;
+                        }
+                        if (!confirm('Are you absolutely certain? This will delete your owner account, all venues, and sign you out permanently!')) {
+                          return;
+                        }
+                        setIsDeletingAcc(true);
+                        const loadToast = toast.loading('Deleting owner account and all associated venues...');
+                        try {
+                          await deleteAccount();
+                          toast.success('Your owner account and all data have been deleted.', { id: loadToast });
+                        } catch (err: any) {
+                          toast.error('Failed to complete account deletion: ' + (err?.message || 'Error'), { id: loadToast });
+                          setIsDeletingAcc(false);
+                        }
+                      }}
+                      className={`px-4 py-2 font-bold uppercase rounded-lg text-xs transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                        confirmDeleteAccText === 'DELETE ACCOUNT' && !isDeletingAcc
+                          ? 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30'
+                          : 'bg-red-950/40 text-red-400/40 cursor-not-allowed border border-red-900/30'
+                      }`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>{isDeletingAcc ? 'Deleting Account...' : 'Permanently Delete Owner Account'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
             </div>
           )}
 

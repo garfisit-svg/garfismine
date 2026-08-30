@@ -117,13 +117,18 @@ export const MyProfilePage: React.FC = () => {
     setConfirmNewRaw('');
   };
 
-  const handleDeleteTrigger = () => {
+  const handleDeleteTrigger = async () => {
     if (confirmDeleteText !== 'DELETE') {
       toast.error('Type DELETE explicitly to confirm removals!');
       return;
     }
-    deleteAccount();
-    toast.success('Account deleted successfully. We will miss you!');
+    const loadToast = toast.loading('Deleting account and clearing data...');
+    try {
+      await deleteAccount();
+      toast.success('Account deleted successfully. We will miss you!', { id: loadToast });
+    } catch (err: any) {
+      toast.error('Failed to complete account deletion: ' + (err?.message || 'Error'), { id: loadToast });
+    }
   };
 
   const handleAvatarSelect = (url: string) => {
