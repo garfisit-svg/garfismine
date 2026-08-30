@@ -1,9 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Booking, Venue, VenueResource, Slot } from '../../types';
-import { Loader2, AlertTriangle, CheckSquare, Clock, Tv, Calendar, ShieldCheck, Mail, ArrowRight, ShieldAlert, Zap } from 'lucide-react';
+import { 
+  Loader2, AlertTriangle, CheckSquare, Clock, Tv, Calendar, ShieldCheck, 
+  Mail, ArrowRight, ShieldAlert, Zap, Cpu, Play, Square, FastForward, CheckCircle2 
+} from 'lucide-react';
 import toast from 'react-hot-toast';
-import { WalkInModal } from './WalkInModal';
+import { 
+  timeToMinutes, minutesToTime, addMinutesToTime, formatTimeDisplay, 
+  getEffectiveBookingTimes, getMaxExtensionDuration, getHourlyAvailabilityForResource 
+} from '../../lib/availability';
 
 interface DashboardTabProps {
   venue: Venue | null;
@@ -13,16 +19,28 @@ interface DashboardTabProps {
 export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn }) => {
   const { 
     currentUser, bookings, resources, slots, 
-    ownerCheckIn, ownerExtendHold, ownerReleaseSlot, bulkBlockSlots, bulkUnblockSlots 
+    ownerCheckIn, ownerExtendHold, ownerReleaseSlot, bulkBlockSlots, bulkUnblockSlots,
+    extendBookingSession, endBookingEarly, ownerCompleteBooking
   } = useApp();
 
   const [currentTime, setCurrentTime] = useState(new Date());
   
   // Confirmatory modals
   const [checkInConfirmBooking, setCheckInConfirmBooking] = useState<Booking | null>(null);
-  const [extendConfirmBooking, setExtendConfirmBooking] = useState<Booking | null>(null);
+  const [extendHoldConfirmBooking, setExtendHoldConfirmBooking] = useState<Booking | null>(null);
   const [releaseConfirmBooking, setReleaseConfirmBooking] = useState<Booking | null>(null);
   
+  // Session Management Modals
+  const [extendSessionBooking, setExtendSessionBooking] = useState<Booking | null>(null);
+  const [extendMins, setExtendMins] = useState<number>(30);
+  const [customExtendMins, setCustomExtendMins] = useState<string>('');
+  const [additionalPayment, setAdditionalPayment] = useState<number | ''>('');
+  const [isExtending, setIsExtending] = useState(false);
+
+  const [endEarlyBooking, setEndEarlyBooking] = useState<Booking | null>(null);
+  const [endEarlyPaymentCollected, setEndEarlyPaymentCollected] = useState<number | ''>('');
+  const [isEndingEarly, setIsEndingEarly] = useState(false);
+
   // Blocking modal state
   const [blockCellSlot, setBlockCellSlot] = useState<any | null>(null);
   const [blockReason, setBlockReason] = useState('Maintenance');
@@ -46,8 +64,16 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
 
   const currentVenueResources = useMemo(() => {
     if (!venue) return [];
-    return resources.filter(r => r.venue_id === venue.id);
+    return resources.filter(r => r.venue_id === venue.id && r.is_active !== false);
   }, [venue, resources]);
+
+  const todayStr = useMemo(() => {
+    return currentTime.toISOString().split('T')[0];
+  }, [currentTime]);
+
+  const currentTimeMinutes = useMemo(() => {
+    return currentTime.getHours() * 60 + currentTime.getMinutes();
+  }, [currentTime]);
 
   // Greetings logic
   const greetingText = useMemo(() => {
@@ -60,7 +86,6 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
 
   // Statistics calculation
   const stats = useMemo(() => {
-    const todayStr = currentTime.toISOString().split('T')[0];
     const todayBookings = currentVenueBookings.filter(b => b.booking_date === todayStr);
     
     // total count
@@ -84,6 +109,17 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
     const monthlyGross = monthlyBookings.reduce((acc, curr) => acc + curr.final_amount, 0);
     const monthlyNet = Math.round(monthlyGross * 0.9);
 
+    // Live Active Units Count
+    const activeRunningCount = currentVenueResources.filter(res => {
+      return currentVenueBookings.some(b => {
+        if (b.resource_id !== res.id || b.booking_date !== todayStr) return false;
+        if (b.booking_status !== 'checked_in' && b.payment_method !== 'walk_in') return false;
+        if (b.booking_status === 'completed' || b.booking_status === 'cancelled') return false;
+        const times = getEffectiveBookingTimes(b);
+        return times.isActive && currentTimeMinutes >= times.startMinutes && currentTimeMinutes < times.endMinutes;
+      });
+    }).length;
+
     // circular occupancy
     const maxActiveHourSlots = currentVenueResources.length * 15; // 9 AM to 11 PM = 15 slots daily
     const filledSlotsCount = slots.filter(s => s.venue_id === venue?.id && s.slot_date === todayStr && (s.status === 'booked' || s.status === 'held')).length;
@@ -97,112 +133,111 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
       gross,
       net,
       monthlyNet,
+      activeRunningCount,
+      totalUnits: currentVenueResources.length,
       occupancyPercent,
       filledSlotsCount,
       maxActiveHourSlots
     };
-  }, [currentVenueBookings, currentVenueResources, slots, venue, currentTime]);
+  }, [currentVenueBookings, currentVenueResources, slots, venue, currentTime, todayStr, currentTimeMinutes]);
 
-  const recentActivityLogs = useMemo(() => {
-    // Collect active elements
-    const logsList: Array<{ icon: string; text: string; details: string; time: string }> = [];
-    currentVenueBookings.slice(-10).reverse().forEach(b => {
-      const isPaid = b.payment_method === 'online' || b.payment_method === 'token_advance';
-      
-      let icon = '🎮';
-      let text = `Updated booking - ${b.booking_ref}`;
-      
-      if (b.payment_method === 'walk_in') {
-        icon = '🚶';
-        text = `Walk-in registered - ${b.walk_in_customer_name || 'Anonymous'}`;
-      } else if (b.booking_status === 'no_show') {
-        icon = '🚫';
-        text = `No-Show logged: Slot recycled`;
-      } else if (b.booking_status === 'checked_in') {
-        icon = '✅';
-        text = `Check-In confirmed - ${b.booking_ref}`;
-      } else if (b.booking_status === 'cancelled') {
-        icon = '❌';
-        text = `Soft hold released`;
-      } else {
-        icon = isPaid ? '💳' : '⏳';
-        text = isPaid ? `New paid booking locked!` : `New Pay-at-Venue soft hold`;
+  // Live Unit Statuses for the Real-time Monitor
+  const liveUnitStatuses = useMemo(() => {
+    return currentVenueResources.map(res => {
+      const unitTodayBookings = currentVenueBookings.filter(b => 
+        b.resource_id === res.id && 
+        b.booking_date === todayStr &&
+        b.booking_status !== 'cancelled' &&
+        b.booking_status !== 'no_show'
+      );
+
+      // Find currently active session (playing right now)
+      let activeBooking: Booking | null = null;
+      let activeTimes: any = null;
+
+      for (const b of unitTodayBookings) {
+        if (b.booking_status === 'completed') continue;
+        const times = getEffectiveBookingTimes(b);
+        if (times.isActive && currentTimeMinutes >= times.startMinutes && currentTimeMinutes < times.endMinutes) {
+          activeBooking = b;
+          activeTimes = times;
+          break;
+        }
       }
 
-      logsList.push({
-        icon,
-        text,
-        details: `${currentVenueResources.find(r => r.id === b.resource_id)?.name || 'Station'} at ${b.start_time}`,
-        time: 'Just now'
-      });
+      // Find active soft hold (starts around now or held)
+      let softHoldBooking: Booking | null = null;
+      if (!activeBooking) {
+        softHoldBooking = unitTodayBookings.find(b => 
+          b.booking_status === 'held' && 
+          b.payment_method === 'pay_at_venue'
+        ) || null;
+      }
+
+      // Find next upcoming booking today after currentTimeMinutes
+      let nextBooking: Booking | null = null;
+      let nextBookingTimes: any = null;
+
+      const futureBookings = unitTodayBookings
+        .map(b => ({ booking: b, times: getEffectiveBookingTimes(b) }))
+        .filter(item => item.times.isActive && item.times.startMinutes > currentTimeMinutes && item.booking.id !== activeBooking?.id)
+        .sort((a, b) => a.times.startMinutes - b.times.startMinutes);
+
+      if (futureBookings.length > 0) {
+        nextBooking = futureBookings[0].booking;
+        nextBookingTimes = futureBookings[0].times;
+      }
+
+      return {
+        resource: res,
+        activeBooking,
+        activeTimes,
+        softHoldBooking,
+        nextBooking,
+        nextBookingTimes
+      };
     });
+  }, [currentVenueResources, currentVenueBookings, todayStr, currentTimeMinutes]);
 
-    if (logsList.length === 0) {
-      logsList.push({
-        icon: '📢',
-        text: 'System online',
-        details: 'Initial metrics mapped safely.',
-        time: 'now'
-      });
-    }
-
-    return logsList;
-  }, [currentVenueBookings, currentVenueResources]);
-
-  // Split target categories
-  const activeSoftHolds = useMemo(() => {
-    const todayStr = currentTime.toISOString().split('T')[0];
-    return currentVenueBookings.filter(b => b.booking_date === todayStr && b.payment_method === 'pay_at_venue' && b.booking_status === 'held');
-  }, [currentVenueBookings, currentTime]);
-
-  // Hourly Matrix Schedule View data
+  // Hourly Matrix Schedule View data using interval overlap calculations
   const gridTimelineMatrix = useMemo(() => {
-    const hoursCount = 13; // 9:00 AM to 9:00 PM
-    const hours = Array.from({ length: hoursCount }, (_, i) => {
-      const hr = i + 9;
-      return `${hr < 10 ? '0' : ''}${hr}:00`;
-    });
-    const todayStr = currentTime.toISOString().split('T')[0];
+    const sHour = venue ? parseInt((venue.operating_hours_start || '09:00').split(':')[0], 10) || 9 : 9;
+    const eHour = venue ? parseInt((venue.operating_hours_end || '22:00').split(':')[0], 10) || 22 : 22;
+    const length = Math.max(1, eHour - sHour + 1);
+
     const isTodayClosed = venue?.closed_dates?.includes(todayStr);
 
     return currentVenueResources.map(res => {
-      const hourSlots = hours.map(hr => {
-        const matchingSlot = slots.find(s => s.resource_id === res.id && s.slot_date === todayStr && s.start_time === hr);
+      const hourlyStatuses = getHourlyAvailabilityForResource(
+        res.id,
+        todayStr,
+        { start: `${sHour.toString().padStart(2, '0')}:00`, end: `${eHour.toString().padStart(2, '0')}:00` },
+        currentVenueBookings,
+        slots
+      );
+
+      const columns = hourlyStatuses.map(col => {
         let color: 'green' | 'yellow' | 'blue' | 'red' | 'gray' | 'rose' = 'green';
-        let detail = 'Available';
-        let bookingId: string | null = null;
+        let detail = col.detail;
+        let bookingId: string | null = col.booking?.id || null;
 
         if (isTodayClosed) {
           color = 'rose';
           detail = 'Venue Closed (Holiday/Break)';
-        } else if (matchingSlot) {
-          if (matchingSlot.status === 'booked') {
-            const b = bookings.find(x => x.id === matchingSlot.booking_id);
-            if (b) {
-              bookingId = b.id;
-              if (b.booking_status === 'checked_in') {
-                color = 'red';
-                detail = `In Session: ${b.walk_in_customer_name || 'Checked In'}${b.walk_in_actual_start_time ? ` (${b.walk_in_actual_start_time}-${b.walk_in_actual_end_time})` : ''}`;
-              } else {
-                color = 'blue';
-                detail = `Confirmed: ${b.walk_in_customer_name || 'Paid Client'}${b.walk_in_actual_start_time ? ` (${b.walk_in_actual_start_time}-${b.walk_in_actual_end_time})` : ''}`;
-              }
-            }
-          } else if (matchingSlot.status === 'held') {
-            const b = bookings.find(x => x.id === matchingSlot.booking_id);
-            if (b) {
-              bookingId = b.id;
-              color = 'yellow';
-              detail = `Soft Hold: ${b.walk_in_customer_name || 'Client'}`;
-            }
-          } else if (matchingSlot.status === 'blocked') {
-            color = 'gray';
-            detail = `Blocked: ${matchingSlot.blocked_reason || 'Maintenance'}`;
+        } else if (col.status === 'booked') {
+          if (col.booking?.booking_status === 'checked_in' || col.booking?.payment_method === 'walk_in') {
+            color = 'red';
+          } else {
+            color = 'blue';
           }
+        } else if (col.status === 'held') {
+          color = 'yellow';
+        } else if (col.status === 'blocked') {
+          color = 'gray';
         }
 
         return {
-          hour: hr,
+          hour: col.hour,
           color,
           detail,
           bookingId,
@@ -214,25 +249,147 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
 
       return {
         resource: res,
-        columns: hourSlots
+        columns
       };
     });
-  }, [currentVenueResources, slots, bookings, currentTime, venue]);
+  }, [currentVenueResources, currentVenueBookings, slots, todayStr, venue]);
 
-  // Modal actions handlers
+  // Recent Activity Logs
+  const recentActivityLogs = useMemo(() => {
+    const logsList: Array<{ icon: string; text: string; details: string; time: string }> = [];
+    currentVenueBookings.slice(-10).reverse().forEach(b => {
+      const isPaid = b.payment_method === 'online' || b.payment_method === 'token_advance';
+      
+      let icon = '🎮';
+      let text = `Updated booking - ${b.booking_ref}`;
+      
+      if (b.payment_method === 'walk_in') {
+        icon = '🚶';
+        text = `Walk-in registered - ${b.walk_in_customer_name || 'Player'}`;
+      } else if (b.booking_status === 'no_show') {
+        icon = '🚫';
+        text = `No-Show logged: Slot recycled`;
+      } else if (b.booking_status === 'checked_in') {
+        icon = '✅';
+        text = `Check-In confirmed - ${b.booking_ref}`;
+      } else if (b.booking_status === 'completed') {
+        icon = '🏁';
+        text = `Session completed - ${b.booking_ref}`;
+      } else if (b.booking_status === 'cancelled') {
+        icon = '❌';
+        text = `Booking cancelled`;
+      } else {
+        icon = isPaid ? '💳' : '⏳';
+        text = isPaid ? `New paid booking locked!` : `New Pay-at-Venue soft hold`;
+      }
+
+      logsList.push({
+        icon,
+        text,
+        details: `${currentVenueResources.find(r => r.id === b.resource_id)?.name || 'Station'} · ${b.walk_in_actual_start_time || b.start_time} - ${b.walk_in_actual_end_time || b.end_time}`,
+        time: 'Recent'
+      });
+    });
+
+    if (logsList.length === 0) {
+      logsList.push({
+        icon: '📢',
+        text: 'System online',
+        details: 'Equipment availability engine active.',
+        time: 'now'
+      });
+    }
+
+    return logsList;
+  }, [currentVenueBookings, currentVenueResources]);
+
+  // Handle Extend Session Logic
+  const handleOpenExtendSession = (b: Booking) => {
+    setExtendSessionBooking(b);
+    setExtendMins(30);
+    setCustomExtendMins('');
+    
+    // Auto calculate additional price based on 30 mins
+    const res = currentVenueResources.find(r => r.id === b.resource_id);
+    if (res) {
+      setAdditionalPayment(Math.round(res.price_per_hour * 0.5));
+    } else {
+      setAdditionalPayment('');
+    }
+  };
+
+  const handleExecuteExtendSession = async () => {
+    if (!extendSessionBooking) return;
+    setIsExtending(true);
+    try {
+      const extraMinutes = customExtendMins ? parseInt(customExtendMins, 10) : extendMins;
+      if (isNaN(extraMinutes) || extraMinutes <= 0) {
+        toast.error('Please specify valid extension minutes');
+        setIsExtending(false);
+        return;
+      }
+
+      const res = await extendBookingSession(
+        extendSessionBooking.id, 
+        extraMinutes, 
+        additionalPayment !== '' ? Number(additionalPayment) : undefined
+      );
+
+      if (res.success) {
+        toast.success(`Session extended by ${extraMinutes} minutes! New end time: ${formatTimeDisplay(res.newEndTime || '')} ⏱️`);
+        setExtendSessionBooking(null);
+      } else {
+        toast.error(res.error || 'Could not extend session');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to extend session');
+    } finally {
+      setIsExtending(false);
+    }
+  };
+
+  // Handle End Session Early Logic
+  const handleOpenEndEarly = (b: Booking) => {
+    setEndEarlyBooking(b);
+    setEndEarlyPaymentCollected(b.final_amount);
+  };
+
+  const handleExecuteEndEarly = async () => {
+    if (!endEarlyBooking) return;
+    setIsEndingEarly(true);
+    try {
+      const res = await endBookingEarly(
+        endEarlyBooking.id, 
+        endEarlyPaymentCollected !== '' ? Number(endEarlyPaymentCollected) : undefined
+      );
+
+      if (res.success) {
+        toast.success(`Session ended early. Station freed immediately for new players! 🏁`);
+        setEndEarlyBooking(null);
+      } else {
+        toast.error(res.error || 'Could not end session early');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to complete session');
+    } finally {
+      setIsEndingEarly(false);
+    }
+  };
+
+  // Modal actions handlers for Check-In
   const handleConfirmCheckIn = () => {
     if (checkInConfirmBooking) {
       ownerCheckIn(checkInConfirmBooking.id);
-      toast.success('Customer checked in successfully! Session is now actively locked.');
+      toast.success('Customer checked in successfully! Session is now active.');
       setCheckInConfirmBooking(null);
     }
   };
 
-  const handleConfirmExtend = () => {
-    if (extendConfirmBooking) {
-      ownerExtendHold(extendConfirmBooking.id);
-      toast.success('Check-in window increased by 15 added minutes safely.');
-      setExtendConfirmBooking(null);
+  const handleConfirmExtendHold = () => {
+    if (extendHoldConfirmBooking) {
+      ownerExtendHold(extendHoldConfirmBooking.id);
+      toast.success('Hold window increased by 15 added minutes.');
+      setExtendHoldConfirmBooking(null);
     }
   };
 
@@ -248,7 +405,6 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
       };
       
       setReleaseConfirmBooking(null);
-      // Automatically prompt Walker
       onOpenWalkIn(payloadRef);
     }
   };
@@ -278,69 +434,68 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 select-none">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 bg-[#12121A] p-6 rounded-2xl border border-border-dark">
         <div>
           <h2 className="text-2xl sm:text-3xl font-display font-black text-white">{greetingText}</h2>
           <p className="text-text-secondary text-xs sm:text-sm mt-1">
-            Running console trackers for <span className="text-white font-bold">{venue?.name || 'Your Arena'}</span> · {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            Running arena console for <span className="text-white font-bold">{venue?.name || 'Your Arena'}</span> · {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
         </div>
         
-        {venue && !venue.is_verified && (
-          <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 px-4 py-3 rounded-xl flex items-start gap-2 max-w-md animate-pulse">
-            <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-            <p className="text-xs leading-normal">
-              <strong>⏳ Venue review pending verification.</strong> It will unlock live booking feeds globally within 24 hours. You can still set up station specifications immediately.
-            </p>
-          </div>
-        )}
+        <div className="flex gap-2">
+          <button
+            onClick={() => onOpenWalkIn()}
+            className="px-4 py-2.5 btn-gradient text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-lg shadow-brand-purple/20"
+          >
+            <span>＋ Start Walk-In</span>
+          </button>
+        </div>
       </div>
 
-      {/* TODAY COUNT STATS */}
+      {/* TODAY KEY STATS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         
         <div className="bg-[#1A1A2E] border border-border-dark p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-          <span className="text-[10px] uppercase font-mono tracking-widest text-text-secondary block">Today's Bookings</span>
-          <h3 className="text-3xl sm:text-4xl font-mono font-black mt-2 text-white">{stats.totalCount}</h3>
+          <span className="text-[10px] uppercase font-mono tracking-widest text-text-secondary block font-bold">Active Rigs Running</span>
+          <div className="flex items-baseline gap-2 mt-2">
+            <h3 className="text-3xl sm:text-4xl font-mono font-black text-emerald-400">{stats.activeRunningCount}</h3>
+            <span className="text-sm font-mono text-text-secondary">/ {stats.totalUnits} units</span>
+          </div>
           <p className="text-[10px] text-text-secondary mt-1">
-            Online: {stats.online} · Holds: {stats.holds} · Walk-ins: {stats.walkInCount}
+            {stats.totalUnits - stats.activeRunningCount} station{stats.totalUnits - stats.activeRunningCount !== 1 ? 's' : ''} currently free
           </p>
-          <div className="absolute right-4 bottom-4 text-emerald-400 font-mono text-[10px] font-bold bg-emerald-400/5 px-2 py-0.5 rounded border border-emerald-400/10">
-            ↑ 3 more than yesterday
+          <div className="absolute right-4 bottom-4 text-emerald-400 font-mono text-[10px] font-bold bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20">
+            Live
           </div>
         </div>
 
         <div className="bg-[#1A1A2E] border border-border-dark p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
-          <span className="text-[10px] uppercase font-mono tracking-widest text-text-secondary block">Today's Revenue (Gross)</span>
+          <span className="text-[10px] uppercase font-mono tracking-widest text-text-secondary block font-bold">Today's Revenue (Gross)</span>
           <h3 className="text-3xl sm:text-4xl font-mono font-black mt-2 text-white">₹{stats.gross}</h3>
-          <p className="text-[10px] text-emerald-400 mt-1 font-bold">
-            Net: ₹{stats.net} (after 10% commission fee)
+          <p className="text-[10px] text-emerald-400 mt-1 font-bold font-mono">
+            Net: ₹{stats.net} (after 10% GARF fee)
           </p>
-          <div className="absolute right-4 bottom-4 text-brand-purple font-mono text-[10px] font-bold bg-brand-purple/5 px-2 py-0.5 rounded border border-brand-purple/10">
-            Gross track
-          </div>
         </div>
 
         <div className="bg-[#1A1A2E] border border-border-dark p-5 rounded-2xl flex flex-col justify-between">
-          <span className="text-[10px] uppercase font-mono tracking-widest text-text-secondary block">This Month Net Earnings</span>
-          <h3 className="text-3xl sm:text-4xl font-mono font-black mt-2 text-white">₹{stats.monthlyNet}</h3>
-          <p className="text-[10px] text-emerald-400 mt-1 font-mono">
-            ↑ 12% vs last calendar month
+          <span className="text-[10px] uppercase font-mono tracking-widest text-text-secondary block font-bold">Total Bookings Today</span>
+          <h3 className="text-3xl sm:text-4xl font-mono font-black mt-2 text-white">{stats.totalCount}</h3>
+          <p className="text-[10px] text-text-secondary mt-1 font-mono">
+            Walk-ins: {stats.walkInCount} · Online: {stats.online} · Holds: {stats.holds}
           </p>
         </div>
 
         <div className="bg-[#1A1A2E] border border-border-dark p-5 rounded-2xl flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-[10px] uppercase font-mono tracking-widest text-text-secondary block">Slot Occupancy Today</span>
+            <span className="text-[10px] uppercase font-mono tracking-widest text-text-secondary block font-bold">Slot Occupancy</span>
             <div className="text-2xl font-mono font-black text-white">{stats.occupancyPercent}%</div>
             <p className="text-[9px] text-text-secondary">
-              {stats.filledSlotsCount} of {stats.maxActiveHourSlots} hour blocks filled
+              {stats.filledSlotsCount} of {stats.maxActiveHourSlots} hour blocks
             </p>
           </div>
-          {/* Circular ring simulator */}
           <div className="relative h-14 w-14 flex items-center justify-center">
             <svg className="w-full h-full transform -rotate-90">
               <circle cx="28" cy="28" r="22" stroke="#252538" strokeWidth="4" fill="transparent" />
@@ -361,17 +516,214 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
 
       </div>
 
+      {/* 🟢 REAL-TIME LIVE EQUIPMENT UNITS & SESSIONS MONITOR */}
+      <div className="bg-[#1A1A2E] border border-border-dark p-6 rounded-2xl space-y-5">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 pb-3 border-b border-border-dark">
+          <div className="flex items-center gap-2.5">
+            <span className="h-3 w-3 rounded-full bg-emerald-400 animate-pulse"></span>
+            <div>
+              <h3 className="font-bold font-display text-white text-lg">
+                Live Equipment Rigs & Active Sessions
+              </h3>
+              <p className="text-xs text-text-secondary">
+                Real-time console occupancy. Extend active play sessions or release stations early at any minute.
+              </p>
+            </div>
+          </div>
+          <span className="text-[11px] font-mono text-text-secondary">
+            Clock: <strong className="text-white">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</strong>
+          </span>
+        </div>
+
+        {currentVenueResources.length === 0 ? (
+          <div className="text-center py-10 text-text-secondary text-sm">
+            No equipment stations configured yet. Go to "Station Specs" to add gaming rigs.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {liveUnitStatuses.map(({ resource, activeBooking, activeTimes, softHoldBooking, nextBooking, nextBookingTimes }) => {
+              const isOccupied = !!activeBooking;
+              const isHeld = !activeBooking && !!softHoldBooking;
+              
+              // Calculate remaining minutes for active session
+              let remainingMins = 0;
+              let elapsedPercent = 0;
+              if (activeBooking && activeTimes) {
+                remainingMins = Math.max(0, activeTimes.endMinutes - currentTimeMinutes);
+                const totalDuration = activeTimes.endMinutes - activeTimes.startMinutes;
+                const elapsed = currentTimeMinutes - activeTimes.startMinutes;
+                elapsedPercent = totalDuration > 0 ? Math.min(100, Math.max(0, Math.round((elapsed / totalDuration) * 100))) : 0;
+              }
+
+              return (
+                <div 
+                  key={resource.id} 
+                  className={`p-5 rounded-2xl border transition flex flex-col justify-between gap-4 ${
+                    isOccupied 
+                      ? 'bg-[#151522] border-emerald-500/30 shadow-lg shadow-emerald-500/5' 
+                      : isHeld 
+                        ? 'bg-[#151522] border-yellow-500/30' 
+                        : 'bg-[#12121A] border-[#252538] hover:border-[#3a3a56]'
+                  }`}
+                >
+                  {/* Card Header: Unit Name & Status Badge */}
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded-xl ${isOccupied ? 'bg-emerald-500/10 text-emerald-400' : 'bg-brand-purple/10 text-brand-purple'}`}>
+                        {resource.type === 'pc' ? <Cpu className="h-5 w-5" /> : <Tv className="h-5 w-5" />}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-white text-sm sm:text-base font-display">
+                          {resource.name}
+                        </h4>
+                        <span className="text-[10px] font-mono text-text-secondary uppercase">
+                          {resource.type} · ₹{resource.price_per_hour}/hr
+                        </span>
+                      </div>
+                    </div>
+
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider ${
+                      isOccupied 
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 animate-pulse' 
+                        : isHeld 
+                          ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/30' 
+                          : 'bg-text-secondary/10 text-text-secondary border border-text-secondary/20'
+                    }`}>
+                      {isOccupied ? '🟢 IN SESSION' : isHeld ? '🟡 HELD' : '⚪ AVAILABLE'}
+                    </span>
+                  </div>
+
+                  {/* Card Body: Active Session or Free state */}
+                  {isOccupied && activeBooking && activeTimes ? (
+                    <div className="space-y-3 bg-[#1A1A2E] p-3.5 rounded-xl border border-emerald-500/20">
+                      <div className="flex justify-between items-center text-xs">
+                        <div>
+                          <span className="text-[10px] font-mono text-text-secondary block">PLAYER</span>
+                          <strong className="text-white font-sans text-sm">
+                            {activeBooking.walk_in_customer_name || 'Customer'}
+                          </strong>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] font-mono text-text-secondary block">TIME REMAINING</span>
+                          <strong className="text-emerald-400 font-mono text-sm font-black">
+                            {remainingMins > 0 ? `${remainingMins}m left` : 'Time ending'}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="w-full bg-[#12121A] h-2 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-emerald-400 h-full transition-all duration-1000"
+                          style={{ width: `${elapsedPercent}%` }}
+                        />
+                      </div>
+
+                      <div className="flex justify-between items-center text-[10px] font-mono text-text-secondary">
+                        <span>Started: <strong className="text-white">{formatTimeDisplay(activeTimes.startTime)}</strong></span>
+                        <span>Ends: <strong className="text-white">{formatTimeDisplay(activeTimes.endTime)}</strong></span>
+                      </div>
+
+                      {/* Active Actions: Extend & End Early */}
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenExtendSession(activeBooking)}
+                          className="flex-1 py-1.5 bg-brand-purple/20 hover:bg-brand-purple/30 border border-brand-purple/40 text-brand-purple rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition"
+                        >
+                          <FastForward className="h-3.5 w-3.5" />
+                          <span>Extend</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEndEarly(activeBooking)}
+                          className="flex-1 py-1.5 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition"
+                        >
+                          <Square className="h-3.5 w-3.5" />
+                          <span>End Early</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : isHeld && softHoldBooking ? (
+                    <div className="space-y-3 bg-[#1A1A2E] p-3.5 rounded-xl border border-yellow-500/20">
+                      <div className="flex justify-between items-center text-xs">
+                        <div>
+                          <span className="text-[10px] font-mono text-text-secondary block">HOLD CLIENT</span>
+                          <strong className="text-yellow-400 font-sans">
+                            {softHoldBooking.walk_in_customer_name || 'Client Reservation'}
+                          </strong>
+                        </div>
+                        <span className="text-[10px] font-mono text-text-secondary">
+                          {softHoldBooking.start_time} - {softHoldBooking.end_time}
+                        </span>
+                      </div>
+
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setCheckInConfirmBooking(softHoldBooking)}
+                          className="flex-1 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-black rounded-lg text-xs font-bold uppercase tracking-wider cursor-pointer"
+                        >
+                          Check In
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setReleaseConfirmBooking(softHoldBooking)}
+                          className="px-3 py-1.5 bg-red-500/15 text-red-400 rounded-lg text-xs font-bold uppercase tracking-wider cursor-pointer"
+                        >
+                          Release
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 bg-[#12121A] p-3.5 rounded-xl border border-[#232338]">
+                      <div className="text-xs text-text-secondary">
+                        {nextBooking && nextBookingTimes ? (
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-mono text-brand-purple block uppercase font-bold">
+                              Next Reserved Booking
+                            </span>
+                            <div className="text-white font-mono text-xs">
+                              {formatTimeDisplay(nextBookingTimes.startTime)} — {nextBooking.walk_in_customer_name || 'Online Client'}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-text-secondary text-xs">
+                            Free for the rest of today's operating hours.
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => onOpenWalkIn({ resourceId: resource.id, date: todayStr, hour: minutesToTime(currentTimeMinutes) })}
+                        className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg text-xs font-mono font-bold uppercase flex items-center justify-center gap-1.5 cursor-pointer transition"
+                      >
+                        <Play className="h-3 w-3" />
+                        <span>Start Walk-In on this rig</span>
+                      </button>
+                    </div>
+                  )}
+
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* VISUAL HOURLY BLOCK TIMELINE */}
       <div className="bg-[#1A1A2E] border border-border-dark p-6 rounded-2xl space-y-4">
-        <div className="flex justify-between items-center pb-2 border-b border-border-dark">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 pb-2 border-b border-border-dark">
           <div>
-            <h4 className="font-bold font-display text-white text-base">Visual Schedule Timeline (Today's Hour Blocks)</h4>
-            <p className="text-xs text-text-secondary">Click any available green slot to block it manually as Offline/Maintenance.</p>
+            <h4 className="font-bold font-display text-white text-base">Visual Schedule Timeline (Today's Operating Hours)</h4>
+            <p className="text-xs text-text-secondary">Reflects real-time interval walk-ins & online bookings. Click any green cell to block it.</p>
           </div>
-          <div className="flex gap-4 text-[10px] text-text-secondary font-mono">
+          <div className="flex flex-wrap gap-4 text-[10px] text-text-secondary font-mono">
             <span className="flex items-center gap-1"><span className="h-2 w-2 bg-emerald-400 rounded-full"></span> Available</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 bg-[#7C3AED] rounded-full"></span> Confirmed</span>
-            <span className="flex items-center gap-1"><span className="h-2 w-2 bg-red-500 rounded-full"></span> Checked In</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 bg-red-500 rounded-full"></span> In Session</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 bg-yellow-500 rounded-full"></span> Soft Hold</span>
             <span className="flex items-center gap-1"><span className="h-2 w-2 bg-gray-600 rounded-full"></span> Blocked</span>
           </div>
         </div>
@@ -380,12 +732,12 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
           <table className="w-full text-left text-xs text-text-secondary">
             <thead>
               <tr className="border-b border-[#2A2A3E]">
-                <th className="py-2.5 px-3 min-w-[120px] font-bold text-white uppercase font-mono">Station Rig</th>
-                {Array.from({ length: 13 }, (_, i) => {
-                  const hour = i + 9;
+                <th className="py-2.5 px-3 min-w-[140px] font-bold text-white uppercase font-mono">Station Rig</th>
+                {gridTimelineMatrix[0]?.columns.map(col => {
+                  const hourNum = parseInt(col.hour.split(':')[0], 10);
                   return (
-                    <th key={hour} className="py-2.5 px-1 text-center font-mono text-[10px]">
-                      {hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
+                    <th key={col.hour} className="py-2.5 px-1 text-center font-mono text-[10px]">
+                      {hourNum > 12 ? `${hourNum - 12} PM` : `${hourNum} AM`}
                     </th>
                   );
                 })}
@@ -429,13 +781,13 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
         </div>
       </div>
 
-      {/* BOTTOM FEED - RECENTS TABLE & ACTIVITY FEED */}
+      {/* BOTTOM ACTIVITY LOGS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* RECENT BOOKINGS */}
+        {/* RECENT BOOKINGS TABLE */}
         <div className="lg:col-span-7 bg-[#1A1A2E] border border-border-dark p-5 rounded-2xl space-y-4">
           <div className="flex justify-between items-center border-b border-border-dark pb-2">
-            <h4 className="font-bold font-display text-white text-base">Recent Activity Bookings</h4>
+            <h4 className="font-bold font-display text-white text-base">Recent Ledger Bookings</h4>
             <span className="text-[10px] font-mono text-text-secondary">Last 5 units</span>
           </div>
 
@@ -443,10 +795,10 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="text-text-secondary border-b border-border-dark">
-                  <th className="py-2">Reference</th>
-                  <th className="py-2">Client</th>
-                  <th className="py-2">Station</th>
-                  <th className="py-2">Slot</th>
+                  <th className="py-2">Ref</th>
+                  <th className="py-2">Player</th>
+                  <th className="py-2">Rig</th>
+                  <th className="py-2">Timeline</th>
                   <th className="py-2 text-right">Status</th>
                 </tr>
               </thead>
@@ -455,19 +807,18 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
                   <tr key={b.id} className="text-white">
                     <td className="py-3 font-mono text-text-secondary text-[11px] font-bold">{b.booking_ref}</td>
                     <td className="py-3 font-semibold">
-                      {b.walk_in_customer_name || 'Logged User'}
+                      {b.walk_in_customer_name || 'Player'}
                     </td>
                     <td className="py-3 text-text-secondary">
-                      {currentVenueResources.find(r => r.id === b.resource_id)?.name || 'Default Rig'}
+                      {currentVenueResources.find(r => r.id === b.resource_id)?.name || 'Station'}
                     </td>
                     <td className="py-3 font-mono text-xs">
                       {b.walk_in_actual_start_time ? (
-                        <div className="flex flex-col">
-                          <span className="text-emerald-400 font-bold">{b.walk_in_actual_start_time} - {b.walk_in_actual_end_time}</span>
-                          <span className="text-[9px] text-text-secondary/60">({b.start_time} block)</span>
-                        </div>
+                        <span className="text-emerald-400 font-bold">
+                          {formatTimeDisplay(b.walk_in_actual_start_time)} - {formatTimeDisplay(b.walk_in_actual_end_time || '')}
+                        </span>
                       ) : (
-                        <span>{b.start_time}</span>
+                        <span>{formatTimeDisplay(b.start_time)} - {formatTimeDisplay(b.end_time)}</span>
                       )}
                     </td>
                     <td className="py-3 text-right">
@@ -513,6 +864,190 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
 
       </div>
 
+      {/* ⏱️ EXTEND SESSION MODAL */}
+      {extendSessionBooking && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md bg-[#1A1A2E] border border-brand-purple/30 p-6 rounded-2xl space-y-5">
+            <div className="flex justify-between items-center border-b border-[#2a2a3e] pb-3">
+              <div className="flex items-center gap-2 text-brand-purple">
+                <FastForward className="h-5 w-5" />
+                <h4 className="font-bold font-display text-white text-lg">Extend Live Session</h4>
+              </div>
+              <button onClick={() => setExtendSessionBooking(null)} className="text-text-secondary hover:text-white cursor-pointer">
+                ✕
+              </button>
+            </div>
+
+            {/* Session Info */}
+            <div className="bg-[#12121A] p-3.5 rounded-xl border border-border-dark text-xs font-mono space-y-1">
+              <div>Station: <strong className="text-white">{currentVenueResources.find(r => r.id === extendSessionBooking.resource_id)?.name}</strong></div>
+              <div>Player: <strong className="text-white">{extendSessionBooking.walk_in_customer_name || 'Client'}</strong> ({extendSessionBooking.booking_ref})</div>
+              <div>
+                Current Window: <strong className="text-emerald-400">{formatTimeDisplay(extendSessionBooking.walk_in_actual_start_time || extendSessionBooking.start_time)} → {formatTimeDisplay(extendSessionBooking.walk_in_actual_end_time || extendSessionBooking.end_time)}</strong>
+              </div>
+            </div>
+
+            {/* Max Extension Analysis */}
+            {(() => {
+              const maxExt = getMaxExtensionDuration(extendSessionBooking, bookings, 240, slots);
+              const requestedMins = customExtendMins ? parseInt(customExtendMins, 10) || 0 : extendMins;
+              const canFit = requestedMins <= maxExt.maxMinutes;
+
+              return (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="text-xs font-mono uppercase text-text-secondary font-bold">
+                        Add Extension Time
+                      </label>
+                      <span className="text-xs font-mono text-brand-purple font-bold">
+                        Max free: {maxExt.maxMinutes} mins
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2">
+                      {[15, 30, 45, 60].map(mins => (
+                        <button
+                          key={mins}
+                          type="button"
+                          disabled={mins > maxExt.maxMinutes}
+                          onClick={() => {
+                            setExtendMins(mins);
+                            setCustomExtendMins('');
+                            const res = currentVenueResources.find(r => r.id === extendSessionBooking.resource_id);
+                            if (res) {
+                              setAdditionalPayment(Math.round(res.price_per_hour * (mins / 60)));
+                            }
+                          }}
+                          className={`py-2 text-xs font-mono font-bold rounded-xl border transition cursor-pointer ${
+                            extendMins === mins && !customExtendMins
+                              ? 'bg-brand-purple text-white border-brand-purple shadow-md'
+                              : mins > maxExt.maxMinutes
+                                ? 'bg-black/20 text-text-secondary/40 border-[#2a2a3e] cursor-not-allowed'
+                                : 'bg-[#12121A] text-text-secondary hover:text-white border-[#2a2a3e]'
+                          }`}
+                        >
+                          +{mins}m
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2">
+                      <span className="text-xs text-text-secondary font-mono">Custom mins:</span>
+                      <input
+                        type="number"
+                        min="5"
+                        max={maxExt.maxMinutes}
+                        placeholder={`Up to ${maxExt.maxMinutes}`}
+                        value={customExtendMins}
+                        onChange={e => {
+                          setCustomExtendMins(e.target.value);
+                          const num = parseInt(e.target.value, 10);
+                          const res = currentVenueResources.find(r => r.id === extendSessionBooking.resource_id);
+                          if (!isNaN(num) && res) {
+                            setAdditionalPayment(Math.round(res.price_per_hour * (num / 60)));
+                          }
+                        }}
+                        className="w-28 bg-[#12121A] border border-[#2a2a3e] rounded-lg px-2.5 py-1 text-xs font-mono text-white outline-none focus:border-brand-purple"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Payment Field */}
+                  <div>
+                    <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
+                      Additional Fee to Collect (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={additionalPayment}
+                      onChange={e => setAdditionalPayment(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-xl p-2.5 text-sm font-mono text-white outline-none focus:border-brand-purple"
+                    />
+                  </div>
+
+                  {!canFit && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 font-sans">
+                      ⚠️ Next booking starts at {formatTimeDisplay(maxExt.nextBookingStartTime || '')}. You can only extend by up to {maxExt.maxMinutes} minutes.
+                    </div>
+                  )}
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setExtendSessionBooking(null)}
+                      className="w-1/2 py-2.5 bg-[#12121A] border border-[#2a2a3e] rounded-xl text-xs font-bold uppercase text-text-secondary cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canFit || isExtending}
+                      onClick={handleExecuteExtendSession}
+                      className="w-1/2 py-2.5 btn-gradient text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isExtending ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>Confirm +{requestedMins}m</span>}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+          </div>
+        </div>
+      )}
+
+      {/* ⏹️ END SESSION EARLY MODAL */}
+      {endEarlyBooking && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md bg-[#1A1A2E] border border-red-500/30 p-6 rounded-2xl space-y-4">
+            <div className="flex items-center gap-2.5 text-red-400">
+              <Square className="h-5 w-5" />
+              <h4 className="font-bold font-display text-white text-lg">End Session Early?</h4>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              This will immediately conclude the session for <strong className="text-white">{endEarlyBooking.walk_in_customer_name || 'Player'}</strong> and instantly release the station rig for subsequent walk-ins or bookings.
+            </p>
+
+            <div className="bg-[#12121A] p-3 rounded-xl border border-border-dark text-xs font-mono space-y-1">
+              <div>Station: <strong className="text-white">{currentVenueResources.find(r => r.id === endEarlyBooking.resource_id)?.name}</strong></div>
+              <div>Actual End: <strong className="text-emerald-400">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (Right Now)</strong></div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
+                Final Settlement Collected (₹)
+              </label>
+              <input
+                type="number"
+                value={endEarlyPaymentCollected}
+                onChange={e => setEndEarlyPaymentCollected(e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-xl p-2.5 text-sm font-mono text-white outline-none focus:border-brand-purple"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setEndEarlyBooking(null)}
+                className="w-1/2 py-2.5 bg-[#12121A] border border-[#2a2a3e] rounded-xl text-xs font-bold uppercase text-text-secondary cursor-pointer"
+              >
+                Keep Playing
+              </button>
+              <button
+                type="button"
+                disabled={isEndingEarly}
+                onClick={handleExecuteEndEarly}
+                className="w-1/2 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                {isEndingEarly ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>End & Free Station</span>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* CHECK IN CONFIRM POPUP */}
       {checkInConfirmBooking && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-51 p-4">
@@ -547,37 +1082,6 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
         </div>
       )}
 
-      {/* EXTEND CONFIRM POPUP */}
-      {extendConfirmBooking && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-51 p-4">
-          <div className="w-full max-w-sm bg-[#1A1A2E] border border-yellow-500/20 p-6 rounded-2xl text-center space-y-4">
-            <div className="inline-flex p-3 bg-yellow-500/10 text-yellow-500 rounded-full">
-              <Clock className="h-6 w-6" />
-            </div>
-            <div>
-              <h4 className="font-bold font-display text-white text-lg">Extend Hold Window (+15m)?</h4>
-              <p className="text-xs text-text-secondary mt-1">
-                This adds 15 extra minutes to their check-in margin. You can only extend a reservation hold once.
-              </p>
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setExtendConfirmBooking(null)}
-                className="w-1/2 py-2.5 bg-[#12121A] border border-[#2a2a3e] rounded-xl text-xs font-bold uppercase text-text-secondary cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmExtend}
-                className="w-1/2 py-2.5 bg-yellow-500 hover:bg-yellow-600 rounded-xl text-xs font-bold uppercase text-black cursor-pointer"
-              >
-                Yes, Extend
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* RELEASE CONFIRM POPUP */}
       {releaseConfirmBooking && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-51 p-4">
@@ -588,7 +1092,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
             <div>
               <h4 className="font-bold font-display text-white text-lg">Release and Recycle Hold Slot?</h4>
               <p className="text-xs text-text-secondary mt-1">
-                This will immediately cancel their hold booking (GARF Client notified). You can then assign this slot immediately to a walk-in client.
+                This will immediately cancel their hold booking. You can then assign this slot immediately to a walk-in client.
               </p>
             </div>
             <div className="flex gap-4">
@@ -649,154 +1153,6 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({ venue, onOpenWalkIn 
           </div>
         </div>
       )}
-
-    </div>
-  );
-};
-
-// MULTI-ROLLER SOFT HOLD CARD COMPONENT WITH REVIEWS TRACKER
-interface SoftHoldCardProps {
-  booking: Booking;
-  currentTime: Date;
-  resourceName: string;
-  onCheckIn: () => void;
-  onExtend: () => void;
-  onRelease: () => void;
-}
-
-const SoftHoldCard: React.FC<SoftHoldCardProps> = ({ 
-  booking, currentTime, resourceName, onCheckIn, onExtend, onRelease 
-}) => {
-  const { profiles, ownerReleaseSlot } = useApp();
-
-  const customerProfile = useMemo(() => {
-    return profiles.find(p => p.id === booking.customer_id);
-  }, [profiles, booking]);
-
-  const startsTimeDate = useMemo(() => {
-    return new Date(`${booking.booking_date}T${booking.start_time}:00`);
-  }, [booking]);
-
-  // Expiration boundary check
-  const expiryTimeDate = useMemo(() => {
-    if (booking.hold_expires_at) {
-      return new Date(booking.hold_expires_at);
-    }
-    // Default 15 minutes after start time
-    return new Date(startsTimeDate.getTime() + 15 * 60 * 1000);
-  }, [booking, startsTimeDate]);
-
-  const hasExpired = currentTime.getTime() > expiryTimeDate.getTime();
-  const startsActive = currentTime.getTime() >= startsTimeDate.getTime();
-
-  // Active Seconds Countdown
-  const secondsRemaining = useMemo(() => {
-    if (!startsActive) return 900; // 15 mins preset
-    return Math.max(0, Math.floor((expiryTimeDate.getTime() - currentTime.getTime()) / 1000));
-  }, [startsActive, expiryTimeDate, currentTime]);
-
-  const countdownText = useMemo(() => {
-    const mins = Math.floor(secondsRemaining / 60);
-    const secs = secondsRemaining % 60;
-    return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  }, [secondsRemaining]);
-
-  // Auto-expire trigger
-  useEffect(() => {
-    if (startsActive && hasExpired) {
-      ownerReleaseSlot(booking.id);
-      toast.error(`Released expired soft hold for PC ${booking.booking_ref}! Slot recycled.`, { id: `auto-expire-${booking.id}` });
-    }
-  }, [startsActive, hasExpired, booking.id, ownerReleaseSlot]);
-
-  // Extension status
-  const alreadyExtended = useMemo(() => {
-    const defaultExpiry = startsTimeDate.getTime() + 15 * 60 * 1000;
-    return expiryTimeDate.getTime() > defaultExpiry;
-  }, [startsTimeDate, expiryTimeDate]);
-
-  return (
-    <div className={`p-4.5 rounded-xl border flex flex-col justify-between transition gap-3 shadow-md ${
-      hasExpired 
-        ? 'border-red-500/30 bg-red-500/5 opacity-55 saturate-50' 
-        : startsActive && secondsRemaining < 300
-          ? 'border-red-500 bg-red-950/20 shadow-red-900/10 animate-pulse'
-          : 'border-yellow-500/25 bg-[#12121A]/80 hover:border-yellow-500/40'
-    }`}>
-      <div className="flex justify-between items-start">
-        <div>
-          <span className="text-[11px] font-mono text-yellow-500 font-bold bg-yellow-500/10 px-2.5 py-0.5 rounded border border-yellow-500/20">
-            {booking.booking_ref}
-          </span>
-          <h5 className="font-bold text-white text-base mt-2 font-display">
-            {booking.walk_in_customer_name || customerProfile?.full_name || 'Client'}
-          </h5>
-          <p className="text-[10px] text-text-secondary font-mono mt-0.5">
-            {resourceName} · {booking.walk_in_actual_start_time ? (
-              <span className="text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                ⏱️ Custom: {booking.walk_in_actual_start_time} - {booking.walk_in_actual_end_time}
-              </span>
-            ) : (
-              <span>{booking.start_time} - {booking.end_time} ({booking.duration_hours}h)</span>
-            )}
-          </p>
-        </div>
-
-        {/* Live Active Clock States */}
-        <div className="text-right">
-          {!startsActive ? (
-            <div className="space-y-0.5">
-              <span className="text-[10px] font-bold text-[#a8a8cf] bg-[#1a1c32] px-2 py-0.5 rounded border border-[#2a2c4e] uppercase font-mono">Starts {booking.start_time}</span>
-              <p className="text-[9px] text-text-secondary/60 font-mono mt-1">Timer begins on slot hour</p>
-            </div>
-          ) : hasExpired ? (
-            <span className="text-xs font-mono font-black text-red-400 block tracking-widest uppercase">EXPIRED</span>
-          ) : (
-            <div className="text-right space-y-0.5">
-              <span className={`text-base font-mono font-black tracking-widest block leading-none ${secondsRemaining < 300 ? 'text-red-400' : 'text-yellow-400'}`}>
-                {countdownText}
-              </span>
-              <span className="text-[8px] uppercase font-mono tracking-wider font-bold text-text-secondary/50 block">Arrive check window</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {customerProfile?.no_show_count && customerProfile.no_show_count > 0 ? (
-        <div className="text-[10px] text-red-400 font-bold bg-red-400/5 p-1 px-2 border border-red-400/10 rounded font-mono">
-          🚨 warning: client possesses {customerProfile.no_show_count}/3 missed check-in no-show marks.
-        </div>
-      ) : null}
-
-      <div className="flex gap-2 pt-2 border-t border-border-dark/40">
-        <button
-          onClick={onCheckIn}
-          disabled={hasExpired}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold text-black font-sans flex-1 transition cursor-pointer flex justify-center items-center gap-1 bg-emerald-400 hover:bg-emerald-500 disabled:opacity-40`}
-        >
-          <span>Check In</span>
-        </button>
-
-        <button
-          onClick={onExtend}
-          disabled={alreadyExtended || hasExpired || !startsActive}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold font-sans flex-1 transition flex justify-center items-center border ${
-            alreadyExtended 
-              ? 'border-text-secondary/20 text-text-secondary/40 cursor-not-allowed bg-black/10' 
-              : 'border-yellow-500/20 hover:border-yellow-500 bg-yellow-500/5 hover:bg-yellow-500/15 text-yellow-500 cursor-pointer'
-          }`}
-        >
-          <span>Extend hold</span>
-        </button>
-
-        <button
-          onClick={onRelease}
-          className="p-1 px-2 rounded-lg text-xs font-bold text-red-400 border border-red-500/20 hover:bg-red-500/10 bg-red-500/5 transition cursor-pointer"
-          title="Release hold for walk-in client"
-        >
-          Release
-        </button>
-      </div>
 
     </div>
   );

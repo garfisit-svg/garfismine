@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { X, Check, Loader2, Info, AlertTriangle } from 'lucide-react';
+import { X, Check, Loader2, Info, AlertTriangle, Clock, Play, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { timeToMinutes, minutesToTime, addMinutesToTime, formatTimeDisplay } from '../../lib/availability';
 
 interface WalkInModalProps {
   isOpen: boolean;
@@ -10,15 +11,31 @@ interface WalkInModalProps {
 }
 
 export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, preselectedSlot }) => {
-  const { resources, slots, bookings, addWalkInBooking, ownerReleaseSlot, venues } = useApp();
+  const { resources, slots, bookings, addWalkInBooking, ownerReleaseSlot, venues, checkUnitAvailability } = useApp();
 
   const [step, setStep] = useState(1);
   const [selectedResourceId, setSelectedResourceId] = useState(preselectedSlot?.resourceId || '');
   const [selectedDate, setSelectedDate] = useState(preselectedSlot?.date || new Date().toISOString().split('T')[0]);
-  const [selectedStartTime, setSelectedStartTime] = useState(preselectedSlot?.hour || '');
-  const [duration, setDuration] = useState(1);
-  const [minuteOffset, setMinuteOffset] = useState('00'); // support custom 11:15 etc.
-  
+
+  // Current clock time formatted as HH:MM
+  const getCurrentTimeFormatted = () => {
+    const now = new Date();
+    const h = now.getHours().toString().padStart(2, '0');
+    const m = now.getMinutes().toString().padStart(2, '0');
+    return `${h}:${m}`;
+  };
+
+  // Start time states
+  const [useCurrentTime, setUseCurrentTime] = useState(true);
+  const [customStartTime, setCustomStartTime] = useState(() => {
+    if (preselectedSlot?.hour) return preselectedSlot.hour;
+    return getCurrentTimeFormatted();
+  });
+
+  // Duration in minutes (e.g. 60 = 1 hr, 90 = 1.5 hr, 120 = 2 hr)
+  const [durationMinutes, setDurationMinutes] = useState<number>(60);
+  const [customMinutesInput, setCustomMinutesInput] = useState<string>('');
+
   // Step 2 Customer fields
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -26,35 +43,25 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, prese
   const [paymentBy, setPaymentBy] = useState<'Cash' | 'UPI'>('Cash');
   const [notes, setNotes] = useState('');
 
-  const actualStartTimeString = useMemo(() => {
-    if (!selectedStartTime) return '';
-    const [h] = selectedStartTime.split(':');
-    return `${h}:${minuteOffset}`;
-  }, [selectedStartTime, minuteOffset]);
-
-  const actualEndTimeString = useMemo(() => {
-    if (!selectedStartTime) return '';
-    const [h] = selectedStartTime.split(':');
-    const endH = Number(h) + duration;
-    const endHStr = endH < 10 ? `0${endH}` : `${endH}`;
-    return `${endHStr}:${minuteOffset}`;
-  }, [selectedStartTime, duration, minuteOffset]);
-  
   const [showSoftHoldWarning, setShowSoftHoldWarning] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Auto-selection update
-  React.useEffect(() => {
-    if (preselectedSlot) {
-      setSelectedResourceId(preselectedSlot.resourceId);
-      setSelectedDate(preselectedSlot.date);
-      setSelectedStartTime(preselectedSlot.hour);
-    }
-  }, [preselectedSlot]);
-
+  // Selected Resource
   const selectedResource = useMemo(() => {
     return resources.find(r => r.id === selectedResourceId) || null;
   }, [selectedResourceId, resources]);
+
+  // Handle preselected slot or default resource
+  useEffect(() => {
+    if (preselectedSlot) {
+      setSelectedResourceId(preselectedSlot.resourceId);
+      setSelectedDate(preselectedSlot.date);
+      setCustomStartTime(preselectedSlot.hour);
+      setUseCurrentTime(false);
+    } else if (!selectedResourceId && resources.length > 0) {
+      setSelectedResourceId(resources[0].id);
+    }
+  }, [preselectedSlot, resources, selectedResourceId]);
 
   const isDayClosed = useMemo(() => {
     const res = selectedResource || resources[0];
@@ -63,327 +70,424 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, prese
     return v?.closed_dates?.includes(selectedDate) || false;
   }, [selectedResource, resources, venues, selectedDate]);
 
-  // Compute 24-hourly blocks status
-  const hourlySlotsStatus = useMemo(() => {
-    if (!selectedResourceId) return [];
-    
-    const times = Array.from({ length: 15 }, (_, i) => {
-      const hourVal = i + 9; // 9:00 AM to 11:00 PM
-      return `${hourVal < 10 ? '0' : ''}${hourVal}:00`;
-    });
+  // Actual Effective Start Time
+  const actualStartTime = useMemo(() => {
+    return customStartTime || '09:00';
+  }, [customStartTime]);
 
-    return times.map(t => {
-      const dbSlot = slots.find(s => s.resource_id === selectedResourceId && s.slot_date === selectedDate && s.start_time === t);
-      
-      let status: 'available' | 'booked' | 'held' | 'blocked' = 'available';
-      let bookingRef: string | null = null;
-      let customerNameStr: string = '';
-      let bookingId: string | null = null;
+  // Actual Effective End Time
+  const actualEndTime = useMemo(() => {
+    return addMinutesToTime(actualStartTime, durationMinutes);
+  }, [actualStartTime, durationMinutes]);
 
-      if (isDayClosed) {
-        status = 'blocked';
-      } else if (dbSlot) {
-        status = dbSlot.status;
-        if (dbSlot.booking_id) {
-          bookingId = dbSlot.booking_id;
-          const associatedB = bookings.find(b => b.id === dbSlot.booking_id);
-          if (associatedB) {
-            bookingRef = associatedB.booking_ref;
-            customerNameStr = associatedB.walk_in_customer_name || 'Customer Profile';
-          }
-        }
-      }
-
-      return {
-        time: t,
-        status,
-        bookingId,
-        bookingRef,
-        customerNameStr
-      };
-    });
-  }, [selectedResourceId, selectedDate, slots, bookings, isDayClosed]);
-
-  // Pricing details
+  // Calculate pricing based on exact minutes
+  const durationHours = durationMinutes / 60;
   const standardPrice = useMemo(() => {
     if (!selectedResource) return 0;
-    return selectedResource.price_per_hour * duration;
-  }, [selectedResource, duration]);
+    return Math.round(selectedResource.price_per_hour * durationHours);
+  }, [selectedResource, durationHours]);
 
   const finalPrice = customAmount === '' ? standardPrice : customAmount;
 
+  // Real-time Availability & Conflict Check for the specified time interval
+  const availabilityCheck = useMemo(() => {
+    if (!selectedResourceId || !selectedDate || !actualStartTime || !actualEndTime) {
+      return { available: true };
+    }
+    return checkUnitAvailability(selectedResourceId, selectedDate, actualStartTime, actualEndTime);
+  }, [selectedResourceId, selectedDate, actualStartTime, actualEndTime, checkUnitAvailability]);
+
+  // Find max free minutes from start time if conflict exists
+  const maxFreeMinsBeforeConflict = useMemo(() => {
+    if (availabilityCheck.available || !selectedResourceId) return durationMinutes;
+    
+    const startMins = timeToMinutes(actualStartTime);
+    // Find all future bookings for this unit on this date starting after startMins
+    const futureBookings = bookings
+      .filter(b => b.resource_id === selectedResourceId && b.booking_date === selectedDate && b.booking_status !== 'cancelled' && b.booking_status !== 'no_show')
+      .map(b => {
+        const bStart = b.walk_in_actual_start_time || b.start_time;
+        return timeToMinutes(bStart);
+      })
+      .filter(m => m > startMins)
+      .sort((a, b) => a - b);
+
+    if (futureBookings.length > 0) {
+      return Math.max(0, futureBookings[0] - startMins);
+    }
+    return 0;
+  }, [availabilityCheck, selectedResourceId, selectedDate, actualStartTime, bookings, durationMinutes]);
+
+  // Other alternative units of the same type that are available
+  const alternateAvailableUnits = useMemo(() => {
+    if (availabilityCheck.available || !selectedResource) return [];
+    return resources.filter(r => 
+      r.venue_id === selectedResource.venue_id && 
+      r.type === selectedResource.type && 
+      r.id !== selectedResource.id &&
+      r.is_active !== false &&
+      checkUnitAvailability(r.id, selectedDate, actualStartTime, actualEndTime).available
+    );
+  }, [availabilityCheck, selectedResource, resources, selectedDate, actualStartTime, actualEndTime, checkUnitAvailability]);
+
   if (!isOpen) return null;
 
-  const handleSlotCellClick = (cell: any) => {
-    if (isDayClosed) {
-      toast.error('Venue is closed on this date (Configured in Settings)');
-      return;
-    }
-    if (cell.status === 'booked' || cell.status === 'blocked') {
-      toast.error('This slot is locked and unavailable for walk-ins');
-      return;
-    }
-    if (cell.status === 'held') {
-      // Trigger warning of overriding a soft-hold client
-      setShowSoftHoldWarning(cell);
-      return;
-    }
-    setSelectedStartTime(cell.time);
+  const handleSetNow = () => {
+    setUseCurrentTime(true);
+    setCustomStartTime(getCurrentTimeFormatted());
   };
 
-  const confirmSoftHoldOverride = () => {
-    if (showSoftHoldWarning) {
-      setSelectedStartTime(showSoftHoldWarning.time);
-      setShowSoftHoldWarning(null);
-      toast.success('Soft hold overridden. Add walk-in here.');
+  const handleDurationPreset = (mins: number) => {
+    setDurationMinutes(mins);
+    setCustomMinutesInput('');
+  };
+
+  const handleCustomMinutesChange = (val: string) => {
+    setCustomMinutesInput(val);
+    const num = parseInt(val, 10);
+    if (!isNaN(num) && num > 0) {
+      setDurationMinutes(num);
+    }
+  };
+
+  const handleAutoAdjustToMax = () => {
+    if (maxFreeMinsBeforeConflict > 0) {
+      setDurationMinutes(maxFreeMinsBeforeConflict);
+      setCustomMinutesInput('');
+      toast.success(`Duration adjusted to ${maxFreeMinsBeforeConflict} minutes`);
     }
   };
 
   const executeAddWalkIn = async () => {
     setSubmitting(true);
     try {
-      if (!selectedStartTime || !selectedResourceId) {
-        toast.error('Please assign a resource and clock time');
+      if (!actualStartTime || !selectedResourceId) {
+        toast.error('Please assign a station rig and start time');
         setSubmitting(false);
         return;
       }
 
-      // Generate sequence of slots based on duration
-      const [startH, startM] = selectedStartTime.split(':').map(Number);
-      const generatedSlots: string[] = [];
-      for (let i = 0; i < duration; i++) {
-        const nextH = startH + i;
-        generatedSlots.push(`${nextH < 10 ? '0' : ''}${nextH}:00`);
+      if (!availabilityCheck.available) {
+        toast.error(availabilityCheck.conflictingReason || 'Time interval conflicts with an existing booking');
+        setSubmitting(false);
+        return;
       }
 
-      // Identify if overriding any soft holds
-      const slotsOverridden = hourlySlotsStatus.filter(cs => generatedSlots.includes(cs.time) && cs.status === 'held');
-      for (const overrideCell of slotsOverridden) {
-        if (overrideCell.bookingId) {
-          await ownerReleaseSlot(overrideCell.bookingId);
-        }
+      // Generate sequence of hourly slot identifiers for legacy tracking
+      const startH = parseInt(actualStartTime.split(':')[0], 10);
+      const endH = Math.ceil(timeToMinutes(actualEndTime) / 60);
+      const generatedSlots: string[] = [];
+      for (let h = startH; h < endH; h++) {
+        generatedSlots.push(`${h.toString().padStart(2, '0')}:00`);
       }
 
       await addWalkInBooking({
         resourceId: selectedResourceId,
         date: selectedDate,
-        slots: generatedSlots,
-        customerName: customerName || 'Anonymous',
+        slots: generatedSlots.length > 0 ? generatedSlots : [`${startH.toString().padStart(2, '0')}:00`],
+        customerName: customerName || 'Walk-in Player',
         customerPhone: customerPhone || undefined,
-        pricePerHr: customAmount !== '' ? Number(customAmount) / duration : undefined,
+        pricePerHr: customAmount !== '' ? Number(customAmount) / durationHours : undefined,
         paymentBy,
-        actualStartTime: actualStartTimeString,
-        actualEndTime: actualEndTimeString
+        actualStartTime: actualStartTime,
+        actualEndTime: actualEndTime
       });
 
-      toast.success('Walk-in registered! Slot hard locked 🟢');
+      toast.success(`Walk-in confirmed! Rig locked for ${formatTimeDisplay(actualStartTime)} → ${formatTimeDisplay(actualEndTime)} 🎮`);
       
       // Reset state and exit
       setStep(1);
-      setSelectedStartTime('');
       setCustomerName('');
       setCustomerPhone('');
       setCustomAmount('');
       setNotes('');
       onClose();
     } catch (e: any) {
-      toast.error(e.message || 'Error executing walk-in lock');
+      toast.error(e.message || 'Error executing walk-in session');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 font-sans">
-      <div className="w-full max-w-2xl bg-[#1A1A2E] border border-[#2a2a3e] rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 font-sans select-none">
+      <div className="w-full max-w-2xl bg-[#1A1A2E] border border-[#2a2a3e] rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         
         {/* Header */}
         <div className="flex justify-between items-center bg-[#12121A] px-6 py-4 border-b border-[#2a2a3e]">
-          <h3 className="font-bold font-display text-white text-lg flex items-center gap-2">
-            <span>➕ Add Walk-In Live Session</span>
-          </h3>
-          <button onClick={onClose} className="p-1 hover:bg-[#1C1C2D] rounded text-text-secondary hover:text-white cursor-pointer">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">🚶</span>
+            <div>
+              <h3 className="font-bold font-display text-white text-lg">
+                Add Walk-In / Live Session
+              </h3>
+              <p className="text-text-secondary text-[11px] font-mono">
+                Start session at any minute with real-time interval conflict checking
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose} 
+            className="p-1.5 hover:bg-[#1C1C2D] rounded-lg text-text-secondary hover:text-white cursor-pointer transition"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[80vh] space-y-6">
+        {/* Content Body */}
+        <div className="p-6 overflow-y-auto space-y-6 flex-grow">
           {step === 1 ? (
-            <div className="space-y-4">
+            <div className="space-y-5">
+              
               {isDayClosed && (
                 <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 text-rose-400 text-xs flex items-center gap-2 animate-pulse">
                   <AlertTriangle className="h-4 w-4 text-rose-400 flex-shrink-0" />
-                  <span>This date is configured as <strong className="font-bold">CLOSED</strong> in Venue Settings. No walk-ins can be registered on closed dates.</span>
+                  <span>This date is marked as <strong className="font-bold">CLOSED</strong> in Venue Settings. No walk-ins can be started today.</span>
                 </div>
               )}
+
+              {/* 1. Target Rig & Date */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs uppercase tracking-wider text-text-secondary font-mono mb-1.5">1. Target Resource</label>
+                  <label className="block text-xs uppercase tracking-wider text-text-secondary font-mono mb-1.5 font-bold">
+                    1. Station / Rig
+                  </label>
                   <select
-                    className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-2.5 text-sm outline-none text-white focus:border-brand-purple"
+                    className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-xl p-2.5 text-sm outline-none text-white focus:border-brand-purple cursor-pointer"
                     value={selectedResourceId}
                     onChange={e => setSelectedResourceId(e.target.value)}
                   >
-                    <option value="">Select computer/turf rig...</option>
+                    <option value="">Select station rig...</option>
                     {resources.map(r => (
                       <option key={r.id} value={r.id}>
-                        {r.name} ({r.type.toUpperCase()}) - ₹{r.price_per_hour}/hr
+                        {r.name} ({r.type.toUpperCase()}) — ₹{r.price_per_hour}/hr
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs uppercase tracking-wider text-text-secondary font-mono mb-1.5">2. Booking Date</label>
+                  <label className="block text-xs uppercase tracking-wider text-text-secondary font-mono mb-1.5 font-bold">
+                    2. Date
+                  </label>
                   <input
                     type="date"
-                    className="w-full bg-[#12121A] font-mono border border-[#2a2a3e] rounded-lg p-2.5 text-sm outline-none text-white focus:border-brand-purple"
+                    className="w-full bg-[#12121A] font-mono border border-[#2a2a3e] rounded-xl p-2.5 text-sm outline-none text-white focus:border-brand-purple"
                     value={selectedDate}
                     onChange={e => setSelectedDate(e.target.value)}
                   />
                 </div>
               </div>
 
-              {selectedResourceId ? (
-                <div>
-                  <label className="block text-xs uppercase tracking-wider text-text-secondary font-mono mb-2">3. Start Slot (Select clock time block)</label>
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                    {hourlySlotsStatus.map(cell => (
-                      <button
-                        key={cell.time}
-                        onClick={() => handleSlotCellClick(cell)}
-                        type="button"
-                        className={`p-2.5 text-center text-xs font-semibold rounded-lg border transition duration-150-all cursor-pointer flex flex-col items-center justify-center ${
-                          selectedStartTime === cell.time
-                            ? 'border-brand-purple bg-brand-purple/20 text-white shadow-md'
-                            : cell.status === 'booked'
-                              ? 'border-brand-cyan/20 bg-brand-cyan/5 text-brand-cyan/60 line-through'
-                              : cell.status === 'blocked'
-                                ? 'border-[#383856] bg-black/30 text-text-secondary/50'
-                                : cell.status === 'held'
-                                  ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-500 animate-pulse'
-                                  : 'border-[#2a2a3e] bg-[#12121A] text-emerald-400 hover:border-emerald-500 hover:bg-emerald-500/10'
-                        }`}
-                      >
-                        <span className="font-mono">{cell.time}</span>
-                        {cell.status === 'held' && <span className="text-[8px] font-mono font-bold">HOLD</span>}
-                        {cell.status === 'booked' && <span className="text-[8px] font-mono">LOCKED</span>}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="flex gap-4 mt-1.5 text-[10px] text-text-secondary font-mono justify-center">
-                    <span className="flex items-center gap-1">🟢 Available</span>
-                    <span className="flex items-center gap-1">🟡 Soft Hold</span>
-                    <span className="flex items-center gap-1">🔵 Confirmed</span>
-                    <span className="flex items-center gap-1">⚫ Blocked</span>
-                  </div>
+              {/* 2. Start Time Selector */}
+              <div className="bg-[#12121A] p-4.5 rounded-xl border border-border-dark space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs uppercase tracking-wider text-text-secondary font-mono font-bold flex items-center gap-1.5">
+                    <Clock className="h-4 w-4 text-brand-purple" />
+                    <span>3. Actual Start Time</span>
+                  </label>
+                  
+                  <button
+                    type="button"
+                    onClick={handleSetNow}
+                    className="px-3 py-1 bg-brand-purple/15 border border-brand-purple/30 hover:bg-brand-purple/25 text-brand-purple rounded-lg text-xs font-mono font-bold flex items-center gap-1 cursor-pointer transition"
+                  >
+                    <Zap className="h-3 w-3" />
+                    <span>Start Right Now ({getCurrentTimeFormatted()})</span>
+                  </button>
                 </div>
-              ) : (
-                <div className="text-center py-6 text-xs text-text-secondary bg-[#12121A] rounded-xl border border-dashed border-[#2a2a3e]">
-                  💡 select a computer rig or console station above to load day-specific available slots
-                </div>
-              )}
 
-              {selectedStartTime && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs uppercase tracking-wider text-text-secondary font-mono mb-1.5">4. Duration Hours</label>
-                    <select
-                      className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-2.5 text-sm outline-none text-white focus:border-brand-purple font-mono"
-                      value={duration}
-                      onChange={e => setDuration(Number(e.target.value))}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="time"
+                    value={customStartTime}
+                    onChange={e => {
+                      setCustomStartTime(e.target.value);
+                      setUseCurrentTime(false);
+                    }}
+                    className="bg-[#1A1A2E] border border-[#2a2a3e] rounded-xl px-4 py-2.5 text-base font-mono font-bold text-white focus:border-brand-purple outline-none"
+                  />
+                  <span className="text-xs text-text-secondary font-mono">
+                    Formatted: <strong className="text-white">{formatTimeDisplay(actualStartTime)}</strong>
+                  </span>
+                </div>
+              </div>
+
+              {/* 3. Duration Selector */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs uppercase tracking-wider text-text-secondary font-mono font-bold">
+                    4. Play Duration
+                  </label>
+                  <span className="text-xs font-mono text-emerald-400 font-bold">
+                    {durationMinutes} minutes ({durationHours} hr{durationHours !== 1 ? 's' : ''})
+                  </span>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {[
+                    { label: '30m', mins: 30 },
+                    { label: '45m', mins: 45 },
+                    { label: '1h', mins: 60 },
+                    { label: '1.5h', mins: 90 },
+                    { label: '2h', mins: 120 },
+                    { label: '3h', mins: 180 },
+                  ].map(p => (
+                    <button
+                      key={p.mins}
+                      type="button"
+                      onClick={() => handleDurationPreset(p.mins)}
+                      className={`py-2 px-2 text-xs font-mono font-bold rounded-xl border transition cursor-pointer text-center ${
+                        durationMinutes === p.mins && !customMinutesInput
+                          ? 'bg-brand-purple border-brand-purple text-white shadow-md shadow-brand-purple/20'
+                          : 'bg-[#12121A] border-[#2a2a3e] text-text-secondary hover:text-white hover:border-brand-purple/40'
+                      }`}
                     >
-                      {[1, 2, 3, 4, 5].map(hr => {
-                        const startHour = Number(selectedStartTime.split(':')[0]);
-                        const endHour = startHour + hr;
-                        return (
-                          <option key={hr} value={hr}>
-                            {hr} Hour{hr > 1 ? 's' : ''} (Ends at {endHour > 12 ? `${endHour - 12}:00 PM` : `${endHour}:00 AM`})
-                          </option>
-                        );
-                      })}
-                    </select>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Minutes Input */}
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-text-secondary font-mono">Or custom:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="600"
+                    placeholder="e.g. 75"
+                    value={customMinutesInput}
+                    onChange={e => handleCustomMinutesChange(e.target.value)}
+                    className="w-24 bg-[#12121A] border border-[#2a2a3e] rounded-lg px-2.5 py-1 text-xs font-mono text-white outline-none focus:border-brand-purple"
+                  />
+                  <span className="text-xs text-text-secondary font-mono">minutes</span>
+                </div>
+              </div>
+
+              {/* 4. Live Session Timeline & Conflict Status Badge */}
+              <div className={`p-4 rounded-xl border space-y-2.5 transition ${
+                !availabilityCheck.available
+                  ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                  : 'bg-emerald-500/10 border-emerald-500/30 text-white'
+              }`}>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] uppercase font-mono tracking-wider text-text-secondary font-bold">
+                    Target Session Interval
+                  </span>
+                  <span className={`text-[10px] font-mono uppercase font-bold px-2 py-0.5 rounded ${
+                    !availabilityCheck.available
+                      ? 'bg-red-500/20 text-red-400'
+                      : 'bg-emerald-500/20 text-emerald-400'
+                  }`}>
+                    {availabilityCheck.available ? '🟢 UNIT AVAILABLE' : '🔴 TIME CONFLICT'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-sm sm:text-base font-mono font-bold">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white">{formatTimeDisplay(actualStartTime)}</span>
+                    <span className="text-text-secondary">➔</span>
+                    <span className="text-white">{formatTimeDisplay(actualEndTime)}</span>
                   </div>
+                  <span className="text-emerald-400 text-xs sm:text-sm">
+                    Est. ₹{standardPrice}
+                  </span>
+                </div>
 
-                  {/* PRECISE TIMING ADJUSTER SECTION */}
-                  <div className="bg-[#12121A] p-4 rounded-xl border border-brand-purple/20 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">⏱️</span>
-                      <div>
-                        <h4 className="text-white text-xs font-bold uppercase tracking-wider font-mono">Custom Walk-In Minute Offset</h4>
-                        <p className="text-[10px] text-text-secondary">If the player starts playing mid-hour (e.g. 11:15 AM)</p>
-                      </div>
-                    </div>
+                {/* Conflict Details and Quick Auto-Fix */}
+                {!availabilityCheck.available && (
+                  <div className="pt-2 border-t border-red-500/20 space-y-2">
+                    <p className="text-xs text-red-300 font-sans leading-relaxed">
+                      ⚠️ {availabilityCheck.conflictingReason}
+                    </p>
+                    
+                    {maxFreeMinsBeforeConflict > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleAutoAdjustToMax}
+                        className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg text-xs font-mono font-bold text-red-200 flex items-center gap-1 cursor-pointer transition"
+                      >
+                        <span>⚡ Auto-adjust duration to {maxFreeMinsBeforeConflict} mins (Ends at conflict)</span>
+                      </button>
+                    )}
 
-                    <div className="grid grid-cols-4 gap-2">
-                      {['00', '15', '30', '45'].map(min => (
-                        <button
-                          key={min}
-                          type="button"
-                          onClick={() => setMinuteOffset(min)}
-                          className={`py-2 text-xs font-mono font-bold rounded-lg border transition cursor-pointer ${
-                            minuteOffset === min 
-                              ? 'border-brand-purple bg-brand-purple/15 text-white glow-purple' 
-                              : 'border-[#2a2a3e] bg-[#161626] text-text-secondary hover:text-white hover:border-[#3a3a56]'
-                          }`}
-                        >
-                          :{min}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="bg-[#1C1C2D] p-3 rounded-lg border border-border-dark flex justify-between items-center">
-                      <div>
-                        <span className="text-[9px] uppercase font-mono text-text-secondary block">LIVE SESSION TIMELINE</span>
-                        <div className="text-xs text-white mt-0.5">
-                          <span className="text-emerald-400 font-mono font-bold">{actualStartTimeString}</span>
-                          <span className="mx-2 text-text-secondary/60 font-mono">➔</span>
-                          <span className="text-emerald-400 font-mono font-bold">{actualEndTimeString}</span>
+                    {alternateAvailableUnits.length > 0 && (
+                      <div className="pt-1">
+                        <span className="text-[10px] text-text-secondary font-mono block mb-1">
+                          Other available {selectedResource?.type.toUpperCase()} units right now:
+                        </span>
+                        <div className="flex gap-2 flex-wrap">
+                          {alternateAvailableUnits.map(alt => (
+                            <button
+                              key={alt.id}
+                              type="button"
+                              onClick={() => setSelectedResourceId(alt.id)}
+                              className="px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 rounded-lg text-xs font-mono text-emerald-300 cursor-pointer transition"
+                            >
+                              👉 Switch to {alt.name}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[9px] uppercase font-mono text-text-secondary block">SLOT ALLOCATION LOCK</span>
-                        <span className="text-[10px] font-mono text-text-secondary bg-[#12121A] px-2 py-0.5 rounded border border-[#2a2a3e] mt-1 inline-block">
-                          {selectedStartTime} - {Number(selectedStartTime.split(':')[0]) + duration}:00
-                        </span>
-                      </div>
-                    </div>
+                    )}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
+              {/* Bottom Step 1 Action */}
               <div className="pt-4 border-t border-[#2a2a3e] flex justify-end">
                 <button
                   type="button"
-                  disabled={!selectedStartTime}
+                  disabled={!selectedResourceId || !availabilityCheck.available || isDayClosed}
                   onClick={() => setStep(2)}
-                  className={`px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1 transition ${selectedStartTime ? 'btn-gradient text-white cursor-pointer' : 'bg-[#12121A] text-text-secondary border border-[#2a2a3e] cursor-not-allowed'}`}
+                  className={`px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition ${
+                    selectedResourceId && availabilityCheck.available && !isDayClosed
+                      ? 'btn-gradient text-white cursor-pointer shadow-lg shadow-brand-purple/20'
+                      : 'bg-[#12121A] text-text-secondary border border-[#2a2a3e] cursor-not-allowed opacity-50'
+                  }`}
                 >
-                  <span>Continue</span>
+                  <span>Continue to Billing</span>
                   <span>→</span>
                 </button>
               </div>
+
             </div>
           ) : (
             <div className="space-y-4">
+              
+              {/* Summary Header */}
+              <div className="p-3 bg-[#12121A] rounded-xl border border-border-dark flex justify-between items-center text-xs font-mono">
+                <div>
+                  <span className="text-text-secondary">Station: </span>
+                  <strong className="text-white">{selectedResource?.name}</strong>
+                </div>
+                <div>
+                  <span className="text-text-secondary">Timing: </span>
+                  <strong className="text-emerald-400">{formatTimeDisplay(actualStartTime)} - {formatTimeDisplay(actualEndTime)} ({durationHours}h)</strong>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1">Customer Name (Optional)</label>
+                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
+                    Player Name (Optional)
+                  </label>
                   <input
                     type="text"
-                    placeholder="anonymous walk-in"
-                    className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-2.5 text-sm outline-none text-white focus:border-brand-purple"
+                    placeholder="e.g. Rahul Sharma"
+                    className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-xl p-2.5 text-sm outline-none text-white focus:border-brand-purple"
                     value={customerName}
                     onChange={e => setCustomerName(e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1">Phone Number (Optional)</label>
+                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
+                    Phone Number (Optional)
+                  </label>
                   <input
                     type="tel"
                     placeholder="9876543210"
-                    className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-2.5 text-sm outline-none text-white focus:border-brand-purple font-mono"
+                    className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-xl p-2.5 text-sm outline-none text-white focus:border-brand-purple font-mono"
                     value={customerPhone}
                     onChange={e => setCustomerPhone(e.target.value)}
                   />
@@ -392,29 +496,41 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, prese
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                 <div>
-                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1">Base Rate Collected (₹)</label>
+                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
+                    Amount Collected (₹)
+                  </label>
                   <input
                     type="number"
-                    placeholder={`Preset: ₹${standardPrice}`}
-                    className="w-full bg-[#12121A] font-mono border border-[#2a2a3e] rounded-lg p-2.5 text-sm outline-none text-white focus:border-brand-purple"
+                    placeholder={`Standard: ₹${standardPrice}`}
+                    className="w-full bg-[#12121A] font-mono border border-[#2a2a3e] rounded-xl p-2.5 text-sm outline-none text-white focus:border-brand-purple"
                     value={customAmount}
                     onChange={e => setCustomAmount(e.target.value === '' ? '' : Number(e.target.value))}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1.5 font-bold">Operational Mode Payment</label>
+                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1 font-bold">
+                    Payment Method
+                  </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setPaymentBy('Cash')}
-                      className={`py-2 text-xs font-bold rounded-lg border text-center transition ${paymentBy === 'Cash' ? 'border-brand-purple bg-brand-purple/10 text-white' : 'border-[#2a2a3e] text-text-secondary'}`}
+                      className={`py-2 text-xs font-bold rounded-xl border text-center transition cursor-pointer ${
+                        paymentBy === 'Cash' 
+                          ? 'border-brand-purple bg-brand-purple/15 text-white' 
+                          : 'border-[#2a2a3e] bg-[#12121A] text-text-secondary'
+                      }`}
                     >
-                      💵 Cash collected
+                      💵 Cash
                     </button>
                     <button
                       type="button"
                       onClick={() => setPaymentBy('UPI')}
-                      className={`py-2 text-xs font-bold rounded-lg border text-center transition ${paymentBy === 'UPI' ? 'border-brand-purple bg-brand-purple/10 text-white' : 'border-[#2a2a3e] text-[#a8a8cf]'}`}
+                      className={`py-2 text-xs font-bold rounded-xl border text-center transition cursor-pointer ${
+                        paymentBy === 'UPI' 
+                          ? 'border-brand-purple bg-brand-purple/15 text-white' 
+                          : 'border-[#2a2a3e] bg-[#12121A] text-[#a8a8cf]'
+                      }`}
                     >
                       📱 Local UPI
                     </button>
@@ -423,36 +539,40 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, prese
               </div>
 
               {customAmount !== '' && Number(customAmount) !== standardPrice && (
-                <div className="p-3 bg-[#12121A] border border-border-dark rounded-lg flex justify-between font-mono text-[10px]">
-                  <span className="text-text-secondary">Expected Price: ₹{standardPrice}</span>
-                  <span className="text-yellow-400">Discount Added: ₹{standardPrice - Number(customAmount)}</span>
+                <div className="p-2.5 bg-[#12121A] border border-border-dark rounded-xl flex justify-between font-mono text-[11px]">
+                  <span className="text-text-secondary">Standard Rate: ₹{standardPrice}</span>
+                  <span className="text-yellow-400 font-bold">
+                    Custom Rate: ₹{customAmount} ({Number(customAmount) < standardPrice ? `Discount ₹${standardPrice - Number(customAmount)}` : `Surplus ₹${Number(customAmount) - standardPrice}`})
+                  </span>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">Internal Supervisor Notes</label>
+                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
+                  Internal Notes (Optional)
+                </label>
                 <textarea
                   rows={2}
-                  placeholder="e.g. Regular client discount, birth event"
-                  className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-lg p-2.5 text-sm outline-none text-white focus:border-brand-purple"
+                  placeholder="e.g. Regular client, paid advance, etc."
+                  className="w-full bg-[#12121A] border border-[#2a2a3e] rounded-xl p-2.5 text-sm outline-none text-white focus:border-brand-purple"
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
                 />
               </div>
 
-              <div className="pt-6 border-t border-[#2a2a3e] flex justify-between">
+              <div className="pt-6 border-t border-[#2a2a3e] flex justify-between items-center">
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="px-5 py-2 bg-[#12121A] border border-[#2a2a3e] rounded-lg text-xs font-bold uppercase text-text-secondary hover:text-white"
+                  className="px-5 py-2.5 bg-[#12121A] border border-[#2a2a3e] rounded-xl text-xs font-bold uppercase text-text-secondary hover:text-white cursor-pointer"
                 >
-                  Back
+                  ← Back
                 </button>
                 <button
                   type="button"
                   onClick={executeAddWalkIn}
                   disabled={submitting}
-                  className="px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 btn-gradient text-white shadow-md shadow-brand-purple/10 cursor-pointer"
+                  className="px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 btn-gradient text-white shadow-lg shadow-brand-purple/20 cursor-pointer"
                 >
                   {submitting ? (
                     <>
@@ -461,48 +581,17 @@ export const WalkInModal: React.FC<WalkInModalProps> = ({ isOpen, onClose, prese
                     </>
                   ) : (
                     <>
-                      <span>✅ Lock Slot - Collect ₹{finalPrice}</span>
+                      <span>Start Session — ₹{finalPrice}</span>
                     </>
                   )}
                 </button>
               </div>
+
             </div>
           )}
         </div>
 
       </div>
-
-      {/* Override Warning Modal */}
-      {showSoftHoldWarning && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-51 p-4">
-          <div className="w-full max-w-sm bg-[#1A1A2E] border border-red-500/20 p-6 rounded-2xl space-y-4">
-            <div className="flex gap-2 items-center text-yellow-500">
-              <AlertTriangle className="h-6 w-6" />
-              <h4 className="font-bold font-display text-white">Override Active Soft Hold?</h4>
-            </div>
-            <p className="text-xs text-text-secondary leading-normal">
-              This slot is currently held temporarily for customer <strong className="text-white">{showSoftHoldWarning.customerNameStr}</strong> (Ref: {showSoftHoldWarning.bookingRef}).
-            </p>
-            <p className="text-xs text-red-400 font-bold leading-normal">
-              Registering a walk-in here will immediately cancel their hold booking and notify them. Proceed?
-            </p>
-            <div className="flex gap-4 pt-1.5">
-              <button
-                onClick={() => setShowSoftHoldWarning(null)}
-                className="w-1/2 py-2 bg-[#12121A] border border-[#2a2a3e] rounded-lg text-xs font-bold uppercase text-text-secondary hover:text-white cursor-pointer"
-              >
-                No, Go Back
-              </button>
-              <button
-                onClick={confirmSoftHoldOverride}
-                className="w-1/2 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-xs font-bold uppercase text-white cursor-pointer"
-              >
-                Yes, Override
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

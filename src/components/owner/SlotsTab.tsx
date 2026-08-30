@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { Venue, VenueResource, Slot } from '../../types';
 import { ChevronLeft, ChevronRight, Calendar, Info, RefreshCw, Zap, Lock, Grid, List } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { doIntervalsOverlap, getEffectiveBookingTimes } from '../../lib/availability';
 
 interface SlotsTabProps {
   venue: Venue | null;
@@ -211,9 +212,12 @@ export const SlotsTab: React.FC<SlotsTabProps> = ({ venue }) => {
                       </td>
                       {weekDays.map(day => {
                         const dateStr = day.toISOString().split('T')[0];
-                        const dbSlot = slots.find(s => s.resource_id === selectedResId && s.slot_date === dateStr && s.start_time === hr);
                         const isDayClosed = venue?.closed_dates?.includes(dateStr);
                         
+                        const curH = parseInt(hr.split(':')[0], 10);
+                        const nextH = curH + 1;
+                        const hrEnd = `${nextH.toString().padStart(2, '0')}:00`;
+
                         let cellStatus = 'available';
                         let detail = 'Available - Click to block';
                         let label = 'AV';
@@ -222,18 +226,47 @@ export const SlotsTab: React.FC<SlotsTabProps> = ({ venue }) => {
                           cellStatus = 'closed';
                           detail = 'Venue Closed (Holiday/Break)';
                           label = 'CLOSED';
-                        } else if (dbSlot) {
-                          cellStatus = dbSlot.status;
-                          if (dbSlot.status === 'booked') {
-                            const b = bookings.find(x => x.id === dbSlot.booking_id);
-                            detail = b ? `Booked: ${b.walk_in_customer_name || 'Client'}` : 'Booked';
-                            label = 'LOCKED';
-                          } else if (dbSlot.status === 'held') {
-                            detail = 'Pay at Venue Soft Hold';
-                            label = 'HOLD';
-                          } else if (dbSlot.status === 'blocked') {
-                            detail = `Blocked: ${dbSlot.blocked_reason || 'Maintenance'}`;
-                            label = 'BLOCKED';
+                        } else {
+                          // Check active bookings on this date & resource using interval overlap
+                          const unitBookings = bookings.filter(
+                            b => b.resource_id === selectedResId && b.booking_date === dateStr
+                          );
+
+                          for (const b of unitBookings) {
+                            const times = getEffectiveBookingTimes(b);
+                            if (!times.isActive) continue;
+
+                            if (doIntervalsOverlap(hr, hrEnd, times.startTime, times.endTime)) {
+                              if (b.booking_status === 'checked_in') {
+                                cellStatus = 'booked';
+                                detail = `In Session: ${b.walk_in_customer_name || 'Client'} (${times.startTime}-${times.endTime})`;
+                                label = 'SESSION';
+                              } else if (b.booking_status === 'confirmed') {
+                                cellStatus = 'booked';
+                                detail = `Booked: ${b.walk_in_customer_name || 'Client'} (${times.startTime}-${times.endTime})`;
+                                label = 'LOCKED';
+                              } else if (b.booking_status === 'held') {
+                                cellStatus = 'held';
+                                detail = `Soft Hold: ${b.walk_in_customer_name || 'Client'} (${times.startTime}-${times.endTime})`;
+                                label = 'HOLD';
+                              }
+                              break;
+                            }
+                          }
+
+                          // If still available, check blocked slots
+                          if (cellStatus === 'available') {
+                            const dbBlocked = slots.find(
+                              s => s.resource_id === selectedResId && 
+                                   s.slot_date === dateStr && 
+                                   s.status === 'blocked' &&
+                                   doIntervalsOverlap(hr, hrEnd, s.start_time, s.end_time)
+                            );
+                            if (dbBlocked) {
+                              cellStatus = 'blocked';
+                              detail = `Blocked: ${dbBlocked.blocked_reason || 'Maintenance'}`;
+                              label = 'BLOCKED';
+                            }
                           }
                         }
 

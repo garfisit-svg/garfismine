@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Slot, VenueResource, Booking, Offer } from '../types';
@@ -7,6 +7,7 @@ import {
   HelpCircle, CreditCard, ShieldCheck, Ticket, QrCode, ArrowLeft, Loader2, Clock, ShieldAlert, Copy
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getHourlyAvailabilityForResource } from '../lib/availability';
 
 export const BookingFlowPage: React.FC = () => {
   const { venueId } = useParams<{ venueId: string }>();
@@ -122,15 +123,17 @@ export const BookingFlowPage: React.FC = () => {
 
   const getDayList = [0, 1, 2, 3, 4, 5, 6].map(getDayDetails);
 
-  // Filter slots matching Resource & Date (Seeded automatically)
-  const resourceSlots = selectedResource 
-    ? slots.filter(s => s.resource_id === selectedResource.id && s.slot_date === selectedDate)
-    : [];
-
-  // Sort slots by start hours
-  const sortedResourceSlots = [...resourceSlots].sort((a, b) => {
-    return parseInt(a.start_time.split(':')[0]) - parseInt(b.start_time.split(':')[0]);
-  });
+  // Compute hourly slot availability using real-time interval overlap logic
+  const sortedResourceSlots = useMemo(() => {
+    if (!selectedResource || !venue) return [];
+    return getHourlyAvailabilityForResource(
+      selectedResource.id,
+      selectedDate,
+      { start: venue.operating_hours_start || '09:00', end: venue.operating_hours_end || '23:00' },
+      bookings,
+      slots
+    );
+  }, [selectedResource, selectedDate, venue, bookings, slots]);
 
   // Consecutive Slot Selection Control
   const handleSlotToggle = (slotTime: string) => {

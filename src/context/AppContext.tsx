@@ -9,6 +9,10 @@ import {
   SquadInvite, SquadEvent, GamingEquipment, TurfDetails, EquipmentSession,
   WalkInSession, TurfBooking
 } from '../types';
+import { 
+  isUnitAvailable, getMaxExtensionDuration, addMinutesToTime, 
+  timeToMinutes, minutesToTime, formatTimeDisplay, doIntervalsOverlap, getEffectiveBookingTimes 
+} from '../lib/availability';
 
 interface AppContextType {
   profiles: Profile[];
@@ -94,6 +98,9 @@ interface AppContextType {
   ownerExtendHold: (bookingId: string) => void;
   ownerReleaseSlot: (bookingId: string) => void;
   addWalkInBooking: (data: { resourceId: string, date: string, slots: string[], customerName?: string, customerPhone?: string, pricePerHr?: number, paymentBy: 'Cash' | 'UPI', actualStartTime?: string, actualEndTime?: string }) => void;
+  extendBookingSession: (bookingId: string, additionalMinutes: number, additionalAmount?: number) => { success: boolean; message: string; newEndTime?: string };
+  endBookingEarly: (bookingId: string, customAmountCollected?: number, paymentType?: 'cash' | 'upi') => { success: boolean; message: string; actualEndTime?: string };
+  checkUnitAvailability: (resourceId: string, date: string, startTime: string, endTime: string, excludeBookingId?: string) => { available: boolean; conflictingBooking?: Booking; conflictingReason?: string };
   ownerNoShow: (bookingId: string) => void;
   ownerCompleteBooking: (bookingId: string) => void;
   bulkBlockSlots: (resourceId: string, date: string, slots: string[], reason: string) => void;
@@ -2906,8 +2913,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw new Error('This venue is closed on this date. Bookings are not allowed.');
     }
 
-    // RULE 1: SLOT CONFLICT PREVENTION (with database-level safety check)
-    // Find slots matching criteria and make sure they are still available
+    // RULE 1: INTERVAL-BASED SLOT CONFLICT PREVENTION (Mathematical overlap check)
+    const duration = data.slots.length;
+    const reqStartTime = data.slots[0];
+    const lastSlotHour = parseInt((data.slots[duration - 1] || '09:00').split(':')[0], 10);
+    const reqEndTime = `${(lastSlotHour + 1).toString().padStart(2, '0')}:00`;
+
+    // Mathematical overlap validation: new_start < existing_end AND new_end > existing_start
+    const availCheck = isUnitAvailable(data.resourceId, data.date, reqStartTime, reqEndTime, bookings, undefined, slots);
+    if (!availCheck.available) {
+      throw new Error(availCheck.conflictingReason || 'This station is currently reserved or occupied during the selected time interval. Please choose another time or unit.');
+    }
+
     const requestedSlotIds = data.slots.map(sTime => `slot-${data.resourceId}-${data.date}-${parseInt((sTime || '09:00').split(':')[0])}`);
     
     // Check if any of these slot ids are currently 'booked', 'blocked', or 'held'
@@ -2919,7 +2936,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const matchedRes = resources.find(r => r.id === data.resourceId);
     if (!matchedRes) throw new Error('Resource not found');
 
-    const duration = data.slots.length;
     const baseAmount = matchedRes.price_per_hour * duration;
     
     // Offer math (Rule 7)
@@ -3515,6 +3531,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const res = resources.find(r => r.id === data.resourceId);
     if (!res) throw new Error('Resource not found');
 
+    const reqStartTime = data.actualStartTime || data.slots[0];
+    const defaultEndHour = parseInt(data.slots[duration - 1].split(':')[0], 10) + 1;
+    const reqEndTime = data.actualEndTime || `${defaultEndHour.toString().padStart(2, '0')}:00`;
+
+    // Mathematical overlap validation across active bookings
+    const availCheck = isUnitAvailable(data.resourceId, data.date, reqStartTime, reqEndTime, bookings, undefined, slots);
+    if (!availCheck.available) {
+      // If conflicting with a soft hold, owner may explicitly override it
+      if (availCheck.conflictingBooking && availCheck.conflictingBooking.booking_status === 'held') {
+        // Will be released below
+      } else {
+        throw new Error(availCheck.conflictingReason || 'This station is occupied during this time.');
+      }
+    }
+
     const rate = data.pricePerHr !== undefined ? data.pricePerHr : res.price_per_hour;
     const amount = rate * duration;
 
@@ -3598,6 +3629,198 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setBookings(prev => [...prev, newB]);
+  };
+
+  /**
+   * Real-Time Session Extension:
+   * Extends the session of an active booking (walk-in or online) by checking
+   * if the equipment unit is free for the extension interval.
+   */
+  const extendBookingSession = (
+    bookingId: string, 
+    additionalMinutes: number, 
+    additionalAmount?: number
+  ): { success: boolean; message: string; newEndTime?: string } => {
+    const target = bookings.find(b => b.id === bookingId);
+    if (!target) {
+      return { success: false, message: 'Booking not found' };
+    }
+
+    const currentTimes = getEffectiveBookingTimes(target);
+    const newEndStr = addMinutesToTime(currentTimes.endTime, additionalMinutes);
+
+    // Validate that the extension window [currentEndTime, newEndTime] does not collide with future reservations
+    const availCheck = isUnitAvailable(
+      target.resource_id, 
+      target.booking_date, 
+      currentTimes.endTime, 
+      newEndStr, 
+      bookings, 
+      target.id, 
+      slots
+    );
+
+    if (!availCheck.available) {
+      const extInfo = getMaxExtensionDuration(target, bookings, additionalMinutes, slots);
+      if (extInfo.canExtend && extInfo.maxMinutes > 0) {
+        return {
+          success: false,
+          message: `Cannot extend for ${additionalMinutes}m due to upcoming reservation starting at ${extInfo.nextBookingStartTime || 'soon'}. Max possible extension is ${extInfo.maxMinutes} mins.`
+        };
+      }
+      return {
+        success: false,
+        message: availCheck.conflictingReason || 'Cannot extend session: next booking starts immediately after this session.'
+      };
+    }
+
+    const res = resources.find(r => r.id === target.resource_id);
+    const hourlyRate = res?.price_per_hour || 150;
+    const addedCost = additionalAmount !== undefined ? additionalAmount : Math.round((hourlyRate * additionalMinutes) / 60);
+
+    const updatedDuration = Math.round((timeToMinutes(newEndStr) - timeToMinutes(currentTimes.startTime)) / 60 * 10) / 10;
+
+    setBookings(prev => prev.map(b => {
+      if (b.id === bookingId) {
+        return {
+          ...b,
+          walk_in_actual_end_time: newEndStr,
+          end_time: newEndStr,
+          duration_hours: updatedDuration,
+          base_amount: b.base_amount + addedCost,
+          final_amount: b.final_amount + addedCost,
+          updated_at: new Date().toISOString()
+        };
+      }
+      return b;
+    }));
+
+    // Update or allocate additional slots if extension spans into next hour
+    const newEndHour = Math.ceil(timeToMinutes(newEndStr) / 60);
+    const currentEndHour = Math.floor(timeToMinutes(currentTimes.endTime) / 60);
+
+    if (newEndHour > currentEndHour) {
+      for (let h = currentEndHour; h < newEndHour; h++) {
+        const slotHourStr = `${h.toString().padStart(2, '0')}:00`;
+        const slotEndHourStr = `${(h + 1).toString().padStart(2, '0')}:00`;
+        const sid = `slot-${target.resource_id}-${target.booking_date}-${h}`;
+
+        setSlots(prev => {
+          const existIdx = prev.findIndex(s => s.id === sid);
+          if (existIdx === -1) {
+            return [...prev, {
+              id: sid,
+              venue_id: target.venue_id,
+              resource_id: target.resource_id,
+              slot_date: target.booking_date,
+              start_time: slotHourStr,
+              end_time: slotEndHourStr,
+              status: 'booked' as const,
+              booking_id: target.id,
+              held_until: null,
+              blocked_reason: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            }];
+          } else {
+            return prev.map(s => s.id === sid ? { ...s, status: 'booked' as const, booking_id: target.id, updated_at: new Date().toISOString() } : s);
+          }
+        });
+      }
+    }
+
+    addNotificationSilently(
+      target.customer_id, 
+      'Session Extended! ⏱️', 
+      `Your session at ${res?.name || 'station'} was extended by +${additionalMinutes} mins (Ends at ${formatTimeDisplay(newEndStr)}).`, 
+      'booking'
+    );
+
+    return { 
+      success: true, 
+      message: `Session extended by +${additionalMinutes}m (new end time: ${formatTimeDisplay(newEndStr)})`, 
+      newEndTime: newEndStr 
+    };
+  };
+
+  /**
+   * End Session Early:
+   * Updates actual end time to current time, instantly freeing up the rig.
+   */
+  const endBookingEarly = (
+    bookingId: string, 
+    customAmountCollected?: number, 
+    paymentType?: 'cash' | 'upi'
+  ): { success: boolean; message: string; actualEndTime?: string } => {
+    const now = new Date();
+    const curTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+    let refCode = '';
+    let venueId = '';
+    let resourceId = '';
+    let bookingDate = '';
+
+    setBookings(prev => prev.map(b => {
+      if (b.id === bookingId) {
+        refCode = b.booking_ref;
+        venueId = b.venue_id;
+        resourceId = b.resource_id;
+        bookingDate = b.booking_date;
+
+        return {
+          ...b,
+          booking_status: 'completed' as const,
+          walk_in_actual_end_time: curTimeStr,
+          completed_at: now.toISOString(),
+          final_amount: customAmountCollected !== undefined ? customAmountCollected : b.final_amount,
+          payment_status: 'completed' as const,
+          updated_at: now.toISOString()
+        };
+      }
+      return b;
+    }));
+
+    // Release future hour slots that were previously allocated beyond current hour
+    const currentHour = now.getHours();
+    setSlots(prev => prev.map(s => {
+      if (s.booking_id === bookingId) {
+        const slotHour = parseInt(s.start_time.split(':')[0], 10);
+        if (slotHour > currentHour) {
+          return {
+            ...s,
+            status: 'available' as const,
+            booking_id: null,
+            held_until: null,
+            updated_at: now.toISOString()
+          };
+        }
+      }
+      return s;
+    }));
+
+    // Checkout nearby checkin
+    setNearbyCheckins(prev => prev.map(c => {
+      if (c.booking_id === bookingId && c.is_active) {
+        return { ...c, is_active: false, checked_out_at: now.toISOString() };
+      }
+      return c;
+    }));
+
+    return { 
+      success: true, 
+      message: `Session ended early at ${formatTimeDisplay(curTimeStr)}. Station is now free for other players!`, 
+      actualEndTime: curTimeStr 
+    };
+  };
+
+  const checkUnitAvailability = (
+    resourceId: string, 
+    date: string, 
+    startTime: string, 
+    endTime: string, 
+    excludeBookingId?: string
+  ) => {
+    return isUnitAvailable(resourceId, date, startTime, endTime, bookings, excludeBookingId, slots);
   };
 
   const ownerNoShow = (bookingId: string) => {
@@ -5386,7 +5609,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       registerVenue, registerDetailedVenue, updateVenue, deleteVenue, addResource, updateResource, deleteResource, createOffer, deactivateOffer, replyToReview,
       verifyVenue, rejectVenue, toggleFeatureVenue, suspendVenue, reactivateVenue, changeUserRole, suspendUser, reactivateUser, adjustUserCoins, updatePlatformSettings,
       createBookingHold, confirmOnlineBooking, cancelBooking,
-      ownerCheckIn, ownerExtendHold, ownerReleaseSlot, addWalkInBooking, ownerNoShow, ownerCompleteBooking, bulkBlockSlots, bulkUnblockSlots, generateSlotsForNext7Days,
+      ownerCheckIn, ownerExtendHold, ownerReleaseSlot, addWalkInBooking, 
+      extendBookingSession, endBookingEarly, checkUnitAvailability,
+      ownerNoShow, ownerCompleteBooking, bulkBlockSlots, bulkUnblockSlots, generateSlotsForNext7Days,
       addVenue: registerVenue, checkInBooking: ownerCheckIn, markNoShowBooking: ownerNoShow,
       markAllNotificationsRead, markNotificationRead, submitReview,
       commissionPercent, platformFee, setPlatformFee,
