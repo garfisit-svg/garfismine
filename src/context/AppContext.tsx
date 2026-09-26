@@ -289,6 +289,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const [profiles, rawSetProfiles] = useState<Profile[]>(() => {
+    if (isSupabaseConfigured) {
+      localStorage.removeItem('garf_profiles');
+      return [];
+    }
     // Force a one-time clean reset to clear all stale previous data/emails for a clean real-world launch!
     const dbVersion = localStorage.getItem('garf_db_version_clean_v3');
     if (!dbVersion) {
