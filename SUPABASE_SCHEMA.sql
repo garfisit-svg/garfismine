@@ -632,13 +632,54 @@ CREATE POLICY "Owners can update their cafes" ON gaming_cafes
 CREATE POLICY "Admins can delete cafes" ON gaming_cafes
   FOR DELETE TO authenticated USING (public.is_current_user_admin());
 
+CREATE OR REPLACE FUNCTION public.guard_cafe_moderation_fields()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $
+BEGIN
+  IF auth.uid() IS NULL OR public.is_current_user_admin() THEN RETURN NEW; END IF;
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.owner_id <> auth.uid()::text THEN RAISE EXCEPTION 'Cafe owner must match the signed-in user'; END IF;
+    NEW.status := 'pending';
+    NEW.is_verified := false;
+    NEW.is_featured := false;
+    NEW.is_suspended := false;
+    NEW.verified_at := NULL;
+    NEW.rejection_reason := NULL;
+    NEW.commission_percent := 10;
+    RETURN NEW;
+  END IF;
+  IF OLD.owner_id <> auth.uid()::text THEN RAISE EXCEPTION 'Cafe updates are restricted to its owner'; END IF;
+  IF NEW.status IS DISTINCT FROM OLD.status
+     OR NEW.is_verified IS DISTINCT FROM OLD.is_verified
+     OR NEW.is_featured IS DISTINCT FROM OLD.is_featured
+     OR NEW.is_suspended IS DISTINCT FROM OLD.is_suspended
+     OR NEW.verified_at IS DISTINCT FROM OLD.verified_at
+     OR NEW.rejection_reason IS DISTINCT FROM OLD.rejection_reason
+     OR NEW.commission_percent IS DISTINCT FROM OLD.commission_percent THEN
+    RAISE EXCEPTION 'Cafe moderation fields require administrator approval';
+  END IF;
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS guard_cafe_moderation_fields ON gaming_cafes;
+CREATE TRIGGER guard_cafe_moderation_fields
+  BEFORE INSERT OR UPDATE ON gaming_cafes
+  FOR EACH ROW EXECUTE FUNCTION public.guard_cafe_moderation_fields();
+
 ALTER TABLE venue_resources ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow full access to venue_resources" ON venue_resources;
 CREATE POLICY "Public active resources are readable" ON venue_resources
   FOR SELECT TO anon, authenticated
-  USING (is_active OR EXISTS (
+  USING (EXISTS (
     SELECT 1 FROM gaming_cafes c
-    WHERE c.id = venue_id AND (c.owner_id = auth.uid()::text OR public.is_current_user_admin())
+    WHERE c.id = venue_id AND (
+      (c.is_active AND c.status = 'approved' AND NOT c.is_suspended)
+      OR c.owner_id = auth.uid()::text OR public.is_current_user_admin()
+    )
   ));
 CREATE POLICY "Venue owners manage resources" ON venue_resources
   FOR ALL TO authenticated
@@ -673,4 +714,29 @@ CREATE POLICY "Admins manage bookings" ON bookings
   FOR ALL TO authenticated
   USING (public.is_current_user_admin())
   WITH CHECK (public.is_current_user_admin());
+
+-- Private operational/social tables default to deny until each feature has scoped
+-- server-side read/write policies.
+ALTER TABLE offers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coin_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE squad_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE squads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE squad_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE polls ENABLE ROW LEVEL SECURITY;
+ALTER TABLE poll_votes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE player_needed_posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE player_needed_responses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dm_threads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nearby_checkins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE squad_invites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE squad_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gaming_equipments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE turf_details ENABLE ROW LEVEL SECURITY;
+ALTER TABLE equipment_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE walk_in_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE turf_bookings ENABLE ROW LEVEL SECURITY;
 
