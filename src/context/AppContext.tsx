@@ -2111,7 +2111,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           options: {
             data: {
               full_name: data.full_name,
-              phone: data.phone
+              phone: data.phone,
+              city: data.city || '',
+              role: data.role === 'owner' || data.role === 'owner_pending' ? 'owner_pending' : 'customer'
             }
           }
         });
