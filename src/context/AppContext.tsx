@@ -2144,7 +2144,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       is_suspended: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      emailVerified: true,
+      emailVerified: !isSupabaseConfigured,
+      password: isSupabaseConfigured ? undefined : data.password,
       last_login_at: new Date().toISOString()
     };
 
