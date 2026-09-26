@@ -41,7 +41,7 @@ interface AppContextType {
   
   // Auth actions
   signUp: (data: { full_name: string, email: string, phone: string, d_o_b?: string, city?: string, referral_code?: string, password?: string, role?: 'customer' | 'owner' | 'admin' | 'owner_pending', avatar_url?: string }) => Promise<Profile>;
-  logIn: (email: string) => Promise<Profile>;
+  logIn: (email: string, password: string) => Promise<Profile>;
   logOut: () => void;
   logoutUser: () => void;
   updateProfile: (profileData: Partial<Profile>) => void;
