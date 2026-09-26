@@ -5438,6 +5438,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const sendPasswordResetEmail = async (email: string): Promise<{ success: boolean; message: string; token?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
+
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: `${window.location.origin}/login`
+      });
+      if (error) throw new Error(error.message);
+      return { success: true, message: 'If an account exists for that email, a password reset link has been sent.' };
+    }
     
     // Read directly from localStorage first to get absolute freshest state!
     const saved = localStorage.getItem('garf_profiles');
@@ -5505,7 +5513,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetPasswordWithToken = async (token: string, newPass: string): Promise<{ success: boolean; message: string }> => {
-    // Read directly from localStorage first to get absolute freshest state!
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.updateUser({ password: newPass });
+      if (error) throw new Error(error.message);
+      return { success: true, message: 'Your password has been reset. Please sign in with your new password.' };
+    }
+
+    // Local demo mode only (Supabase is not configured):
     const saved = localStorage.getItem('garf_profiles');
     let currentProfiles = profiles;
     if (saved) {
