@@ -637,7 +637,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
-AS $
+AS $guard$
 BEGIN
   IF auth.uid() IS NULL OR public.is_current_user_admin() THEN RETURN NEW; END IF;
   IF TG_OP = 'INSERT' THEN
@@ -663,7 +663,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$guard$;
 
 DROP TRIGGER IF EXISTS guard_cafe_moderation_fields ON gaming_cafes;
 CREATE TRIGGER guard_cafe_moderation_fields
