@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, CheckCircle, ArrowLeft } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { isSupabaseConfigured } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
 export const OwnerForgotPasswordPage: React.FC = () => {
@@ -18,13 +19,13 @@ export const OwnerForgotPasswordPage: React.FC = () => {
 
     const cleanEmail = email.trim().toLowerCase();
     const matchedProfile = profiles?.find(p => p.email?.trim().toLowerCase() === cleanEmail);
-    
-    if (!matchedProfile) {
+
+    if (!isSupabaseConfigured && !matchedProfile) {
       toast.error('No account registered with this email address.');
       return;
     }
 
-    if (matchedProfile.role !== 'owner' && matchedProfile.role !== 'admin') {
+    if (!isSupabaseConfigured && matchedProfile && matchedProfile.role !== 'owner' && matchedProfile.role !== 'admin') {
       toast.error('This email is not registered as an Owner or Admin.');
       return;
     }

@@ -41,7 +41,7 @@ interface AppContextType {
   
   // Auth actions
   signUp: (data: { full_name: string, email: string, phone: string, d_o_b?: string, city?: string, referral_code?: string, password?: string, role?: 'customer' | 'owner' | 'admin' | 'owner_pending', avatar_url?: string }) => Promise<Profile>;
-  logIn: (email: string) => Promise<Profile>;
+  logIn: (email: string, password?: string) => Promise<Profile>;
   logOut: () => void;
   logoutUser: () => void;
   updateProfile: (profileData: Partial<Profile>) => void;
@@ -289,6 +289,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const [profiles, rawSetProfiles] = useState<Profile[]>(() => {
+    if (isSupabaseConfigured) {
+      localStorage.removeItem('garf_profiles');
+      return [];
+    }
     // Force a one-time clean reset to clear all stale previous data/emails for a clean real-world launch!
     const dbVersion = localStorage.getItem('garf_db_version_clean_v3');
     if (!dbVersion) {
@@ -378,6 +382,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [currentUser, setCurrentUser] = useState<Profile | null>(() => {
+    if (isSupabaseConfigured) return null;
     const saved = localStorage.getItem('garf_current_user');
     if (saved && saved !== 'null' && saved !== 'undefined') {
       try {
@@ -483,23 +488,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadSupabaseProfiles();
   }, []);
 
-  // Restore Supabase Auth session on mount / currentUser change to keep auth.uid() populated
+  // Restore identity only from the persisted Supabase Auth session, never from a
+  // locally cached profile or password.
   useEffect(() => {
-    const autoLoginSupabase = async () => {
-      if (isSupabaseConfigured && supabase && currentUser && currentUser.email && currentUser.password) {
-        try {
-          console.log('Restoring Supabase Auth session on mount for:', currentUser.email);
-          await supabase.auth.signInWithPassword({
-            email: currentUser.email,
-            password: currentUser.password
-          });
-        } catch (e) {
-          console.error('Failed to auto-login Supabase session on mount:', e);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    let active = true;
+    const restoreProfile = async (session: any) => {
+      if (!session?.user?.id) {
+        if (active) {
+          setCurrentUser(null);
+          localStorage.removeItem('garf_current_user');
         }
+        return;
       }
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (!active) return;
+      if (error || !data || data.is_suspended) {
+        setCurrentUser(null);
+        localStorage.removeItem('garf_current_user');
+        return;
+      }
+      const { password: _password, resetToken: _resetToken, resetTokenExpires: _resetTokenExpires, ...safeProfile } = data as any;
+      const profile = safeProfile as Profile;
+      setProfiles(prev => [...prev.filter(p => p.id !== profile.id), profile]);
+      setCurrentUser(profile);
+      localStorage.setItem('garf_current_user', JSON.stringify(profile));
     };
-    autoLoginSupabase();
-  }, [currentUser?.id]);
+
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        console.warn('Could not restore Supabase session:', error.message);
+        restoreProfile(null);
+      } else {
+        restoreProfile(data.session);
+      }
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setCurrentUser(null);
+        localStorage.removeItem('garf_current_user');
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'PASSWORD_RECOVERY') {
+        window.setTimeout(() => { void restoreProfile(session); }, 0);
+      }
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Load venues, resources, slots, and bookings from Supabase on mount if active, and subscribe to real-time events
   useEffect(() => {
@@ -747,16 +789,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           is_suspended: profile.is_suspended || false,
           updated_at: new Date().toISOString()
         };
-
-        if (profile.password) {
-          payload.password = profile.password;
-        }
-        if (profile.resetToken) {
-          payload.resetToken = profile.resetToken;
-        }
-        if (profile.resetTokenExpires) {
-          payload.resetTokenExpires = profile.resetTokenExpires;
-        }
 
         // 1. Check if a profile with this email or ID already exists in Supabase
         let existingByEmail: any = null;
@@ -2111,8 +2143,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const rFour = Math.random().toString(36).substring(2, 6).toUpperCase();
     const myRefCode = `GARF-${rFour}`;
 
-    const isPreVerified = data.email?.toLowerCase().trim() === 'garfisit@gmail.com';
-
     let userId = `user-${Math.random().toString(36).substr(2, 9)}`;
     if (isSupabaseConfigured && supabase) {
       try {
@@ -2123,18 +2153,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           options: {
             data: {
               full_name: data.full_name,
-              phone: data.phone
+              phone: data.phone,
+              city: data.city || '',
+              role: data.role === 'owner' || data.role === 'owner_pending' ? 'owner_pending' : 'customer'
             }
           }
         });
         if (authError) {
-          console.error('Supabase Auth signUp error:', authError.message);
+          throw new Error(authError.message);
         } else if (authData?.user) {
           userId = authData.user.id;
           console.log('Using Supabase Auth UUID for signup:', userId);
+        } else {
+          throw new Error('Supabase did not return a user for this sign-up.');
         }
       } catch (err) {
         console.error('Error during Supabase Auth signUp:', err);
+        throw err;
       }
     }
 
@@ -2144,7 +2179,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       email: data.email,
       phone: data.phone,
       avatar_url: data.avatar_url || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${encodeURIComponent(data.full_name)}`,
-      role: isPreVerified ? 'admin' : (data.role || 'customer'),
+      role: data.role === 'owner' || data.role === 'owner_pending' ? 'owner_pending' : 'customer',
       garf_coins: 10, // welcome bonus
       referral_code: myRefCode,
       referred_by: null,
@@ -2153,8 +2188,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       is_suspended: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      emailVerified: true,
-      password: data.password,
+      emailVerified: !isSupabaseConfigured,
+      password: isSupabaseConfigured ? undefined : data.password,
       last_login_at: new Date().toISOString()
     };
 
@@ -2203,9 +2238,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('garf_profiles', JSON.stringify(updatedProfiles));
     await saveProfileToSupabase(newProfile);
     
-    // Auto-login registered users directly
-    setCurrentUser(newProfile);
-    localStorage.setItem('garf_current_user', JSON.stringify(newProfile));
+    // Supabase may require email confirmation. Do not create a local authenticated
+    // session until Supabase has actually issued one.
+    const { data: sessionData } = isSupabaseConfigured && supabase
+      ? await supabase.auth.getSession()
+      : { data: { session: true as any } };
+    if (sessionData.session) {
+      setCurrentUser(newProfile);
+      localStorage.setItem('garf_current_user', JSON.stringify(newProfile));
+    } else {
+      setCurrentUser(null);
+      localStorage.removeItem('garf_current_user');
+    }
 
     // Welcome coin transaction
     const txIdWelcome = `txn-${Math.random().toString(36).substr(2,9)}`;
@@ -2226,7 +2270,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const logIn = async (email: string, password?: string) => {
-    // Matches hardcoded emails for simulation:
+    // In production, Supabase Auth is the authority. Never fall back to a local profile
+    // after an Auth failure, since doing so would turn client storage into credentials.
+    if (isSupabaseConfigured && supabase) {
+      if (!password) throw new Error('Password is required.');
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password
+      });
+      if (authError || !authData.user) {
+        throw new Error(authError?.message || 'Authentication failed.');
+      }
+
+      const { data: dbProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+      if (profileError) throw new Error(`Unable to load your profile: ${profileError.message}`);
+      if (!dbProfile) throw new Error('Your account profile is not ready. Contact support.');
+
+      const { password: _password, resetToken: _resetToken, resetTokenExpires: _resetTokenExpires, ...safeProfile } = dbProfile as any;
+      if (safeProfile.is_suspended) {
+        await supabase.auth.signOut();
+        throw new Error('Your account has been suspended. Contact support.');
+      }
+      const updatedProfile = { ...safeProfile, last_login_at: new Date().toISOString(), updated_at: new Date().toISOString() } as Profile;
+      setProfiles(prev => [...prev.filter(p => p.id !== updatedProfile.id), updatedProfile]);
+      setCurrentUser(updatedProfile);
+      localStorage.setItem('garf_current_user', JSON.stringify(updatedProfile));
+      return updatedProfile;
+    }
+
+    // Local demo mode only (Supabase is not configured):
     let profile: Profile | undefined;
     const cleanEmail = email.trim().toLowerCase();
     
@@ -2365,6 +2441,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const logOut = () => {
+    if (isSupabaseConfigured && supabase) void supabase.auth.signOut();
     setCurrentUser(null);
     localStorage.removeItem('garf_current_user');
   };
@@ -5415,6 +5492,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const sendPasswordResetEmail = async (email: string): Promise<{ success: boolean; message: string; token?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
+
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: `${window.location.origin}/login`
+      });
+      if (error) throw new Error(error.message);
+      return { success: true, message: 'If an account exists for that email, a password reset link has been sent.' };
+    }
     
     // Read directly from localStorage first to get absolute freshest state!
     const saved = localStorage.getItem('garf_profiles');
@@ -5482,7 +5567,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetPasswordWithToken = async (token: string, newPass: string): Promise<{ success: boolean; message: string }> => {
-    // Read directly from localStorage first to get absolute freshest state!
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.updateUser({ password: newPass });
+      if (error) throw new Error(error.message);
+      return { success: true, message: 'Your password has been reset. Please sign in with your new password.' };
+    }
+
+    // Local demo mode only (Supabase is not configured):
     const saved = localStorage.getItem('garf_profiles');
     let currentProfiles = profiles;
     if (saved) {
