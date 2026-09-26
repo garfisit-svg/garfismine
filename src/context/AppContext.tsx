@@ -2193,9 +2193,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('garf_profiles', JSON.stringify(updatedProfiles));
     await saveProfileToSupabase(newProfile);
     
-    // Auto-login registered users directly
-    setCurrentUser(newProfile);
-    localStorage.setItem('garf_current_user', JSON.stringify(newProfile));
+    // Supabase may require email confirmation. Do not create a local authenticated
+    // session until Supabase has actually issued one.
+    const { data: sessionData } = isSupabaseConfigured && supabase
+      ? await supabase.auth.getSession()
+      : { data: { session: true as any } };
+    if (sessionData.session) {
+      setCurrentUser(newProfile);
+      localStorage.setItem('garf_current_user', JSON.stringify(newProfile));
+    } else {
+      setCurrentUser(null);
+      localStorage.removeItem('garf_current_user');
+    }
 
     // Welcome coin transaction
     const txIdWelcome = `txn-${Math.random().toString(36).substr(2,9)}`;
