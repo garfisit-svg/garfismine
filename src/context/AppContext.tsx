@@ -378,6 +378,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [currentUser, setCurrentUser] = useState<Profile | null>(() => {
+    if (isSupabaseConfigured) return null;
     const saved = localStorage.getItem('garf_current_user');
     if (saved && saved !== 'null' && saved !== 'undefined') {
       try {
@@ -483,23 +484,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadSupabaseProfiles();
   }, []);
 
-  // Restore Supabase Auth session on mount / currentUser change to keep auth.uid() populated
+  // Restore identity only from the persisted Supabase Auth session, never from a
+  // locally cached profile or password.
   useEffect(() => {
-    const autoLoginSupabase = async () => {
-      if (isSupabaseConfigured && supabase && currentUser && currentUser.email && currentUser.password) {
-        try {
-          console.log('Restoring Supabase Auth session on mount for:', currentUser.email);
-          await supabase.auth.signInWithPassword({
-            email: currentUser.email,
-            password: currentUser.password
-          });
-        } catch (e) {
-          console.error('Failed to auto-login Supabase session on mount:', e);
+    if (!isSupabaseConfigured || !supabase) return;
+
+    let active = true;
+    const restoreProfile = async (session: any) => {
+      if (!session?.user?.id) {
+        if (active) {
+          setCurrentUser(null);
+          localStorage.removeItem('garf_current_user');
         }
+        return;
       }
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (!active) return;
+      if (error || !data || data.is_suspended) {
+        setCurrentUser(null);
+        localStorage.removeItem('garf_current_user');
+        return;
+      }
+      const { password: _password, resetToken: _resetToken, resetTokenExpires: _resetTokenExpires, ...safeProfile } = data as any;
+      const profile = safeProfile as Profile;
+      setProfiles(prev => [...prev.filter(p => p.id !== profile.id), profile]);
+      setCurrentUser(profile);
+      localStorage.setItem('garf_current_user', JSON.stringify(profile));
     };
-    autoLoginSupabase();
-  }, [currentUser?.id]);
+
+    void supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        console.warn('Could not restore Supabase session:', error.message);
+        restoreProfile(null);
+      } else {
+        restoreProfile(data.session);
+      }
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setCurrentUser(null);
+        localStorage.removeItem('garf_current_user');
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'PASSWORD_RECOVERY') {
+        window.setTimeout(() => { void restoreProfile(session); }, 0);
+      }
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Load venues, resources, slots, and bookings from Supabase on mount if active, and subscribe to real-time events
   useEffect(() => {
