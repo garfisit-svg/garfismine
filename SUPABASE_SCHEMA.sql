@@ -7,36 +7,9 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Clean-up block (Optional: drops tables if they already exist, starting from child tables)
-DROP TABLE IF EXISTS turf_bookings CASCADE;
-DROP TABLE IF EXISTS walk_in_sessions CASCADE;
-DROP TABLE IF EXISTS equipment_sessions CASCADE;
-DROP TABLE IF EXISTS turf_details CASCADE;
-DROP TABLE IF EXISTS gaming_equipments CASCADE;
-DROP TABLE IF EXISTS squad_events CASCADE;
-DROP TABLE IF EXISTS squad_invites CASCADE;
-DROP TABLE IF EXISTS nearby_checkins CASCADE;
-DROP TABLE IF EXISTS dm_threads CASCADE;
-DROP TABLE IF EXISTS player_needed_responses CASCADE;
-DROP TABLE IF EXISTS player_needed_posts CASCADE;
-DROP TABLE IF EXISTS poll_votes CASCADE;
-DROP TABLE IF EXISTS polls CASCADE;
-DROP TABLE IF EXISTS messages CASCADE;
-DROP TABLE IF EXISTS squad_members CASCADE;
-DROP TABLE IF EXISTS squads CASCADE;
-DROP TABLE IF EXISTS squad_profiles CASCADE;
-DROP TABLE IF EXISTS admin_logs CASCADE;
-DROP TABLE IF EXISTS notifications CASCADE;
-DROP TABLE IF EXISTS offers CASCADE;
-DROP TABLE IF EXISTS coin_transactions CASCADE;
-DROP TABLE IF EXISTS reviews CASCADE;
-DROP TABLE IF EXISTS bookings CASCADE;
-DROP TABLE IF EXISTS slots CASCADE;
-DROP TABLE IF EXISTS venue_resources CASCADE;
-DROP TABLE IF EXISTS gaming_cafes CASCADE;
-DROP TABLE IF EXISTS profiles CASCADE;
 
 -- 1. PROFILES Table
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
   id TEXT PRIMARY KEY,
   full_name TEXT NOT NULL,
   email TEXT UNIQUE,
@@ -51,15 +24,12 @@ CREATE TABLE profiles (
   is_suspended BOOLEAN DEFAULT FALSE NOT NULL,
   no_show_count INTEGER DEFAULT 0 NOT NULL,
   pay_at_venue_blocked BOOLEAN DEFAULT FALSE NOT NULL,
-  password TEXT,
-  "resetToken" TEXT,
-  "resetTokenExpires" TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- 2. GAMING_CAFES Table
-CREATE TABLE gaming_cafes (
+CREATE TABLE IF NOT EXISTS gaming_cafes (
   id TEXT PRIMARY KEY,
   owner_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
@@ -93,7 +63,7 @@ CREATE TABLE gaming_cafes (
 );
 
 -- 3. VENUE_RESOURCES Table
-CREATE TABLE venue_resources (
+CREATE TABLE IF NOT EXISTS venue_resources (
   id TEXT PRIMARY KEY,
   venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
@@ -106,7 +76,7 @@ CREATE TABLE venue_resources (
 );
 
 -- 4. OFFERS Table
-CREATE TABLE offers (
+CREATE TABLE IF NOT EXISTS offers (
   id TEXT PRIMARY KEY,
   venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   title TEXT NOT NULL,
@@ -126,7 +96,7 @@ CREATE TABLE offers (
 );
 
 -- 5. BOOKINGS Table
-CREATE TABLE bookings (
+CREATE TABLE IF NOT EXISTS bookings (
   id TEXT PRIMARY KEY,
   booking_ref TEXT UNIQUE NOT NULL,
   customer_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
@@ -164,7 +134,7 @@ CREATE TABLE bookings (
 );
 
 -- 6. SLOTS Table
-CREATE TABLE slots (
+CREATE TABLE IF NOT EXISTS slots (
   id TEXT PRIMARY KEY,
   venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   resource_id TEXT REFERENCES venue_resources(id) ON DELETE CASCADE NOT NULL,
@@ -181,7 +151,7 @@ CREATE TABLE slots (
 );
 
 -- 7. REVIEWS Table
-CREATE TABLE reviews (
+CREATE TABLE IF NOT EXISTS reviews (
   id TEXT PRIMARY KEY,
   booking_id TEXT REFERENCES bookings(id) ON DELETE CASCADE UNIQUE NOT NULL,
   customer_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
@@ -194,7 +164,7 @@ CREATE TABLE reviews (
 );
 
 -- 8. COIN_TRANSACTIONS Table
-CREATE TABLE coin_transactions (
+CREATE TABLE IF NOT EXISTS coin_transactions (
   id TEXT PRIMARY KEY,
   user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   amount INTEGER NOT NULL,
@@ -206,7 +176,7 @@ CREATE TABLE coin_transactions (
 );
 
 -- 9. NOTIFICATIONS Table
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY,
   user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   title TEXT NOT NULL,
@@ -218,7 +188,7 @@ CREATE TABLE notifications (
 );
 
 -- 10. ADMIN_LOGS Table
-CREATE TABLE admin_logs (
+CREATE TABLE IF NOT EXISTS admin_logs (
   id TEXT PRIMARY KEY,
   admin_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   action TEXT NOT NULL,
@@ -233,7 +203,7 @@ CREATE TABLE admin_logs (
 -- =========================================================================
 
 -- 11. SQUAD_PROFILES Table
-CREATE TABLE squad_profiles (
+CREATE TABLE IF NOT EXISTS squad_profiles (
   id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
   username TEXT UNIQUE NOT NULL,
   gamer_tag TEXT,
@@ -249,7 +219,7 @@ CREATE TABLE squad_profiles (
 );
 
 -- 12. SQUADS Table
-CREATE TABLE squads (
+CREATE TABLE IF NOT EXISTS squads (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
@@ -268,7 +238,7 @@ CREATE TABLE squads (
 );
 
 -- 13. SQUAD_MEMBERS Table
-CREATE TABLE squad_members (
+CREATE TABLE IF NOT EXISTS squad_members (
   id TEXT PRIMARY KEY,
   squad_id TEXT REFERENCES squads(id) ON DELETE CASCADE NOT NULL,
   user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
@@ -282,7 +252,7 @@ CREATE TABLE squad_members (
 );
 
 -- 14. POLLS Table
-CREATE TABLE polls (
+CREATE TABLE IF NOT EXISTS polls (
   id TEXT PRIMARY KEY,
   created_by TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   squad_id TEXT REFERENCES squads(id) ON DELETE CASCADE,
@@ -297,7 +267,7 @@ CREATE TABLE polls (
 );
 
 -- 15. POLL_VOTES Table
-CREATE TABLE poll_votes (
+CREATE TABLE IF NOT EXISTS poll_votes (
   id TEXT PRIMARY KEY,
   poll_id TEXT REFERENCES polls(id) ON DELETE CASCADE NOT NULL,
   user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
@@ -307,7 +277,7 @@ CREATE TABLE poll_votes (
 );
 
 -- 16. PLAYER_NEEDED_POSTS Table
-CREATE TABLE player_needed_posts (
+CREATE TABLE IF NOT EXISTS player_needed_posts (
   id TEXT PRIMARY KEY,
   posted_by TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   city TEXT NOT NULL,
@@ -326,7 +296,7 @@ CREATE TABLE player_needed_posts (
 );
 
 -- 17. PLAYER_NEEDED_RESPONSES Table
-CREATE TABLE player_needed_responses (
+CREATE TABLE IF NOT EXISTS player_needed_responses (
   id TEXT PRIMARY KEY,
   post_id TEXT REFERENCES player_needed_posts(id) ON DELETE CASCADE NOT NULL,
   responder_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
@@ -337,7 +307,7 @@ CREATE TABLE player_needed_responses (
 );
 
 -- 18. MESSAGES Table (supports global_city, squad, and direct chat messages!)
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL CHECK (type IN ('global_city', 'squad', 'direct')),
   sender_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
@@ -357,7 +327,7 @@ CREATE TABLE messages (
 );
 
 -- 19. DM_THREADS Table
-CREATE TABLE dm_threads (
+CREATE TABLE IF NOT EXISTS dm_threads (
   id TEXT PRIMARY KEY,
   user1_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   user2_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
@@ -370,7 +340,7 @@ CREATE TABLE dm_threads (
 );
 
 -- 20. NEARBY_CHECKINS Table
-CREATE TABLE nearby_checkins (
+CREATE TABLE IF NOT EXISTS nearby_checkins (
   id TEXT PRIMARY KEY,
   user_id TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
@@ -383,7 +353,7 @@ CREATE TABLE nearby_checkins (
 );
 
 -- 21. SQUAD_INVITES Table
-CREATE TABLE squad_invites (
+CREATE TABLE IF NOT EXISTS squad_invites (
   id TEXT PRIMARY KEY,
   squad_id TEXT REFERENCES squads(id) ON DELETE CASCADE NOT NULL,
   invited_by TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
@@ -395,7 +365,7 @@ CREATE TABLE squad_invites (
 );
 
 -- 22. SQUAD_EVENTS Table
-CREATE TABLE squad_events (
+CREATE TABLE IF NOT EXISTS squad_events (
   id TEXT PRIMARY KEY,
   squad_id TEXT REFERENCES squads(id) ON DELETE CASCADE NOT NULL,
   created_by TEXT REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
@@ -415,7 +385,7 @@ CREATE TABLE squad_events (
 -- =========================================================================
 
 -- 23. GAMING_EQUIPMENTS Table
-CREATE TABLE gaming_equipments (
+CREATE TABLE IF NOT EXISTS gaming_equipments (
   id TEXT PRIMARY KEY,
   venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   equipment_type TEXT NOT NULL CHECK (equipment_type IN ('pc', 'ps5', 'ps4', 'xbox_series_x', 'xbox_one', 'vr_headset', 'racing_sim', 'arcade')),
@@ -436,7 +406,7 @@ CREATE TABLE gaming_equipments (
 );
 
 -- 24. TURF_DETAILS Table
-CREATE TABLE turf_details (
+CREATE TABLE IF NOT EXISTS turf_details (
   id TEXT PRIMARY KEY,
   venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   turf_name TEXT NOT NULL,
@@ -469,7 +439,7 @@ CREATE TABLE turf_details (
 );
 
 -- 25. EQUIPMENT_SESSIONS Table
-CREATE TABLE equipment_sessions (
+CREATE TABLE IF NOT EXISTS equipment_sessions (
   id TEXT PRIMARY KEY,
   venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   equipment_id TEXT REFERENCES gaming_equipments(id) ON DELETE CASCADE NOT NULL,
@@ -485,7 +455,7 @@ CREATE TABLE equipment_sessions (
 );
 
 -- 26. WALK_IN_SESSIONS Table
-CREATE TABLE walk_in_sessions (
+CREATE TABLE IF NOT EXISTS walk_in_sessions (
   id TEXT PRIMARY KEY,
   venue_id TEXT REFERENCES gaming_cafes(id) ON DELETE CASCADE NOT NULL,
   equipment_id TEXT REFERENCES gaming_equipments(id) ON DELETE SET NULL,
@@ -509,7 +479,7 @@ CREATE TABLE walk_in_sessions (
 );
 
 -- 27. TURF_BOOKINGS Table
-CREATE TABLE turf_bookings (
+CREATE TABLE IF NOT EXISTS turf_bookings (
   id TEXT PRIMARY KEY,
   booking_id TEXT REFERENCES bookings(id) ON DELETE CASCADE NOT NULL,
   turf_id TEXT REFERENCES turf_details(id) ON DELETE CASCADE NOT NULL,
@@ -540,34 +510,167 @@ alter publication supabase_realtime add table venue_resources;
 -- =========================================================================
 --  📈 PERFORMANCE OPTIMIZING INDEXES
 -- =========================================================================
-CREATE INDEX idx_slots_search ON slots(resource_id, slot_date);
-CREATE INDEX idx_messages_squad ON messages(squad_id) WHERE type = 'squad';
-CREATE INDEX idx_messages_dm ON messages(sender_id, receiver_id) WHERE type = 'direct';
-CREATE INDEX idx_bookings_date ON bookings(booking_date);
+CREATE INDEX IF NOT EXISTS idx_slots_search ON slots(resource_id, slot_date);
+CREATE INDEX IF NOT EXISTS idx_messages_squad ON messages(squad_id) WHERE type = 'squad';
+CREATE INDEX IF NOT EXISTS idx_messages_dm ON messages(sender_id, receiver_id) WHERE type = 'direct';
+CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(booking_date);
 
--- =========================================================================
---  🛡️ ROW LEVEL SECURITY POLICIES FOR ALL APP TABLES
--- =========================================================================
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+-- Profile credentials belong in Supabase Auth. Profile RLS is intentionally
+-- strict; the additive migration in supabase/migrations applies the same policy
+-- to existing projects.
+CREATE OR REPLACE FUNCTION public.is_current_user_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles p
+    WHERE p.id = auth.uid()::text AND p.role = 'admin'
+  );
+$$;
 
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow full access to profiles" ON profiles;
-CREATE POLICY "Allow full access to profiles" ON profiles FOR ALL USING (true) WITH CHECK (true);
+REVOKE ALL ON FUNCTION public.is_current_user_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_current_user_admin() TO anon, authenticated;
 
+CREATE OR REPLACE FUNCTION public.guard_profile_privilege_fields()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF auth.uid() IS NULL OR public.is_current_user_admin() THEN RETURN NEW; END IF;
+  IF auth.uid()::text <> OLD.id THEN
+    RAISE EXCEPTION 'Profile updates are restricted to the account owner';
+  END IF;
+  IF NEW.role IS DISTINCT FROM OLD.role
+     AND NOT (OLD.role = 'customer' AND NEW.role = 'owner_pending') THEN
+    RAISE EXCEPTION 'Role changes require administrator approval';
+  END IF;
+  IF NEW.garf_coins IS DISTINCT FROM OLD.garf_coins
+     OR NEW.is_suspended IS DISTINCT FROM OLD.is_suspended
+     OR NEW.no_show_count IS DISTINCT FROM OLD.no_show_count
+     OR NEW.pay_at_venue_blocked IS DISTINCT FROM OLD.pay_at_venue_blocked THEN
+    RAISE EXCEPTION 'Protected profile fields cannot be changed by the account owner';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS guard_profile_privilege_fields ON public.profiles;
+CREATE TRIGGER guard_profile_privilege_fields
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.guard_profile_privilege_fields();
+
+CREATE OR REPLACE FUNCTION public.create_profile_for_auth_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE requested_role text;
+BEGIN
+  requested_role := CASE
+    WHEN NEW.raw_user_meta_data ->> 'role' = 'owner_pending' THEN 'owner_pending'
+    ELSE 'customer'
+  END;
+  INSERT INTO public.profiles (id, full_name, email, phone, city, role, referral_code)
+  VALUES (
+    NEW.id::text,
+    COALESCE(NULLIF(NEW.raw_user_meta_data ->> 'full_name', ''), split_part(NEW.email, '@', 1), 'Player'),
+    NEW.email,
+    NULLIF(NEW.raw_user_meta_data ->> 'phone', ''),
+    NULLIF(NEW.raw_user_meta_data ->> 'city', ''),
+    requested_role,
+    'GARF-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.create_profile_for_auth_user() FROM PUBLIC;
+DROP TRIGGER IF EXISTS on_auth_user_created_create_profile ON auth.users;
+CREATE TRIGGER on_auth_user_created_create_profile
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.create_profile_for_auth_user();
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow full access to profiles" ON public.profiles;
+DROP POLICY IF EXISTS profile_read_self_or_admin ON public.profiles;
+DROP POLICY IF EXISTS profile_update_self_or_admin ON public.profiles;
+CREATE POLICY profile_read_self_or_admin
+  ON public.profiles FOR SELECT TO authenticated
+  USING (id = auth.uid()::text OR public.is_current_user_admin());
+CREATE POLICY profile_update_self_or_admin
+  ON public.profiles FOR UPDATE TO authenticated
+  USING (id = auth.uid()::text OR public.is_current_user_admin())
+  WITH CHECK (id = auth.uid()::text OR public.is_current_user_admin());
+REVOKE ALL ON public.profiles FROM anon;
+GRANT SELECT, UPDATE ON public.profiles TO authenticated;
+
+-- Public browsing tables stay readable; the remaining user-specific tables use
+-- RLS and receive no client policies until their operations have server-side
+-- authorization rules.
 ALTER TABLE gaming_cafes ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow full access to gaming_cafes" ON gaming_cafes;
-CREATE POLICY "Allow full access to gaming_cafes" ON gaming_cafes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public approved cafes are readable" ON gaming_cafes
+  FOR SELECT TO anon, authenticated
+  USING ((is_active AND status = 'approved' AND NOT is_suspended)
+    OR owner_id = auth.uid()::text OR public.is_current_user_admin());
+CREATE POLICY "Owners can register cafes" ON gaming_cafes
+  FOR INSERT TO authenticated
+  WITH CHECK (owner_id = auth.uid()::text AND status = 'pending'
+    AND NOT is_verified AND NOT is_featured AND NOT is_suspended);
+CREATE POLICY "Owners can update their cafes" ON gaming_cafes
+  FOR UPDATE TO authenticated
+  USING (owner_id = auth.uid()::text OR public.is_current_user_admin())
+  WITH CHECK (owner_id = auth.uid()::text OR public.is_current_user_admin());
+CREATE POLICY "Admins can delete cafes" ON gaming_cafes
+  FOR DELETE TO authenticated USING (public.is_current_user_admin());
 
 ALTER TABLE venue_resources ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow full access to venue_resources" ON venue_resources;
-CREATE POLICY "Allow full access to venue_resources" ON venue_resources FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public active resources are readable" ON venue_resources
+  FOR SELECT TO anon, authenticated
+  USING (is_active OR EXISTS (
+    SELECT 1 FROM gaming_cafes c
+    WHERE c.id = venue_id AND (c.owner_id = auth.uid()::text OR public.is_current_user_admin())
+  ));
+CREATE POLICY "Venue owners manage resources" ON venue_resources
+  FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM gaming_cafes c WHERE c.id = venue_id
+    AND (c.owner_id = auth.uid()::text OR public.is_current_user_admin())))
+  WITH CHECK (EXISTS (SELECT 1 FROM gaming_cafes c WHERE c.id = venue_id
+    AND (c.owner_id = auth.uid()::text OR public.is_current_user_admin())));
 
 ALTER TABLE slots ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow full access to slots" ON slots;
-CREATE POLICY "Allow full access to slots" ON slots FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public slot availability is readable" ON slots
+  FOR SELECT TO anon, authenticated
+  USING (EXISTS (SELECT 1 FROM gaming_cafes c WHERE c.id = venue_id
+    AND ((c.is_active AND c.status = 'approved' AND NOT c.is_suspended)
+      OR c.owner_id = auth.uid()::text OR public.is_current_user_admin())));
+CREATE POLICY "Venue owners manage slots" ON slots
+  FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM gaming_cafes c WHERE c.id = venue_id
+    AND (c.owner_id = auth.uid()::text OR public.is_current_user_admin())))
+  WITH CHECK (EXISTS (SELECT 1 FROM gaming_cafes c WHERE c.id = venue_id
+    AND (c.owner_id = auth.uid()::text OR public.is_current_user_admin())));
 
 ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow full access to bookings" ON bookings;
-CREATE POLICY "Allow full access to bookings" ON bookings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Customers owners and admins read bookings" ON bookings
+  FOR SELECT TO authenticated
+  USING (customer_id = auth.uid()::text
+    OR EXISTS (SELECT 1 FROM gaming_cafes c WHERE c.id = venue_id
+      AND c.owner_id = auth.uid()::text)
+    OR public.is_current_user_admin());
+CREATE POLICY "Admins manage bookings" ON bookings
+  FOR ALL TO authenticated
+  USING (public.is_current_user_admin())
+  WITH CHECK (public.is_current_user_admin());
 
