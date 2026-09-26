@@ -1543,6 +1543,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isPushing = useRef<boolean>(false);
 
   const processPushQueue = async () => {
+    if (isSupabaseConfigured) return;
     if (isPushing.current) return;
     const keys = Object.keys(pendingUpdates.current);
     if (keys.length === 0) return;
@@ -1569,6 +1570,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const pushToServer = (key: string, value: any) => {
+    if (isSupabaseConfigured) return;
     if (isSyncingFromServer.current || !initialLoadCompleted.current) return;
     pendingUpdates.current[key] = value;
 
@@ -1582,6 +1584,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Mount effect to fetch database and set up 3s background poll
   useEffect(() => {
+    if (isSupabaseConfigured) {
+      initialLoadCompleted.current = true;
+      return;
+    }
     const fetchCentralData = async () => {
       try {
         const response = await fetch('/api/data');
