@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { isSupabaseConfigured } from '../lib/supabase';
 import { Lock, Mail, AlertCircle, Gamepad2, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -24,8 +25,11 @@ export const LoginPage: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('resetToken');
+    const recoveryType = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('type');
     if (token) {
       setResetToken(token);
+    } else if (recoveryType === 'recovery') {
+      setResetToken('supabase-recovery');
     }
   }, [location.search]);
   
@@ -96,8 +100,18 @@ export const LoginPage: React.FC = () => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    
-    // Read directly from localStorage first to be absolutely sure we have all signed-up users!
+
+    if (isSupabaseConfigured) {
+      try {
+        const res = await sendPasswordResetEmail(cleanEmail);
+        toast.success(res.message, { duration: 8000 });
+      } catch (err: any) {
+        toast.error(err.message || 'Failed to dispatch reset link');
+      }
+      return;
+    }
+
+    // Local demo mode only: check local profiles.
     const saved = localStorage.getItem('garf_profiles');
     let currentProfiles = profiles || [];
     if (saved) {
