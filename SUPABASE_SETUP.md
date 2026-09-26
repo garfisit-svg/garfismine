@@ -13,14 +13,16 @@ Supabase gives you a PostgreSQL database with a real-time listening socket out o
    * Click **New Project** and select a region closest to your target audience.
    * Save your **Database Password** safely.
 
-2. **Run the SQL Schema Script**:
-   * Once your project is ready, click on **SQL Editor** from the left navigation rail in Supabase.
-   * Click **New Query**.
-   * Open the file `/SUPABASE_SCHEMA.sql` located at the root of this project.
-   * Copy the entire code block and paste it into the editor.
-   * Click **Run** ➔ Your tables, relationships, performance indexes, and real-time triggers are instantly created!
+2. **Create or update the database safely**:
+   * For a brand-new project, run `SUPABASE_SCHEMA.sql` once from the Supabase SQL Editor.
+   * For an existing project, do not re-run the schema script; apply the ordered SQL migrations under `supabase/migrations` instead.
+   * The schema no longer drops existing tables, and enables scoped RLS for profiles, cafes, resources, slots, and bookings. Private social and operational tables are denied to browser roles until they receive feature-specific policies.
 
-3. **Get Your API Credentials**:
+3. **Configure Auth redirects and the first administrator**:
+   * In Supabase Auth URL settings, allow your deployed `/login` URL and local development URL as redirects.
+   * Create and confirm your first account, then promote its Auth UUID to administrator from the SQL Editor. Do not grant administrator roles through client-side signup.
+   
+4. **Get Your API Credentials**:
    * Navigate to **Project Settings** ➔ **API**.
    * Copy your **Project URL** (e.g. `https://xxx.supabase.co`).
    * Copy your **Anon/Public Key** (e.g. `eyJhbG...`).
