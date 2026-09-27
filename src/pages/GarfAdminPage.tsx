@@ -230,11 +230,6 @@ export const GarfAdminPage: React.FC = () => {
       return;
     }
 
-    const localDemoKeys = ['Garfismine', 'Garfismine@1234', 'garfadmin', 'garfisit'];
-    if (!localDemoKeys.includes(cleanPass.toLowerCase()) && !localDemoKeys.includes(cleanPass)) {
-      toast.error('Incorrect Administrator Access Key. Access Denied.');
-      return;
-    }
     try {
       const profile = await logIn('garfisit@gmail.com', cleanPass);
       if (profile.role !== 'admin') throw new Error('The local account is not an administrator.');
