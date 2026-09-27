@@ -93,7 +93,7 @@ export const GarfAdminPage: React.FC = () => {
             .eq('id', user.id)
             .maybeSingle();
           if (active) {
-            setIsAuthorized(!profileError && profile?.role === 'admin' && currentUser?.id === user.id && currentUser.role === 'admin');
+            setIsAuthorized(!profileError && profile?.role === 'admin' && currentUser?.id === user.id && currentUser?.role === 'admin');
           }
         } else {
           if (active) setIsAuthorized(currentUser?.role === 'admin');
