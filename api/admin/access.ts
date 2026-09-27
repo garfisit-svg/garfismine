@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 const json = (res: any, status: number, body: Record<string, unknown>) => {
-  res.status(status).setHeader('Content-Type', 'application/json').json(body);
+  res.status(status).setHeader('Content-Type', 'application/json').setHeader('Cache-Control', 'no-store').json(body);
 };
 
 export default async function handler(req: any, res: any) {
