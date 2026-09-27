@@ -75,30 +75,40 @@ export const GarfAdminPage: React.FC = () => {
     };
   }, []);
 
-  // Supabase live auth checks on mount
+  // A UI email check is not an administrator grant. Confirm both the Auth
+  // session and the role stored in the RLS-protected profile before syncing.
   useEffect(() => {
+    let active = true;
     const checkSupabaseAuth = async () => {
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const { data: { user }, error } = await supabase.auth.getUser();
-          if (!error && user && (user.email === 'garfisit@gmail.com' || currentUser?.role === 'admin')) {
-            setIsAuthorized(true);
+      try {
+        if (isSupabaseConfigured && supabase) {
+          const { data: { user }, error: authError } = await supabase.auth.getUser();
+          if (authError || !user) {
+            if (active) setIsAuthorized(false);
+            return;
           }
-        } catch (err) {
-          console.error('Supabase Auth Check error:', err);
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+          if (active) {
+            setIsAuthorized(!profileError && profile?.role === 'admin' && currentUser?.id === user.id && currentUser.role === 'admin');
+          }
+        } else {
+          if (active) setIsAuthorized(currentUser?.role === 'admin');
         }
+      } catch (err) {
+        console.error('Administrator authorization check failed:', err);
+        if (active) setIsAuthorized(false);
+      } finally {
+        if (active) setSupabaseLoading(false);
       }
-      setSupabaseLoading(false);
     };
-    checkSupabaseAuth();
-  }, [currentUser]);
-
-  // Sync authorization state with our global AppContext logged in user
-  useEffect(() => {
-    if (currentUser && (currentUser.email?.toLowerCase().trim() === 'garfisit@gmail.com' || currentUser.role === 'admin')) {
-      setIsAuthorized(true);
-    }
-  }, [currentUser]);
+    setSupabaseLoading(true);
+    void checkSupabaseAuth();
+    return () => { active = false; };
+  }, [currentUser?.id, currentUser?.role]);
 
   // Handle manual or automatic database sync
   const handleTriggerSync = async () => {
@@ -116,10 +126,10 @@ export const GarfAdminPage: React.FC = () => {
 
   // Direct Supabase Real-Time Channel Subscription for Admin
   useEffect(() => {
-    if (!isAuthorized || !isSupabaseConfigured || !supabase) return;
+    if (!isAuthorized || currentUser?.role !== 'admin' || !isSupabaseConfigured || !supabase) return;
 
     console.log('⚡ Admin Console: Subscribing to PostgreSQL Realtime Channels...');
-    setDbStats(prev => ({ ...prev, isRealtimeConnected: true }));
+    setDbStats(prev => ({ ...prev, isRealtimeConnected: false }));
 
     const liveAdminChannel = supabase
       .channel('garf-admin-live-pulse')
@@ -161,7 +171,7 @@ export const GarfAdminPage: React.FC = () => {
     return () => {
       supabase.removeChannel(liveAdminChannel);
     };
-  }, [isAuthorized]);
+  }, [isAuthorized, currentUser?.id, currentUser?.role]);
 
   // Fetch Supabase Table Stats
   useEffect(() => {
