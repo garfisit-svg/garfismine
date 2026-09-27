@@ -550,7 +550,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const loadVenues = async () => {
         try {
           let query = supabase.from('gaming_cafes').select('*');
-          const isAdminUser = currentUser?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'garfisit@gmail.com';
+          const isAdminUser = currentUser?.role === 'admin';
           if (!isAdminUser) {
             if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
               query = query.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
@@ -1543,6 +1543,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isPushing = useRef<boolean>(false);
 
   const processPushQueue = async () => {
+    if (isSupabaseConfigured) return;
     if (isPushing.current) return;
     const keys = Object.keys(pendingUpdates.current);
     if (keys.length === 0) return;
@@ -1569,6 +1570,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const pushToServer = (key: string, value: any) => {
+    if (isSupabaseConfigured) return;
     if (isSyncingFromServer.current || !initialLoadCompleted.current) return;
     pendingUpdates.current[key] = value;
 
@@ -1582,6 +1584,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Mount effect to fetch database and set up 3s background poll
   useEffect(() => {
+    if (isSupabaseConfigured) {
+      initialLoadCompleted.current = true;
+      return;
+    }
     const fetchCentralData = async () => {
       try {
         const response = await fetch('/api/data');
@@ -2572,65 +2578,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
-    // Save all newly generated entities to Supabase FIRST in a strict transactional manner
+    // Persist the submission before reflecting success in browser state. Never allow a
+    // failed RLS/database write to look like a completed registration.
     if (isSupabaseConfigured && supabase) {
-      // 1. Await profile update in Supabase to 'owner_pending' before inserting the venue
-      // to strictly prevent the foreign key constraint from failing!
-      try {
-        const updatedProfile = { ...currentUser, role: 'owner_pending' as const };
-        console.log('registerVenue: Syncing updated user profile to owner_pending in Supabase...');
-        await saveProfileToSupabase(updatedProfile);
-      } catch (err: any) {
-        console.error('registerVenue: Profile save failed:', err);
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || authData.user?.id !== currentUser.id) {
+        throw new Error('Your sign-in session could not be verified. Please sign in again and retry.');
+      }
+
+      // Customer accounts can start an owner application; an existing owner must
+      // retain its approved role when registering an additional venue.
+      if (currentUser.role === 'customer') {
+        const { data: updatedProfile, error: profileError } = await supabase
+          .from('profiles')
+          .update({ role: 'owner_pending', updated_at: new Date().toISOString() })
+          .eq('id', currentUser.id)
+          .select('id')
+          .maybeSingle();
+        if (profileError || !updatedProfile) {
+          throw new Error(profileError?.message || 'Your owner profile could not be updated. Please refresh and try again.');
+        }
+      }
+
+      const venuePayload = {
+        id: newV.id,
+        owner_id: newV.owner_id,
+        name: newV.name,
+        type: newV.type,
+        description: newV.description,
+        address: newV.address,
+        city: newV.city,
+        state: newV.state,
+        pincode: newV.pincode,
+        phone: newV.phone,
+        email: newV.email,
+        cover_image: newV.cover_image,
+        gallery_images: newV.gallery_images || [],
+        amenities: newV.amenities || [],
+        games_available: newV.games_available || [],
+        price_per_hour: Number(newV.price_per_hour),
+        rating: 0,
+        total_reviews: 0,
+        is_verified: false,
+        is_active: false,
+        is_featured: false,
+        is_suspended: false,
+        operating_hours_start: newV.operating_hours_start || '09:00',
+        operating_hours_end: newV.operating_hours_end || '23:00',
+        operating_days: newV.operating_days || [],
+        commission_percent: 10,
+        rejection_reason: null,
+        verified_at: null,
+        created_at: newV.created_at,
+        status: 'pending'
+      };
+
+      const { error: venueError } = await supabase.from('gaming_cafes').insert(venuePayload);
+      if (venueError) {
+        throw new Error(`Venue submission failed: ${venueError.message}`);
       }
 
       try {
-        // 2. Save Venue
-        const venuePayload = {
-          id: newV.id,
-          owner_id: newV.owner_id,
-          name: newV.name,
-          type: newV.type,
-          description: newV.description,
-          address: newV.address,
-          city: newV.city,
-          state: newV.state,
-          pincode: newV.pincode,
-          phone: newV.phone,
-          email: newV.email,
-          cover_image: newV.cover_image,
-          gallery_images: newV.gallery_images || [],
-          amenities: newV.amenities || [],
-          games_available: newV.games_available || [],
-          price_per_hour: Number(newV.price_per_hour),
-          rating: Number(newV.rating) || 0,
-          total_reviews: Number(newV.total_reviews) || 0,
-          is_verified: newV.is_verified ?? false,
-          is_active: newV.is_active ?? false,
-          is_featured: newV.is_featured || false,
-          is_suspended: newV.is_suspended || false,
-          operating_hours_start: newV.operating_hours_start || '09:00',
-          operating_hours_end: newV.operating_hours_end || '23:00',
-          operating_days: newV.operating_days || [],
-          commission_percent: Number(newV.commission_percent) || 10,
-          rejection_reason: newV.rejection_reason || null,
-          verified_at: newV.verified_at || null,
-          created_at: newV.created_at || new Date().toISOString(),
-          status: newV.status || 'pending'
-        };
-        
-        console.log('registerVenue: Sending gaming_cafes upsert payload:', venuePayload);
-        const { data: dbVenue, error: venueError } = await supabase
-          .from('gaming_cafes')
-          .upsert(venuePayload, { onConflict: 'id' })
-          .select();
-        console.log('registerVenue: gaming_cafes upsert response data:', dbVenue, 'error:', venueError);
-        
-        if (venueError) {
-          console.warn(`Failed to save Gaming Cafe to Database: ${venueError.message}`);
-        }
-
-        // 3. Save Venue Resources
         if (newRes.length > 0) {
           const resourcesPayload = newRes.map(res => ({
             id: res.id,
@@ -2643,20 +2651,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             sort_order: res.sort_order,
             created_at: res.created_at
           }));
-          
-          console.log('registerVenue: Sending venue_resources upsert payload:', resourcesPayload);
-          const { data: dbResources, error: resError } = await supabase
-            .from('venue_resources')
-            .upsert(resourcesPayload, { onConflict: 'id' })
-            .select();
-          console.log('registerVenue: venue_resources upsert response data:', dbResources, 'error:', resError);
-          
-          if (resError) {
-            console.warn(`Failed to save Venue Resources to Database: ${resError.message}`);
-          }
+          const { error } = await supabase.from('venue_resources').insert(resourcesPayload);
+          if (error) throw new Error(`Venue resources could not be saved: ${error.message}`);
         }
 
-        // 4. Save Slots in bulk
         if (allNewSlots.length > 0) {
           const slotsPayload = allNewSlots.map(slot => ({
             id: slot.id,
@@ -2666,25 +2664,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             start_time: slot.start_time,
             end_time: slot.end_time,
             status: slot.status,
-            booking_id: slot.booking_id || null,
-            held_until: slot.held_until || null,
-            blocked_reason: slot.blocked_reason || null,
+            booking_id: null,
+            held_until: null,
+            blocked_reason: null,
             created_at: slot.created_at,
             updated_at: slot.updated_at
           }));
-          
-          console.log('registerVenue: Sending slots upsert payload count:', slotsPayload.length);
-          const { error: slotError } = await supabase
-            .from('slots')
-            .upsert(slotsPayload, { onConflict: 'id' });
-          
-          if (slotError) {
-            console.warn(`Failed to save Slots to Database: ${slotError.message}`);
-          }
+          const { error } = await supabase.from('slots').insert(slotsPayload);
+          if (error) throw new Error(`Availability could not be initialized: ${error.message}`);
         }
-        
-      } catch (err: any) {
-        console.error('Error in registerVenue Supabase execution:', err);
+      } catch (error: any) {
+        // Roll back the parent row; FK cascades remove any resources/slots already
+        // written, avoiding a partial submission that appears successful.
+        const { error: cleanupError } = await supabase.from('gaming_cafes').delete().eq('id', vId);
+        if (cleanupError) {
+          console.error('Venue submission cleanup failed:', cleanupError.message);
+        }
+        throw error;
       }
     }
 
@@ -2780,20 +2776,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setSlots(prev => [...prev, ...allNewSlots]);
 
-    // Update user role locally
-    setProfiles(prev => {
-      const updated = prev.map(p => p.id === currentUser.id ? { ...p, role: 'owner_pending' as const } : p);
-      localStorage.setItem('garf_profiles', JSON.stringify(updated));
-      return updated;
-    });
-    setCurrentUser(prev => {
-      if (prev) {
+    // Only promote first-time customers. Existing approved owners keep their role.
+    if (currentUser.role === 'customer') {
+      setProfiles(prev => {
+        const updated = prev.map(p => p.id === currentUser.id ? { ...p, role: 'owner_pending' as const } : p);
+        localStorage.setItem('garf_profiles', JSON.stringify(updated));
+        return updated;
+      });
+      setCurrentUser(prev => {
+        if (!prev) return null;
         const updated = { ...prev, role: 'owner_pending' as const };
         localStorage.setItem('garf_current_user', JSON.stringify(updated));
         return updated;
-      }
-      return null;
-    });
+      });
+    }
 
     // Notify admins of new registered venue awaiting verification
     profiles.filter(p => p.role === 'admin').forEach(adm => {
@@ -5653,7 +5649,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 2. Fetch venues
       let venueQuery = supabase.from('gaming_cafes').select('*');
-      const isAdminUser = currentUser?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'garfisit@gmail.com';
+      const isAdminUser = currentUser?.role === 'admin';
       if (!isAdminUser) {
         if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
           venueQuery = venueQuery.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);

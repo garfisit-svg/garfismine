@@ -145,7 +145,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '127.0.0.1', () => {
     console.log(`🚀 Full-stack central server is running on http://localhost:${PORT}`);
   });
 }

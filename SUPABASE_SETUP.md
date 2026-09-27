@@ -1,125 +1,46 @@
-# 🚀 Turning GARF into a Real-Time Production Site with Supabase & Vercel
+# Supabase and Vercel deployment
 
-This guide outlines the **simplest, fastest, and most cost-effective** way to migrate your local-state application to a production-grade backend with **real-time chat, slot holds, and booking sync** using **Supabase** (Database, Auth, and Realtime Engine) and **Vercel** (Hosting).
+This application is a Vite single-page app backed by Supabase Auth and Postgres. The local Express JSON server is for development only; on Vercel, use Supabase for shared production data.
 
----
+## Supabase setup
 
-## 📅 Part 1: Setting up Supabase (Takes 3 Minutes)
+1. Create a Supabase project and configure Auth email/password sign-in.
+2. For a new project, run `SUPABASE_SCHEMA.sql` once in the Supabase SQL Editor.
+3. For an existing project, apply migrations in order:
+   - `supabase/migrations/202609260001_profile_auth_hardening.sql`
+   - `supabase/migrations/202609270001_admin_realtime_and_indexes.sql`
+4. In **Authentication → URL Configuration**, set the production Site URL and add the exact production and local callback URLs used by password reset and email confirmation.
+5. Create and confirm the administrator's Auth account. Promote that account from the SQL Editor, replacing the email with the confirmed administrator email:
 
-Supabase gives you a PostgreSQL database with a real-time listening socket out of the box.
-
-1. **Create an Account & Project**:
-   * Go to [supabase.com](https://supabase.com) and sign up for a free account.
-   * Click **New Project** and select a region closest to your target audience.
-   * Save your **Database Password** safely.
-
-2. **Run the SQL Schema Script**:
-   * Once your project is ready, click on **SQL Editor** from the left navigation rail in Supabase.
-   * Click **New Query**.
-   * Open the file `/SUPABASE_SCHEMA.sql` located at the root of this project.
-   * Copy the entire code block and paste it into the editor.
-   * Click **Run** ➔ Your tables, relationships, performance indexes, and real-time triggers are instantly created!
-
-3. **Get Your API Credentials**:
-   * Navigate to **Project Settings** ➔ **API**.
-   * Copy your **Project URL** (e.g. `https://xxx.supabase.co`).
-   * Copy your **Anon/Public Key** (e.g. `eyJhbG...`).
-
----
-
-## ⚡ Part 2: Connect the App locally
-
-Before deploying to production, test the connection locally:
-
-1. Create a `.env` file at your project root if you haven't already.
-2. Add the copied credentials:
-   ```env
-   VITE_SUPABASE_URL=https://your-project-id.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-anon-public-key
-   ```
-3. The app is already equipped with `@supabase/supabase-js` (fully installed) and handles fallback gracefully.
-
----
-
-## 🌍 Part 3: Deploying on Vercel (Takes 2 Minutes)
-
-Vercel is the premier platform for hosting React-Vite websites for free, with instant deployments.
-
-1. **Push your code to GitHub**:
-   * Initialize a git repo and push it to your GitHub account (private or public).
-
-2. **Import to Vercel**:
-   * Go to [vercel.com](https://vercel.com) and sign up/login.
-   * Click **Add New** ➔ **Project**.
-   * Import your GitHub repository.
-
-3. **Configure Environment Variables**:
-   * In the Vercel setup panel, expand **Environment Variables**.
-   * Add the following two key-value pairs:
-     * `VITE_SUPABASE_URL` ➔ `[Your URL]`
-     * `VITE_SUPABASE_ANON_KEY` ➔ `[Your Anon Key]`
-   * Click **Deploy**!
-
-Vercel will build the React SPA and serve it over a lightning-fast CDN with free HTTPS.
-
----
-
-## 🛠️ Part 4: Connecting local state to Supabase
-
-To make the existing state read from Supabase directly in `/src/context/AppContext.tsx`:
-
-### 1. Fetching on App Launch
-Update the `useEffect` block inside your `AppContext.tsx` to read values from Supabase tables:
-```typescript
-import { supabase } from '../lib/supabase';
-
-useEffect(() => {
-  const loadSupabaseData = async () => {
-    if (!supabase) return;
-    
-    // Fetch profiles
-    const { data: profileList } = await supabase.from('profiles').select('*');
-    if (profileList) setProfiles(profileList);
-
-    // Fetch live bookings
-    const { data: bookingList } = await supabase.from('bookings').select('*');
-    if (bookingList) setBookings(bookingList);
-  };
-  
-  loadSupabaseData();
-}, []);
+```sql
+UPDATE public.profiles AS p
+SET role = 'admin', updated_at = now()
+FROM auth.users AS u
+WHERE p.id = u.id::text
+  AND lower(u.email) = lower('admin@example.com')
+  AND u.email_confirmed_at IS NOT NULL;
 ```
 
-### 2. Inserting items
-Whenever a write operation happens (like registering a venue or booking a slot), perform the insert query:
-```typescript
-const registerVenue = async (venueData) => {
-  if (supabase) {
-    await supabase.from('venues').insert([venueData]);
-  }
-};
-```
+Check that exactly one row was updated. The email/password must belong to that Auth account. Client-side signup cannot grant administrator privileges.
 
-### 3. Real-Time Chat messages
-Listen to incoming messages live and insert them seamlessly:
-```typescript
-import { SupabaseSyncService } from '../lib/supabaseSync';
+The profile, venue, resource, slot, and booking policies are enforced by RLS. The realtime migration adds the admin synchronization tables to Supabase's `supabase_realtime` publication when that publication exists. Realtime delivery still follows RLS.
 
-useEffect(() => {
-  const subscription = SupabaseSyncService.subscribeToMessages((newMessage) => {
-    // Add live messages straight to react state instantly!
-    setMessages(prev => [...prev, newMessage]);
-  });
+## Vercel setup
 
-  return () => {
-    subscription?.unsubscribe();
-  };
-}, []);
-```
+Set the Vercel project to the Vite framework, with build command `npm run build` and output directory `dist`. Configure these variables for Production, Preview, and Development as appropriate, then redeploy:
 
----
+- `VITE_SUPABASE_URL`: the Supabase project URL
+- `VITE_SUPABASE_ANON_KEY`: the Supabase publishable/anon key
 
-## 🎉 Benefits of this Setup
-* **Zero Cost**: Supabase and Vercel both offer generous free tiers.
-* **Instant Scalability**: Handles hundreds of concurrent users without breaking.
-* **True Real-time**: WebSockets are handled by Supabase channels for live chat and booking update notifications.
+Never expose a Supabase service-role key or payment secret in a `VITE_*` variable. Vite embeds those values in browser assets. If either required Supabase variable is missing in a production build, the app now fails closed with a configuration notice instead of falling back to browser-local demo data.
+
+The repository's `vercel.json` rewrites routes to `index.html` for SPA navigation such as `/login` and `/owner/login`. If a direct refresh still returns 404, verify that Vercel is deploying this repository's current branch, that the build succeeds, and that the output directory is `dist`.
+
+## Operational readiness
+
+- Confirm the admin account's `profiles.role` is `admin`; a matching email alone is not an RLS grant.
+- Confirm a venue registration appears in `public.gaming_cafes` with `status = 'pending'`, and its resources and initial slots exist before telling the owner submission succeeded.
+- Monitor Vercel build/deployment logs and Supabase Auth, Postgres, and Realtime logs. Keep database backups and test restoring one before launch.
+- Private social and operational tables currently have RLS enabled without browser policies. Their persistence needs scoped server-side operations before those features can be considered production-ready.
+- Booking holds and payment confirmation still need a transactional database/server workflow and verified payment-provider callbacks. Do not treat a client-side payment confirmation as proof of payment.
+- Load, concurrency, payment, account recovery, and production-browser testing are still required before claiming readiness for heavy real-world traffic.

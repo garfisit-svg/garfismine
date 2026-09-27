@@ -631,6 +631,9 @@ CREATE POLICY "Owners can update their cafes" ON gaming_cafes
   WITH CHECK (owner_id = auth.uid()::text OR public.is_current_user_admin());
 CREATE POLICY "Admins can delete cafes" ON gaming_cafes
   FOR DELETE TO authenticated USING (public.is_current_user_admin());
+CREATE POLICY "Owners can delete pending cafes" ON gaming_cafes
+  FOR DELETE TO authenticated
+  USING (owner_id = auth.uid()::text AND status = 'pending');
 
 CREATE OR REPLACE FUNCTION public.guard_cafe_moderation_fields()
 RETURNS trigger
@@ -740,3 +743,32 @@ ALTER TABLE equipment_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE walk_in_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE turf_bookings ENABLE ROW LEVEL SECURITY;
 
+-- Keep administrator data synchronization responsive and index the common
+-- venue filters. Supabase Realtime continues to enforce the table's RLS rules.
+CREATE INDEX IF NOT EXISTS gaming_cafes_status_owner_idx
+  ON public.gaming_cafes (status, owner_id);
+CREATE INDEX IF NOT EXISTS gaming_cafes_owner_created_idx
+  ON public.gaming_cafes (owner_id, created_at DESC);
+
+DO $realtime$
+DECLARE
+  table_name text;
+  realtime_tables text[] := ARRAY[
+    'profiles', 'gaming_cafes', 'venue_resources', 'slots', 'bookings'
+  ];
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    FOREACH table_name IN ARRAY realtime_tables LOOP
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_publication_tables
+        WHERE pubname = 'supabase_realtime'
+          AND schemaname = 'public'
+          AND tablename = table_name
+      ) THEN
+        EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', table_name);
+      END IF;
+    END LOOP;
+  END IF;
+END;
+$realtime$;

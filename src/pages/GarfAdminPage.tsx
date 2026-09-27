@@ -75,30 +75,40 @@ export const GarfAdminPage: React.FC = () => {
     };
   }, []);
 
-  // Supabase live auth checks on mount
+  // A UI email check is not an administrator grant. Confirm both the Auth
+  // session and the role stored in the RLS-protected profile before syncing.
   useEffect(() => {
+    let active = true;
     const checkSupabaseAuth = async () => {
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const { data: { user }, error } = await supabase.auth.getUser();
-          if (!error && user && (user.email === 'garfisit@gmail.com' || currentUser?.role === 'admin')) {
-            setIsAuthorized(true);
+      try {
+        if (isSupabaseConfigured && supabase) {
+          const { data: { user }, error: authError } = await supabase.auth.getUser();
+          if (authError || !user) {
+            if (active) setIsAuthorized(false);
+            return;
           }
-        } catch (err) {
-          console.error('Supabase Auth Check error:', err);
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+          if (active) {
+            setIsAuthorized(!profileError && profile?.role === 'admin' && currentUser?.id === user.id && currentUser?.role === 'admin');
+          }
+        } else {
+          if (active) setIsAuthorized(currentUser?.role === 'admin');
         }
+      } catch (err) {
+        console.error('Administrator authorization check failed:', err);
+        if (active) setIsAuthorized(false);
+      } finally {
+        if (active) setSupabaseLoading(false);
       }
-      setSupabaseLoading(false);
     };
-    checkSupabaseAuth();
-  }, [currentUser]);
-
-  // Sync authorization state with our global AppContext logged in user
-  useEffect(() => {
-    if (currentUser && (currentUser.email?.toLowerCase().trim() === 'garfisit@gmail.com' || currentUser.role === 'admin')) {
-      setIsAuthorized(true);
-    }
-  }, [currentUser]);
+    setSupabaseLoading(true);
+    void checkSupabaseAuth();
+    return () => { active = false; };
+  }, [currentUser?.id, currentUser?.role]);
 
   // Handle manual or automatic database sync
   const handleTriggerSync = async () => {
@@ -116,10 +126,10 @@ export const GarfAdminPage: React.FC = () => {
 
   // Direct Supabase Real-Time Channel Subscription for Admin
   useEffect(() => {
-    if (!isAuthorized || !isSupabaseConfigured || !supabase) return;
+    if (!isAuthorized || currentUser?.role !== 'admin' || !isSupabaseConfigured || !supabase) return;
 
     console.log('⚡ Admin Console: Subscribing to PostgreSQL Realtime Channels...');
-    setDbStats(prev => ({ ...prev, isRealtimeConnected: true }));
+    setDbStats(prev => ({ ...prev, isRealtimeConnected: false }));
 
     const liveAdminChannel = supabase
       .channel('garf-admin-live-pulse')
@@ -161,7 +171,7 @@ export const GarfAdminPage: React.FC = () => {
     return () => {
       supabase.removeChannel(liveAdminChannel);
     };
-  }, [isAuthorized]);
+  }, [isAuthorized, currentUser?.id, currentUser?.role]);
 
   // Fetch Supabase Table Stats
   useEffect(() => {
@@ -194,59 +204,95 @@ export const GarfAdminPage: React.FC = () => {
     fetchStats();
   }, [isAuthorized, profiles.length, venues.length, bookings.length]);
 
-  // Handle local root password login
+  // Authenticate administrators through Supabase in production. Local demo login
+  // is disabled in production when Supabase configuration is missing.
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPass = adminPassword.trim();
-    if (cleanPass !== 'Garfismine' && cleanPass.toLowerCase() !== 'garfismine' && cleanPass !== 'Garfismine@1234' && cleanPass.toLowerCase() !== 'garfadmin' && cleanPass !== 'garfisit') {
-      toast.error('Incorrect Administrator Access Key. Access Denied.');
+    if (isSupabaseConfigured) {
+      const load = toast.loading('Authenticating administrator...');
+      try {
+        const profile = await logIn('garfisit@gmail.com', cleanPass);
+        if (profile.role !== 'admin') {
+          throw new Error('This account is not provisioned as an administrator.');
+        }
+        setIsAuthorized(true);
+        toast.success('Administrator access granted.', { id: load });
+      } catch (err: any) {
+        setIsAuthorized(false);
+        toast.error(err?.message || 'Administrator sign-in failed.', { id: load });
+      }
       return;
     }
-    const load = toast.loading('Authenticating Root Console...');
+
+    if (import.meta.env.PROD) {
+      toast.error('Supabase must be configured before the production admin console can be used.');
+      return;
+    }
+
     try {
-      await logIn('garfisit@gmail.com');
+      const profile = await logIn('garfisit@gmail.com', cleanPass);
+      if (profile.role !== 'admin') throw new Error('The local account is not an administrator.');
       setIsAuthorized(true);
-      await syncDatabase();
-      toast.success('Access Granted. Welcome back, Administrator.', { id: load });
-    } catch (err) {
-      // Fallback: grant authorization if passkey is correct even if local profile load varies
-      setIsAuthorized(true);
-      toast.success('Access Granted via Master Access Passkey.', { id: load });
+      toast.success('Local development admin access granted.');
+    } catch (err: any) {
+      setIsAuthorized(false);
+      toast.error(err?.message || 'Local administrator sign-in failed.');
     }
   };
 
-  // Direct Approve Cafe & Owner
+  // Persist moderation to Supabase before updating the dashboard state.
   const handleApproveVenueAndOwner = async (venueId: string, ownerId: string) => {
-    const load = toast.loading('Approving Gaming Cafe & Granting Owner Privileges...');
+    const load = toast.loading('Approving venue and granting owner privileges...');
+    let promotedOwner = false;
     try {
-      // 1. Verify Venue
-      toggleVenueVerification(venueId);
-      
-      // 2. Update owner profile role to 'owner'
-      const ownerProfile = profiles.find(p => p.id === ownerId);
-      if (ownerProfile && ownerProfile.role !== 'owner') {
+      if (isSupabaseConfigured && supabase) {
+        if (currentUser?.role !== 'admin') throw new Error('Administrator access is required.');
+
+        const ownerProfile = profiles.find(profile => profile.id === ownerId);
+        if (!ownerProfile) throw new Error('Owner profile could not be loaded. Refresh and retry.');
+
+        if (ownerProfile.role !== 'owner') {
+          const { data, error } = await supabase
+            .from('profiles')
+            .update({ role: 'owner', updated_at: new Date().toISOString() })
+            .eq('id', ownerId)
+            .select('id')
+            .maybeSingle();
+          if (error || !data) throw new Error(error?.message || 'Owner role could not be updated.');
+          promotedOwner = true;
+        }
+
+        const { data: venue, error: venueError } = await supabase
+          .from('gaming_cafes')
+          .update({
+            status: 'approved',
+            is_verified: true,
+            is_active: true,
+            verified_at: new Date().toISOString()
+          })
+          .eq('id', venueId)
+          .eq('status', 'pending')
+          .select('id')
+          .maybeSingle();
+
+        if (venueError || !venue) {
+          if (promotedOwner) {
+            const { error: rollbackError } = await supabase
+              .from('profiles')
+              .update({ role: 'owner_pending', updated_at: new Date().toISOString() })
+              .eq('id', ownerId);
+            if (rollbackError) console.error('Could not roll back owner role after venue approval failure:', rollbackError.message);
+          }
+          throw new Error(venueError?.message || 'This venue is no longer pending approval. Refresh and retry.');
+        }
+
+        await syncDatabase();
+      } else {
+        toggleVenueVerification(venueId);
         updateUserRole(ownerId, 'owner');
       }
-
-      // 3. Save directly to Supabase if active
-      if (isSupabaseConfigured && supabase) {
-        await supabase.from('gaming_cafes').update({
-          status: 'approved',
-          is_verified: true,
-          is_active: true,
-          verified_at: new Date().toISOString()
-        }).eq('id', venueId);
-
-        if (ownerId) {
-          await supabase.from('profiles').update({
-            role: 'owner',
-            updated_at: new Date().toISOString()
-          }).eq('id', ownerId);
-        }
-      }
-
-      await syncDatabase();
-      toast.success('Cafe approved & Owner role granted in real-time!', { id: load });
+      toast.success('Venue approved and owner access granted.', { id: load });
     } catch (err: any) {
       toast.error(`Approval failed: ${err.message}`, { id: load });
     }
@@ -259,19 +305,31 @@ export const GarfAdminPage: React.FC = () => {
       toast.error('Please enter a rejection reason.');
       return;
     }
-    const load = toast.loading('Processing cafe rejection...');
+    const load = toast.loading('Processing venue rejection...');
     try {
-      rejectVenue(rejectingVenueId, rejectionReasonInput.trim());
       if (isSupabaseConfigured && supabase) {
-        await supabase.from('gaming_cafes').update({
-          status: 'rejected',
-          is_verified: false,
-          is_active: false,
-          rejection_reason: rejectionReasonInput.trim()
-        }).eq('id', rejectingVenueId);
+        if (currentUser?.role !== 'admin') throw new Error('Administrator access is required.');
+        const { data, error } = await supabase
+          .from('gaming_cafes')
+          .update({
+            status: 'rejected',
+            is_verified: false,
+            is_active: false,
+            rejection_reason: rejectionReasonInput.trim()
+          })
+          .eq('id', rejectingVenueId)
+          .eq('status', 'pending')
+          .select('id')
+          .maybeSingle();
+        if (error || !data) {
+          throw new Error(error?.message || 'This venue is no longer pending review. Refresh and retry.');
+        }
+        await syncDatabase();
+      } else {
+        rejectVenue(rejectingVenueId, rejectionReasonInput.trim());
       }
-      await syncDatabase();
-      toast.success('Cafe registration rejected.', { id: load });
+
+      toast.success('Venue registration rejected.', { id: load });
       setRejectModalOpen(false);
       setRejectingVenueId(null);
       setRejectionReasonInput('');
