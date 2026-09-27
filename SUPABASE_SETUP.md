@@ -32,7 +32,7 @@ Set the Vercel project to the Vite framework, with build command `npm run build`
 - `VITE_SUPABASE_URL`: the Supabase project URL
 - `VITE_SUPABASE_ANON_KEY`: the Supabase publishable/anon key
 
-Never expose a Supabase service-role key or payment secret in a `VITE_*` variable. Vite embeds those values in browser assets.
+Never expose a Supabase service-role key or payment secret in a `VITE_*` variable. Vite embeds those values in browser assets. If either required Supabase variable is missing in a production build, the app now fails closed with a configuration notice instead of falling back to browser-local demo data.
 
 The repository's `vercel.json` rewrites routes to `index.html` for SPA navigation such as `/login` and `/owner/login`. If a direct refresh still returns 404, verify that Vercel is deploying this repository's current branch, that the build succeeds, and that the output directory is `dist`.
 
