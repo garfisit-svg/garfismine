@@ -550,7 +550,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const loadVenues = async () => {
         try {
           let query = supabase.from('gaming_cafes').select('*');
-          const isAdminUser = currentUser?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'garfisit@gmail.com';
+          const isAdminUser = currentUser?.role === 'admin';
           if (!isAdminUser) {
             if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
               query = query.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
@@ -2776,20 +2776,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setSlots(prev => [...prev, ...allNewSlots]);
 
-    // Update user role locally
-    setProfiles(prev => {
-      const updated = prev.map(p => p.id === currentUser.id ? { ...p, role: 'owner_pending' as const } : p);
-      localStorage.setItem('garf_profiles', JSON.stringify(updated));
-      return updated;
-    });
-    setCurrentUser(prev => {
-      if (prev) {
+    // Only promote first-time customers. Existing approved owners keep their role.
+    if (currentUser.role === 'customer') {
+      setProfiles(prev => {
+        const updated = prev.map(p => p.id === currentUser.id ? { ...p, role: 'owner_pending' as const } : p);
+        localStorage.setItem('garf_profiles', JSON.stringify(updated));
+        return updated;
+      });
+      setCurrentUser(prev => {
+        if (!prev) return null;
         const updated = { ...prev, role: 'owner_pending' as const };
         localStorage.setItem('garf_current_user', JSON.stringify(updated));
         return updated;
-      }
-      return null;
-    });
+      });
+    }
 
     // Notify admins of new registered venue awaiting verification
     profiles.filter(p => p.role === 'admin').forEach(adm => {
@@ -5649,7 +5649,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 2. Fetch venues
       let venueQuery = supabase.from('gaming_cafes').select('*');
-      const isAdminUser = currentUser?.role === 'admin' || currentUser?.email?.toLowerCase().trim() === 'garfisit@gmail.com';
+      const isAdminUser = currentUser?.role === 'admin';
       if (!isAdminUser) {
         if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
           venueQuery = venueQuery.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
