@@ -233,7 +233,7 @@ export const GarfAdminPage: React.FC = () => {
     }
 
     try {
-      const profile = await logIn('garfisit@gmail.com', cleanPass);
+      const profile = await logIn(cleanEmail, cleanPass);
       if (profile.role !== 'admin') throw new Error('The local account is not an administrator.');
       setIsAuthorized(true);
       toast.success('Local development admin access granted.');
