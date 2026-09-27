@@ -2,6 +2,12 @@
 -- upgraded Supabase projects. RLS still applies to every subscriber.
 BEGIN;
 
+-- Permit compensating cleanup of a failed, still-pending owner submission.
+DROP POLICY IF EXISTS "Owners can delete pending cafes" ON public.gaming_cafes;
+CREATE POLICY "Owners can delete pending cafes"
+  ON public.gaming_cafes FOR DELETE TO authenticated
+  USING (owner_id = auth.uid()::text AND status = 'pending');
+
 CREATE INDEX IF NOT EXISTS gaming_cafes_status_owner_idx
   ON public.gaming_cafes (status, owner_id);
 CREATE INDEX IF NOT EXISTS gaming_cafes_owner_created_idx
