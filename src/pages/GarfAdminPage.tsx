@@ -204,8 +204,8 @@ export const GarfAdminPage: React.FC = () => {
     fetchStats();
   }, [isAuthorized, profiles.length, venues.length, bookings.length]);
 
-  // Authenticate administrators through Supabase in production. The local
-  // demo key is available only when Supabase is intentionally not configured.
+  // Authenticate administrators through Supabase in production. Local demo login
+  // is disabled in production when Supabase configuration is missing.
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPass = adminPassword.trim();
