@@ -42,8 +42,7 @@ export const GarfAdminPage: React.FC = () => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmDeleteType, setConfirmDeleteType] = useState<'venue' | 'booking' | 'user' | null>(null);
 
-  // Administrator Supabase Auth credentials
-  const [adminEmail, setAdminEmail] = useState(currentUser?.email || '');
+  // The shared access password is submitted only to the server-side gateway.
   const [adminPassword, setAdminPassword] = useState('');
 
   // Active dashboard tab state
@@ -205,41 +204,48 @@ export const GarfAdminPage: React.FC = () => {
     fetchStats();
   }, [isAuthorized, profiles.length, venues.length, bookings.length]);
 
-  // Authenticate administrators through Supabase in production. Local demo login
-  // is disabled in production when Supabase configuration is missing.
+  // Authenticate through the server-side password gateway; the secret is never bundled in the browser.
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanEmail = adminEmail.trim().toLowerCase();
-    const cleanPass = adminPassword.trim();
-    if (isSupabaseConfigured) {
-      const load = toast.loading('Authenticating administrator...');
-      try {
-        const profile = await logIn(cleanEmail, cleanPass);
-        if (profile.role !== 'admin') {
-          throw new Error('This account is not provisioned as an administrator.');
-        }
-        setIsAuthorized(true);
-        toast.success('Administrator access granted.', { id: load });
-      } catch (err: any) {
-        setIsAuthorized(false);
-        toast.error(err?.message || 'Administrator sign-in failed.', { id: load });
-      }
-      return;
-    }
+    const password = adminPassword;
+    if (!password) return;
 
-    if (import.meta.env.PROD) {
-      toast.error('Supabase must be configured before the production admin console can be used.');
-      return;
-    }
-
+    const load = toast.loading('Checking administrator access...');
     try {
-      const profile = await logIn(cleanEmail, cleanPass);
-      if (profile.role !== 'admin') throw new Error('The local account is not an administrator.');
+      const response = await fetch('/api/admin/access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.error || 'Administrator sign-in failed.');
+      }
+      if (!isSupabaseConfigured || !supabase) {
+        throw new Error('Administrator authentication is not configured.');
+      }
+
+      const { data, error } = await supabase.auth.verifyOtp({
+        token_hash: result.tokenHash,
+        type: 'email'
+      });
+      if (error || !data.user) throw new Error('Administrator sign-in failed.');
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .maybeSingle();
+      if (profileError || profile?.role !== 'admin') {
+        await supabase.auth.signOut();
+        throw new Error('This account is not provisioned as an administrator.');
+      }
+      setAdminPassword('');
       setIsAuthorized(true);
-      toast.success('Local development admin access granted.');
+      toast.success('Administrator access granted.', { id: load });
     } catch (err: any) {
       setIsAuthorized(false);
-      toast.error(err?.message || 'Local administrator sign-in failed.');
+      toast.error(err?.message || 'Administrator sign-in failed.', { id: load });
     }
   };
 
@@ -411,43 +417,24 @@ export const GarfAdminPage: React.FC = () => {
 
           <form onSubmit={handleAdminLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <label htmlFor="admin-email" className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary">Administrator email</label>
-              <input
-                id="admin-email"
-                type="email"
-                required
-                autoComplete="username"
-                className="w-full bg-[#161622] border border-[#2a2a3e] rounded-xl p-3 text-sm text-white outline-none focus:border-brand-purple"
-                placeholder="admin@example.com"
-                value={adminEmail}
-                onChange={e => setAdminEmail(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label htmlFor="admin-password" className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary">Password</label>
+              <label htmlFor="admin-password" className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary">Admin password</label>
               <input
                 id="admin-password"
                 type="password"
                 required
                 autoComplete="current-password"
                 className="w-full bg-[#161622] border border-[#2a2a3e] rounded-xl p-3 text-sm text-white outline-none focus:border-brand-purple font-mono"
-                placeholder="Enter your account password"
+                placeholder="Enter admin password"
                 value={adminPassword}
                 onChange={e => setAdminPassword(e.target.value)}
               />
-            </div>
-
-            <div className="p-3.5 bg-brand-purple/5 border border-brand-purple/10 rounded-xl text-xs text-[#a3a3c2] leading-relaxed font-sans flex gap-2">
-              <Info className="h-4 w-4 text-brand-purple flex-shrink-0 mt-0.5" />
-              <span>Administrator access requires a confirmed Supabase account with the admin role.</span>
             </div>
 
             <button
               type="submit"
               className="w-full py-3.5 bg-gradient-to-r from-brand-purple to-brand-pink text-white rounded-xl font-bold font-sans text-xs uppercase tracking-wider hover:brightness-110 shadow-lg cursor-pointer transition active:scale-98"
             >
-              Sign in to Admin Console
+              Open Admin Console
             </button>
           </form>
         </div>
