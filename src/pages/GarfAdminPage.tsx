@@ -204,24 +204,45 @@ export const GarfAdminPage: React.FC = () => {
     fetchStats();
   }, [isAuthorized, profiles.length, venues.length, bookings.length]);
 
-  // Handle local root password login
+  // Authenticate administrators through Supabase in production. The local
+  // demo key is available only when Supabase is intentionally not configured.
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPass = adminPassword.trim();
-    if (cleanPass !== 'Garfismine' && cleanPass.toLowerCase() !== 'garfismine' && cleanPass !== 'Garfismine@1234' && cleanPass.toLowerCase() !== 'garfadmin' && cleanPass !== 'garfisit') {
+    if (isSupabaseConfigured) {
+      const load = toast.loading('Authenticating administrator...');
+      try {
+        const profile = await logIn('garfisit@gmail.com', cleanPass);
+        if (profile.role !== 'admin') {
+          throw new Error('This account is not provisioned as an administrator.');
+        }
+        setIsAuthorized(true);
+        toast.success('Administrator access granted.', { id: load });
+      } catch (err: any) {
+        setIsAuthorized(false);
+        toast.error(err?.message || 'Administrator sign-in failed.', { id: load });
+      }
+      return;
+    }
+
+    if (import.meta.env.PROD) {
+      toast.error('Supabase must be configured before the production admin console can be used.');
+      return;
+    }
+
+    const localDemoKeys = ['Garfismine', 'Garfismine@1234', 'garfadmin', 'garfisit'];
+    if (!localDemoKeys.includes(cleanPass.toLowerCase()) && !localDemoKeys.includes(cleanPass)) {
       toast.error('Incorrect Administrator Access Key. Access Denied.');
       return;
     }
-    const load = toast.loading('Authenticating Root Console...');
     try {
-      await logIn('garfisit@gmail.com');
+      const profile = await logIn('garfisit@gmail.com', cleanPass);
+      if (profile.role !== 'admin') throw new Error('The local account is not an administrator.');
       setIsAuthorized(true);
-      await syncDatabase();
-      toast.success('Access Granted. Welcome back, Administrator.', { id: load });
-    } catch (err) {
-      // Fallback: grant authorization if passkey is correct even if local profile load varies
-      setIsAuthorized(true);
-      toast.success('Access Granted via Master Access Passkey.', { id: load });
+      toast.success('Local development admin access granted.');
+    } catch (err: any) {
+      setIsAuthorized(false);
+      toast.error(err?.message || 'Local administrator sign-in failed.');
     }
   };
 
