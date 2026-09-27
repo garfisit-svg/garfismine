@@ -631,6 +631,9 @@ CREATE POLICY "Owners can update their cafes" ON gaming_cafes
   WITH CHECK (owner_id = auth.uid()::text OR public.is_current_user_admin());
 CREATE POLICY "Admins can delete cafes" ON gaming_cafes
   FOR DELETE TO authenticated USING (public.is_current_user_admin());
+CREATE POLICY "Owners can delete pending cafes" ON gaming_cafes
+  FOR DELETE TO authenticated
+  USING (owner_id = auth.uid()::text AND status = 'pending');
 
 CREATE OR REPLACE FUNCTION public.guard_cafe_moderation_fields()
 RETURNS trigger
