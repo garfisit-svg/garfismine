@@ -7,7 +7,7 @@ The admin screen accepts one password. The password is checked by the Vercel Fun
 Set these for the Production environment (and Preview only if you want the admin flow enabled on previews):
 
 - `ADMIN_ACCESS_PASSWORD`: the chosen admin password. Store it as a sensitive server-side environment variable. Do not prefix it with `VITE_`.
-- `ADMIN_AUTH_USER_ID`: UUID of the existing administrator in Supabase Authentication. Its matching `public.profiles` row must have role `admin`.
+- `ADMIN_AUTH_USER_ID`: UUID of the existing Supabase Auth user to use as the administrator. After the password is validated, the server sets this user's existing `public.profiles` row to role `admin`.
 - `SUPABASE_URL`: project URL.
 - `SUPABASE_SERVICE_ROLE_KEY`: service-role key. This is server-only and must never be exposed to the browser.
 - `APP_URL`: optional canonical site URL, used as the Supabase magic-link redirect destination (for example, the production HTTPS origin).
@@ -18,4 +18,4 @@ Keep the existing `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` settings for 
 
 Apply `supabase/migrations/202609270002_admin_access_rate_limit.sql` to the same Supabase project. The endpoint uses this service-role-only RPC for persistent IP-based throttling. It blocks after five failed attempts in a rolling 15-minute window and the block lasts 15 minutes.
 
-After setting environment variables, redeploy the Vercel Production deployment so the function receives them. If the endpoint returns an unavailable configuration message, verify the four required server variables, the admin user's UUID and role, and that the migration was applied.
+After setting environment variables, redeploy the Vercel Production deployment so the function receives them. If the endpoint returns an unavailable configuration message, verify the four required server variables, the admin user's UUID and existing profile row, and that the migration was applied.

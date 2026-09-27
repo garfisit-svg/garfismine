@@ -60,14 +60,21 @@ export default async function handler(req: any, res: any) {
     return json(res, 503, { error: 'Administrator account is not configured.' });
   }
 
-  const { data: profile, error: profileError } = await admin
+  // The configured Auth user is the sole admin identity. Grant its profile role
+  // only after the shared server-side password has been validated above.
+  const { data: adminProfile, error: profileError } = await admin
     .from('profiles')
-    .select('role')
+    .update({ role: 'admin', updated_at: new Date().toISOString() })
     .eq('id', adminUserId)
+    .select('id')
     .maybeSingle();
-  if (profileError || profile?.role !== 'admin') {
-    console.error('Configured admin account lacks the admin profile role:', profileError?.message);
-    return json(res, 403, { error: 'Administrator account is not authorized.' });
+  if (profileError || !adminProfile) {
+    console.error('Could not provision the configured admin profile:', profileError?.message);
+    return json(res, 403, {
+      error: profileError
+        ? 'Administrator profile could not be provisioned.'
+        : 'Administrator profile is missing for the configured account.'
+    });
   }
 
   const origin = req.headers.origin;
