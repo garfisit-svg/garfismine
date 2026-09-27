@@ -42,7 +42,8 @@ export const GarfAdminPage: React.FC = () => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmDeleteType, setConfirmDeleteType] = useState<'venue' | 'booking' | 'user' | null>(null);
 
-  // Root Administrator login password
+  // Administrator Supabase Auth credentials
+  const [adminEmail, setAdminEmail] = useState(currentUser?.email || '');
   const [adminPassword, setAdminPassword] = useState('');
 
   // Active dashboard tab state
@@ -208,11 +209,12 @@ export const GarfAdminPage: React.FC = () => {
   // is disabled in production when Supabase configuration is missing.
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanEmail = adminEmail.trim().toLowerCase();
     const cleanPass = adminPassword.trim();
     if (isSupabaseConfigured) {
       const load = toast.loading('Authenticating administrator...');
       try {
-        const profile = await logIn('garfisit@gmail.com', cleanPass);
+        const profile = await logIn(cleanEmail, cleanPass);
         if (profile.role !== 'admin') {
           throw new Error('This account is not provisioned as an administrator.');
         }
@@ -395,7 +397,7 @@ export const GarfAdminPage: React.FC = () => {
         
         <div className="space-y-2">
           <h1 className="text-3xl font-display font-black tracking-tight text-white uppercase">GARF <span className="text-red-500">ROOT SECURE</span></h1>
-          <p className="text-text-secondary text-sm">Enter administrator access key to open real-time system console.</p>
+          <p className="text-text-secondary text-sm">Sign in with an administrator account to open the system console.</p>
         </div>
 
         {/* SECURITY SIGN IN PANEL */}
@@ -409,12 +411,28 @@ export const GarfAdminPage: React.FC = () => {
 
           <form onSubmit={handleAdminLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary">Administrator Access Key (Password)</label>
+              <label htmlFor="admin-email" className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary">Administrator email</label>
               <input
+                id="admin-email"
+                type="email"
+                required
+                autoComplete="username"
+                className="w-full bg-[#161622] border border-[#2a2a3e] rounded-xl p-3 text-sm text-white outline-none focus:border-brand-purple"
+                placeholder="admin@example.com"
+                value={adminEmail}
+                onChange={e => setAdminEmail(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="admin-password" className="block text-[10px] font-bold uppercase tracking-wider text-text-secondary">Password</label>
+              <input
+                id="admin-password"
                 type="password"
                 required
+                autoComplete="current-password"
                 className="w-full bg-[#161622] border border-[#2a2a3e] rounded-xl p-3 text-sm text-white outline-none focus:border-brand-purple font-mono"
-                placeholder="••••••••••••"
+                placeholder="Enter your account password"
                 value={adminPassword}
                 onChange={e => setAdminPassword(e.target.value)}
               />
@@ -422,14 +440,14 @@ export const GarfAdminPage: React.FC = () => {
 
             <div className="p-3.5 bg-brand-purple/5 border border-brand-purple/10 rounded-xl text-xs text-[#a3a3c2] leading-relaxed font-sans flex gap-2">
               <Info className="h-4 w-4 text-brand-purple flex-shrink-0 mt-0.5" />
-              <span>Submit secure passkey (<code className="text-brand-pink font-mono">Garfismine</code>) to unlock full real-time database management.</span>
+              <span>Administrator access requires a confirmed Supabase account with the admin role.</span>
             </div>
 
             <button
               type="submit"
               className="w-full py-3.5 bg-gradient-to-r from-brand-purple to-brand-pink text-white rounded-xl font-bold font-sans text-xs uppercase tracking-wider hover:brightness-110 shadow-lg cursor-pointer transition active:scale-98"
             >
-              Verify Access Key & Enter Console
+              Sign in to Admin Console
             </button>
           </form>
         </div>
