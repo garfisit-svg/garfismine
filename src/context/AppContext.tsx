@@ -180,6 +180,18 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 // Helper for dynamic seed date adjustment (to keep dates centered around today)
+const fetchAllSupabaseRows = async <T,>(query: any): Promise<T[]> => {
+  const pageSize = 500;
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await query.range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    const page = (data || []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+};
+
 const getOffsetDateString = (offsetDays: number) => {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
@@ -408,85 +420,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [profiles, currentUser]);
 
-  // Load profiles from Supabase on mount if active
+  // Load profiles from the active Supabase session. The database is authoritative
+  // in production; browser-cached profiles must never be merged into moderation state.
   useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+    let active = true;
     const loadSupabaseProfiles = async () => {
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const { data, error } = await supabase.from('profiles').select('*');
-          if (data && !error) {
-            // Map DB profiles by ID and normalized email
-            const dbProfilesById = new Map<string, any>();
-            const dbProfilesByEmail = new Map<string, any>();
-            data.forEach((p: any) => {
-              if (p && p.id) {
-                dbProfilesById.set(p.id, p);
-                if (p.email) {
-                  dbProfilesByEmail.set(p.email.toLowerCase().trim(), p);
-                }
-              }
-            });
-
-            // Local profiles
-            const localSaved = localStorage.getItem('garf_profiles');
-            let localProfiles: Profile[] = [];
-            if (localSaved) {
-              try {
-                localProfiles = JSON.parse(localSaved);
-              } catch (e) {
-                console.error('Error parsing local profiles during merge:', e);
-              }
-            }
-
-            const combinedMap = new Map<string, Profile>();
-
-            // 1. Keep non-conflicting local profiles (e.g. offline created users that don't collide with DB)
-            localProfiles.forEach(p => {
-              if (p && p.id) {
-                const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-                if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
-                  combinedMap.set(p.id, p);
-                }
-              }
-            });
-            
-            // 2. Add all authoritative DB profiles
-            data.forEach((p: any) => {
-              if (p && p.id) {
-                const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-                const matchingLocal = localProfiles.find(lp => lp && (lp.id === p.id || (normEmail && lp.email?.toLowerCase().trim() === normEmail)));
-                combinedMap.set(p.id, {
-                  ...matchingLocal,
-                  ...p,
-                  id: p.id,
-                  emailVerified: p.emailVerified ?? matchingLocal?.emailVerified ?? true
-                });
-              }
-            });
-
-            const mergedList = Array.from(combinedMap.values());
-            rawSetProfiles(mergedList);
-            localStorage.setItem('garf_profiles', JSON.stringify(mergedList));
-
-            // Align currentUser if they were logged in under a mock ID that now has a DB UUID
-            if (currentUser && currentUser.email) {
-              const currentEmail = currentUser.email.toLowerCase().trim();
-              const dbMatch = dbProfilesByEmail.get(currentEmail);
-              if (dbMatch && currentUser.id !== dbMatch.id) {
-                const alignedUser = { ...currentUser, ...dbMatch, id: dbMatch.id };
-                setCurrentUser(alignedUser);
-                localStorage.setItem('garf_current_user', JSON.stringify(alignedUser));
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Failed to sync profiles from Supabase:', err);
-        }
+      try {
+        const rows = await fetchAllSupabaseRows<Profile>(supabase.from('profiles').select('*'));
+        if (!active) return;
+        rawSetProfiles(rows);
+        localStorage.removeItem('garf_profiles');
+        const activeProfile = currentUser && rows.find(profile => profile.id === currentUser.id);
+        if (activeProfile) setCurrentUser(activeProfile);
+      } catch (error) {
+        console.error('Failed to load profiles from Supabase:', error);
       }
     };
-
-    loadSupabaseProfiles();
-  }, []);
+    void loadSupabaseProfiles();
+    return () => { active = false; };
+  }, [currentUser?.id, currentUser?.role]);
 
   // Restore identity only from the persisted Supabase Auth session, never from a
   // locally cached profile or password.
@@ -515,7 +468,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       const { password: _password, resetToken: _resetToken, resetTokenExpires: _resetTokenExpires, ...safeProfile } = data as any;
       const profile = safeProfile as Profile;
-      setProfiles(prev => [...prev.filter(p => p.id !== profile.id), profile]);
+      rawSetProfiles(prev => [...prev.filter(p => p.id !== profile.id), profile]);
       setCurrentUser(profile);
       localStorage.setItem('garf_current_user', JSON.stringify(profile));
     };
@@ -553,101 +506,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const isAdminUser = currentUser?.role === 'admin';
           if (!isAdminUser) {
             if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
-              query = query.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
+              query = query.or('status.eq.approved,owner_id.eq.' + currentUser.id);
             } else {
               query = query.eq('status', 'approved');
             }
           }
-          const { data, error } = await query;
-          if (data && !error) {
-            rawSetVenues(prev => {
-              const localSaved = localStorage.getItem('garf_venues');
-              let localVenues: Venue[] = [];
-              if (localSaved) {
-                try { localVenues = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, Venue>();
-              localVenues.forEach(v => { if (v && v.id) combinedMap.set(v.id, v); });
-              data.forEach((v: any) => { if (v && v.id) combinedMap.set(v.id, v); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_venues', JSON.stringify(merged));
-              return merged;
-            });
-          }
+          const rows = await fetchAllSupabaseRows<Venue>(query);
+          rawSetVenues(rows);
+          localStorage.setItem('garf_venues', JSON.stringify(rows));
         } catch (err) {
-          console.error('Error fetching venues from Supabase on mount:', err);
+          console.error('Error fetching venues from Supabase:', err);
         }
       };
 
       // Load resources
       const loadResources = async () => {
         try {
-          const { data, error } = await supabase.from('venue_resources').select('*');
-          if (data && !error) {
-            rawSetResources(prev => {
-              const localSaved = localStorage.getItem('garf_resources');
-              let localResources: VenueResource[] = [];
-              if (localSaved) {
-                try { localResources = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, VenueResource>();
-              localResources.forEach(r => { if (r && r.id) combinedMap.set(r.id, r); });
-              data.forEach((r: any) => { if (r && r.id) combinedMap.set(r.id, r); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_resources', JSON.stringify(merged));
-              return merged;
-            });
-          }
+          const rows = await fetchAllSupabaseRows<VenueResource>(supabase.from('venue_resources').select('*'));
+          rawSetResources(rows);
+          localStorage.setItem('garf_resources', JSON.stringify(rows));
         } catch (err) {
-          console.error('Error fetching venue_resources from Supabase on mount:', err);
+          console.error('Error fetching venue resources from Supabase:', err);
         }
       };
 
       // Load slots
       const loadSlots = async () => {
         try {
-          const { data, error } = await supabase.from('slots').select('*');
-          if (data && !error) {
-            rawSetSlots(prev => {
-              const localSaved = localStorage.getItem('garf_slots');
-              let localSlots: Slot[] = [];
-              if (localSaved) {
-                try { localSlots = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, Slot>();
-              localSlots.forEach(s => { if (s && s.id) combinedMap.set(s.id, s); });
-              data.forEach((s: any) => { if (s && s.id) combinedMap.set(s.id, s); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_slots', JSON.stringify(merged));
-              return merged;
-            });
-          }
+          const rows = await fetchAllSupabaseRows<Slot>(supabase.from('slots').select('*'));
+          rawSetSlots(rows);
+          localStorage.setItem('garf_slots', JSON.stringify(rows));
         } catch (err) {
-          console.error('Error fetching slots from Supabase on mount:', err);
+          console.error('Error fetching slots from Supabase:', err);
         }
       };
 
       // Load bookings
       const loadBookings = async () => {
         try {
-          const { data, error } = await supabase.from('bookings').select('*');
-          if (data && !error) {
-            rawSetBookings(prev => {
-              const localSaved = localStorage.getItem('garf_bookings');
-              let localBookings: Booking[] = [];
-              if (localSaved) {
-                try { localBookings = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, Booking>();
-              localBookings.forEach(b => { if (b && b.id) combinedMap.set(b.id, b); });
-              data.forEach((b: any) => { if (b && b.id) combinedMap.set(b.id, b); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_bookings', JSON.stringify(merged));
-              return merged;
-            });
-          }
+          const rows = await fetchAllSupabaseRows<Booking>(supabase.from('bookings').select('*'));
+          rawSetBookings(rows);
+          localStorage.setItem('garf_bookings', JSON.stringify(rows));
         } catch (err) {
-          console.error('Error fetching bookings from Supabase on mount:', err);
+          console.error('Error fetching bookings from Supabase:', err);
         }
       };
 
@@ -746,7 +647,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
               const item = payload.new as Profile;
-              setProfiles(prev => {
+              rawSetProfiles(prev => {
                 const updated = prev.some(p => p.id === item.id)
                   ? prev.map(p => p.id === item.id ? item : p)
                   : [...prev, item];
@@ -768,7 +669,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         channels.forEach(ch => supabase.removeChannel(ch));
       };
     }
-  }, []);
+  }, [currentUser?.id, currentUser?.role]);
 
   const saveProfileToSupabase = async (profile: Profile) => {
     if (isSupabaseConfigured && supabase) {
@@ -1107,14 +1008,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const [venues, rawSetVenues] = useState<Venue[]>(() => {
-    const saved = localStorage.getItem('garf_venues');
+    const saved = isSupabaseConfigured ? null : localStorage.getItem('garf_venues');
     if (saved) return JSON.parse(saved);
     const seed: Venue[] = [];
     return seed;
   });
 
   const [resources, rawSetResources] = useState<VenueResource[]>(() => {
-    const saved = localStorage.getItem('garf_resources');
+    const saved = isSupabaseConfigured ? null : localStorage.getItem('garf_resources');
     if (saved) return JSON.parse(saved);
     const seed: VenueResource[] = [];
     return seed;
@@ -1122,13 +1023,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Unique slots state which gets populated for current +7 days automatically
   const [slots, rawSetSlots] = useState<Slot[]>(() => {
-    const saved = localStorage.getItem('garf_slots');
+    const saved = isSupabaseConfigured ? null : localStorage.getItem('garf_slots');
     if (saved) return JSON.parse(saved);
     return []; // Will build dynamically below!
   });
 
   const [bookings, rawSetBookings] = useState<Booking[]>(() => {
-    const saved = localStorage.getItem('garf_bookings');
+    const saved = isSupabaseConfigured ? null : localStorage.getItem('garf_bookings');
     if (saved) return JSON.parse(saved);
     const seed: Booking[] = [];
     return seed;
@@ -5643,189 +5544,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      // 1. Fetch profiles
-      const { data: profileList, error: profileErr } = await supabase.from('profiles').select('*');
-      if (profileErr) throw new Error(`Profiles: ${profileErr.message}`);
-
-      // 2. Fetch venues
+      const profileRows = await fetchAllSupabaseRows<Profile>(supabase.from('profiles').select('*'));
       let venueQuery = supabase.from('gaming_cafes').select('*');
       const isAdminUser = currentUser?.role === 'admin';
       if (!isAdminUser) {
         if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
-          venueQuery = venueQuery.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
+          venueQuery = venueQuery.or('status.eq.approved,owner_id.eq.' + currentUser.id);
         } else {
           venueQuery = venueQuery.eq('status', 'approved');
         }
       }
-      const { data: venueList, error: venueErr } = await venueQuery;
-      if (venueErr) throw new Error(`Venues: ${venueErr.message}`);
 
-      // 3. Fetch resources
-      const { data: resourceList, error: resourceErr } = await supabase.from('venue_resources').select('*');
-      if (resourceErr) throw new Error(`Resources: ${resourceErr.message}`);
+      const [venueRows, resourceRows, slotRows, bookingRows] = await Promise.all([
+        fetchAllSupabaseRows<Venue>(venueQuery),
+        fetchAllSupabaseRows<VenueResource>(supabase.from('venue_resources').select('*')),
+        fetchAllSupabaseRows<Slot>(supabase.from('slots').select('*')),
+        fetchAllSupabaseRows<Booking>(supabase.from('bookings').select('*'))
+      ]);
 
-      // 4. Fetch slots
-      const { data: slotList, error: slotErr } = await supabase.from('slots').select('*');
-      if (slotErr) throw new Error(`Slots: ${slotErr.message}`);
-
-      // 5. Fetch bookings
-      const { data: bookingList, error: bookingErr } = await supabase.from('bookings').select('*');
-      if (bookingErr) throw new Error(`Bookings: ${bookingErr.message}`);
-
-      if (profileList) {
-        const localSaved = localStorage.getItem('garf_profiles');
-        let localProfs: Profile[] = [];
-        if (localSaved) {
-          try { localProfs = JSON.parse(localSaved); } catch(e) {}
+      rawSetProfiles(profileRows);
+      localStorage.removeItem('garf_profiles');
+      if (currentUser) {
+        const refreshedProfile = profileRows.find(profile => profile.id === currentUser.id);
+        if (refreshedProfile) {
+          setCurrentUser(refreshedProfile);
+          localStorage.setItem('garf_current_user', JSON.stringify(refreshedProfile));
         }
-
-        const dbProfilesById = new Map<string, any>();
-        const dbProfilesByEmail = new Map<string, any>();
-        profileList.forEach((p: any) => {
-          if (p && p.id) {
-            dbProfilesById.set(p.id, p);
-            if (p.email) {
-              dbProfilesByEmail.set(p.email.toLowerCase().trim(), p);
-            }
-          }
-        });
-
-        const mergedMap = new Map<string, Profile>();
-        localProfs.forEach(p => {
-          if (p && p.id) {
-            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-            if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
-              mergedMap.set(p.id, p);
-            }
-          }
-        });
-        profileList.forEach((p: any) => {
-          if (p && p.id) {
-            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-            const matchingLocal = localProfs.find(lp => lp && (lp.id === p.id || (normEmail && lp.email?.toLowerCase().trim() === normEmail)));
-            mergedMap.set(p.id, {
-              ...matchingLocal,
-              ...p,
-              id: p.id,
-              emailVerified: p.emailVerified ?? matchingLocal?.emailVerified ?? true
-            });
-          }
-        });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetProfiles(merged);
-        localStorage.setItem('garf_profiles', JSON.stringify(merged));
-
-        // Self-heal: upload local-only, non-simulated profiles that don't collide with DB
-        localProfs.forEach(p => {
-          if (p && p.id) {
-            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-            if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
-              if (!p.id.startsWith('user-') && !p.id.startsWith('mock-')) {
-                saveProfileToSupabase(p);
-              }
-            }
-          }
-        });
       }
 
-      if (venueList) {
-        const localSaved = localStorage.getItem('garf_venues');
-        let localVenues: Venue[] = [];
-        if (localSaved) {
-          try { localVenues = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, Venue>();
-        localVenues.forEach(v => { if (v && v.id) mergedMap.set(v.id, v); });
-        venueList.forEach((v: any) => { if (v && v.id) mergedMap.set(v.id, v); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetVenues(merged);
-        localStorage.setItem('garf_venues', JSON.stringify(merged));
+      rawSetVenues(venueRows);
+      rawSetResources(resourceRows);
+      rawSetSlots(slotRows);
+      rawSetBookings(bookingRows);
 
-        // Self-heal: upload local-only venues to Supabase
-        const dbIds = new Set(venueList.map((v: any) => v.id));
-        localVenues.forEach(v => {
-          if (v && v.id && !dbIds.has(v.id)) {
-            saveVenueToSupabase(v);
-          }
-        });
-      }
-
-      if (resourceList) {
-        const localSaved = localStorage.getItem('garf_resources');
-        let localResources: VenueResource[] = [];
-        if (localSaved) {
-          try { localResources = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, VenueResource>();
-        localResources.forEach(r => { if (r && r.id) mergedMap.set(r.id, r); });
-        resourceList.forEach((r: any) => { if (r && r.id) mergedMap.set(r.id, r); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetResources(merged);
-        localStorage.setItem('garf_resources', JSON.stringify(merged));
-
-        // Self-heal: upload local-only resources
-        const dbIds = new Set(resourceList.map((r: any) => r.id));
-        localResources.forEach(r => {
-          if (r && r.id && !dbIds.has(r.id)) {
-            saveResourceToSupabase(r);
-          }
-        });
-      }
-
-      if (slotList) {
-        const localSaved = localStorage.getItem('garf_slots');
-        let localSlots: Slot[] = [];
-        if (localSaved) {
-          try { localSlots = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, Slot>();
-        localSlots.forEach(s => { if (s && s.id) mergedMap.set(s.id, s); });
-        slotList.forEach((s: any) => { if (s && s.id) mergedMap.set(s.id, s); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetSlots(merged);
-        localStorage.setItem('garf_slots', JSON.stringify(merged));
-
-        // Self-heal: upload local-only slots
-        const dbIds = new Set(slotList.map((s: any) => s.id));
-        localSlots.forEach(s => {
-          if (s && s.id && !dbIds.has(s.id)) {
-            saveSlotToSupabase(s);
-          }
-        });
-      }
-
-      if (bookingList) {
-        const localSaved = localStorage.getItem('garf_bookings');
-        let localBookings: Booking[] = [];
-        if (localSaved) {
-          try { localBookings = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, Booking>();
-        localBookings.forEach(b => { if (b && b.id) mergedMap.set(b.id, b); });
-        bookingList.forEach((b: any) => { if (b && b.id) mergedMap.set(b.id, b); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetBookings(merged);
-        localStorage.setItem('garf_bookings', JSON.stringify(merged));
-
-        // Self-heal: upload local-only bookings
-        const dbIds = new Set(bookingList.map((b: any) => b.id));
-        localBookings.forEach(b => {
-          if (b && b.id && !dbIds.has(b.id)) {
-            saveBookingToSupabase(b);
-          }
-        });
-      }
+      // Browser storage is only a cache; database rows are authoritative.
+      localStorage.setItem('garf_venues', JSON.stringify(venueRows));
+      localStorage.setItem('garf_resources', JSON.stringify(resourceRows));
+      localStorage.setItem('garf_slots', JSON.stringify(slotRows));
+      localStorage.setItem('garf_bookings', JSON.stringify(bookingRows));
     } catch (err: any) {
       console.error('Manual database sync failed:', err);
       throw err;
     }
   };
-
   const resetAllAppData = async () => {
     try {
       await fetch('/api/data/reset', { method: 'POST' });
