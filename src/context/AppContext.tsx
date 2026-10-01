@@ -200,6 +200,17 @@ const fetchAllSupabaseRows = async (createPageQuery: (from: number, to: number) 
   }
 };
 
+const insertSupabaseRowsInBatches = async (
+  rows: any[],
+  insertBatch: (batch: any[]) => any,
+  batchSize = 250
+) => {
+  for (let from = 0; from < rows.length; from += batchSize) {
+    const { error } = await insertBatch(rows.slice(from, from + batchSize));
+    if (error) throw error;
+  }
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // One-time purge of old seeded demo data so we start fresh and ready for real venues!
   const PURGE_KEY = 'garf_purged_dummy_data_v2';
@@ -2560,8 +2571,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             sort_order: res.sort_order,
             created_at: res.created_at
           }));
-          const { error } = await supabase.from('venue_resources').insert(resourcesPayload);
-          if (error) throw new Error(`Venue resources could not be saved: ${error.message}`);
+          try {
+            await insertSupabaseRowsInBatches(resourcesPayload, batch =>
+              supabase.from('venue_resources').insert(batch)
+            );
+          } catch (error: any) {
+            throw new Error(`Venue resources could not be saved: ${error?.message || 'Unknown database error'}`);
+          }
         }
 
         if (allNewSlots.length > 0) {
@@ -2579,8 +2595,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             created_at: slot.created_at,
             updated_at: slot.updated_at
           }));
-          const { error } = await supabase.from('slots').insert(slotsPayload);
-          if (error) throw new Error(`Availability could not be initialized: ${error.message}`);
+          try {
+            await insertSupabaseRowsInBatches(slotsPayload, batch =>
+              supabase.from('slots').insert(batch)
+            );
+          } catch (error: any) {
+            throw new Error(`Availability could not be initialized: ${error?.message || 'Unknown database error'}`);
+          }
         }
       } catch (error: any) {
         // Roll back the parent row; FK cascades remove any resources/slots already
