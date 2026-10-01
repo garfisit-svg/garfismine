@@ -94,15 +94,16 @@ interface AppContextType {
   cancelBooking: (bookingId: string, reason: string) => Promise<{ refund: number; coinsRestored: number }>;
   
   // Owner operation actions
-  ownerCheckIn: (bookingId: string) => void;
-  ownerExtendHold: (bookingId: string) => void;
-  ownerReleaseSlot: (bookingId: string) => void;
+  ownerCheckIn: (bookingId: string) => Promise<void>;
+  ownerExtendHold: (bookingId: string) => Promise<void>;
+  ownerReleaseSlot: (bookingId: string) => Promise<void>;
   addWalkInBooking: (data: { resourceId: string, date: string, slots: string[], customerName?: string, customerPhone?: string, pricePerHr?: number, paymentBy: 'Cash' | 'UPI', actualStartTime?: string, actualEndTime?: string }) => void;
   extendBookingSession: (bookingId: string, additionalMinutes: number, additionalAmount?: number) => { success: boolean; message: string; newEndTime?: string };
   endBookingEarly: (bookingId: string, customAmountCollected?: number, paymentType?: 'cash' | 'upi') => { success: boolean; message: string; actualEndTime?: string };
   checkUnitAvailability: (resourceId: string, date: string, startTime: string, endTime: string, excludeBookingId?: string) => { available: boolean; conflictingBooking?: Booking; conflictingReason?: string };
-  ownerNoShow: (bookingId: string) => void;
-  ownerCompleteBooking: (bookingId: string) => void;
+  ownerNoShow: (bookingId: string) => Promise<void>;
+  ownerCompleteBooking: (bookingId: string) => Promise<void>;
+  verifyBookingPayment: (bookingId: string) => Promise<Booking>;
   bulkBlockSlots: (resourceId: string, date: string, slots: string[], reason: string) => void;
   bulkUnblockSlots: (resourceId: string, date: string, slots: string[]) => void;
   generateSlotsForNext7Days: (resourceId: string) => void;
@@ -3044,6 +3045,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const persistBookingRpc = async (functionName: string, args: Record<string, unknown>): Promise<Booking> => {
+    if (!isSupabaseConfigured || !supabase) throw new Error('Supabase is not configured.');
+    const { data, error } = await supabase.rpc(functionName, args as any);
+    if (error) throw new Error(error.message || 'The booking could not be saved.');
+    const booking = (Array.isArray(data) ? data[0] : data) as Booking | null;
+    if (!booking?.id) throw new Error('The database did not return the saved booking. Please refresh before retrying.');
+
+    rawSetBookings(prev => [booking, ...prev.filter(existing => existing.id !== booking.id)]);
+
+    const { data: slotRows, error: slotError } = await supabase
+      .from('slots')
+      .select('*')
+      .eq('resource_id', booking.resource_id)
+      .eq('slot_date', booking.booking_date);
+    if (!slotError && slotRows) {
+      rawSetSlots(prev => [
+        ...prev.filter(slot => !(slot.resource_id === booking.resource_id && slot.slot_date === booking.booking_date)),
+        ...(slotRows as Slot[])
+      ]);
+    } else {
+      const slotStatus: Slot['status'] = booking.booking_status === 'held'
+        ? 'held'
+        : (booking.booking_status === 'confirmed' || booking.booking_status === 'checked_in') ? 'booked' : 'available';
+      rawSetSlots(prev => prev.map(slot => slot.booking_id === booking.id ? {
+        ...slot,
+        status: slotStatus,
+        booking_id: slotStatus === 'available' ? null : booking.id,
+        held_until: slotStatus === 'held' ? booking.hold_expires_at : null,
+        updated_at: booking.updated_at
+      } : slot));
+    }
+
+    const { data: profileRow } = await supabase.from('profiles').select('*').eq('id', booking.customer_id).maybeSingle();
+    if (profileRow) {
+      const safeProfile = profileRow as Profile;
+      rawSetProfiles(prev => [safeProfile, ...prev.filter(profile => profile.id !== safeProfile.id)]);
+      if (currentUser?.id === safeProfile.id) setCurrentUser(safeProfile);
+    }
+    if (currentUser?.id === booking.customer_id) {
+      const { data: transactions } = await supabase
+        .from('coin_transactions')
+        .select('*')
+        .eq('user_id', booking.customer_id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (transactions) rawSetCoinTransactions(transactions as CoinTransaction[]);
+    }
+    return booking;
+  };
+
+  const verifyBookingPayment = async (bookingId: string): Promise<Booking> => {
+    return persistBookingRpc('verify_booking_payment', { p_booking_id: bookingId });
+  };
+
   // CUSTOMER BOOKING FLOW ACTIONS
   const createBookingHold = async (data: {
     venueId: string, 
@@ -3055,6 +3110,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentMethod: 'online' | 'pay_at_venue' | 'token_advance'
   }) => {
     if (!currentUser) throw new Error('Authentication required');
+
+    if (isSupabaseConfigured && supabase) {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || authData.user?.id !== currentUser.id) {
+        throw new Error('Your sign-in session could not be verified. Sign in again and retry.');
+      }
+      const booking = await persistBookingRpc('create_booking_hold', {
+        p_venue_id: data.venueId,
+        p_resource_id: data.resourceId,
+        p_booking_date: data.date,
+        p_slot_times: data.slots,
+        p_coins_requested: data.coinsToUse,
+        p_offer_id: data.offerId,
+        p_payment_method: data.paymentMethod
+      });
+      return booking;
+    }
 
     if (!data.slots || data.slots.length === 0) {
       throw new Error('Please select at least one slot to proceed with booking.');
@@ -3303,6 +3375,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const confirmOnlineBooking = async (bookingId: string, upiTransactionId?: string) => {
+    if (isSupabaseConfigured && supabase) {
+      if (!upiTransactionId?.trim()) throw new Error('Enter the UPI transaction reference first.');
+      return persistBookingRpc('submit_booking_payment', {
+        p_booking_id: bookingId,
+        p_upi_transaction_id: upiTransactionId.trim()
+      });
+    }
+
     let matchedB: Booking | undefined;
     let finalEarnings = 0; // Simplified requirements: no booking cashback earnings
 
@@ -3411,6 +3491,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const cancelBooking = async (bookingId: string, reason: string) => {
+    if (isSupabaseConfigured && supabase) {
+      const existing = bookings.find(booking => booking.id === bookingId);
+      const booking = await persistBookingRpc('cancel_booking', {
+        p_booking_id: bookingId,
+        p_reason: reason
+      });
+      return {
+        refund: 0,
+        coinsRestored: booking.payment_status === 'pending' ? booking.coins_used : 0,
+        manualPaymentReferenceSubmitted: Boolean(existing?.upi_transaction_id || booking.upi_transaction_id)
+      } as { refund: number; coinsRestored: number };
+    }
+
     let finalB: Booking | undefined;
     const now = new Date();
 
