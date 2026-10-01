@@ -599,29 +599,32 @@ export const BookingFlowPage: React.FC = () => {
             {/* B. GATEWAY INFO */}
             <div className="space-y-4">
               <span className="text-xs uppercase font-mono text-text-secondary font-bold tracking-widest block">PAYMENT MODE</span>
-              <div className="grid grid-cols-1 gap-4">
-                
-                {/* Method 1: Pay Online */}
-                <div
-                  className="text-left p-6 bg-[#12121A] rounded-2xl border border-brand-purple/30 glow-purple bg-brand-purple/5 relative flex flex-col gap-4 font-sans"
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('online')}
+                  disabled={Boolean(paymentBookingHold) || (isSupabaseConfigured && !ownerUpiId)}
+                  className={`p-4 text-left rounded-xl border transition disabled:opacity-40 ${paymentMethod === 'online' ? 'border-brand-cyan bg-brand-cyan/10' : 'border-border-dark bg-[#12121A]'}`}
                 >
-                  <span className="absolute top-3 right-3 bg-brand-green/10 border border-brand-green/30 text-brand-green text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    SECURED
-                  </span>
-
-                  <div className="space-y-2">
-                    <div className="flex gap-2 items-center text-brand-purple">
-                      <CreditCard className="h-5 w-5" />
-                      <h4 className="font-bold text-base text-white">Pay by UPI</h4>
-                    </div>
-                    <ul className="text-xs text-text-secondary space-y-1.5 leading-relaxed">
-                      <li>• The slot is held while the venue checks your reference</li>
-                      <li>• Booking confirmation appears after the venue verifies payment</li>
-                    </ul>
-                  </div>
-                </div>
-
+                  <span className="block font-bold text-white text-sm">Pay by UPI</span>
+                  <span className="block mt-1 text-[11px] text-text-secondary">Reserve the slot first; the venue confirms after checking the reference.</span>
+                  {isSupabaseConfigured && !ownerUpiId && <span className="block mt-2 text-[10px] text-amber-400">Online payment is unavailable until the venue adds its UPI address.</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('pay_at_venue')}
+                  disabled={Boolean(paymentBookingHold) || !isPayAtVenueAvailable || Boolean(isBlockedFromSoftHold)}
+                  className={`p-4 text-left rounded-xl border transition disabled:opacity-40 ${paymentMethod === 'pay_at_venue' ? 'border-yellow-400 bg-yellow-400/10' : 'border-border-dark bg-[#12121A]'}`}
+                >
+                  <span className="block font-bold text-white text-sm">Pay at venue</span>
+                  <span className="block mt-1 text-[11px] text-text-secondary">Available for same-day sessions within two hours, subject to account eligibility.</span>
+                </button>
               </div>
+              {paymentMethod === 'pay_at_venue' && (
+                <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-xs text-yellow-200">
+                  This creates a short hold, not a prepaid booking. The venue must check you in before the displayed deadline.
+                </div>
+              )}
             </div>
 
             {paymentMethod === 'online' && !paymentBookingHold && (
@@ -699,11 +702,7 @@ export const BookingFlowPage: React.FC = () => {
                           <Copy className="h-3 w-3" />
                         </button>
                       </div>
-                      {!ownerProfile?.upi_id && (
-                        <p className="text-[9px] text-yellow-500 mt-1">
-                          ⚠️ Owner has not configured their custom UPI; using name fallback.
-                        </p>
-                      )}
+
                     </div>
                   </div>
 
@@ -811,7 +810,7 @@ export const BookingFlowPage: React.FC = () => {
             {paymentMethod === 'online' && (
               <div className="text-[10px] text-red-400 font-mono text-center flex items-center justify-center gap-1.5 p-2 bg-red-500/10 border border-red-500/20 rounded-xl leading-tight">
                 <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                <span>No refund on cancellation</span>
+                <span>For direct UPI transfers, arrange any refund with the venue</span>
               </div>
             )}
 
@@ -842,7 +841,7 @@ export const BookingFlowPage: React.FC = () => {
                 <span>Confirm - Pay at Venue</span>
               </button>
             )}
-            <p className="text-[10px] text-text-secondary/60 text-center uppercase tracking-wider font-mono">Direct routing active: Owner UPI ID + Admin Platform Fee split</p>
+            <p className="text-[10px] text-text-secondary/60 text-center uppercase tracking-wider font-mono">Payments go directly to the venue. The venue must verify UPI transfers before confirmation.</p>
           </aside>
 
         </div>
