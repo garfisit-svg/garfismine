@@ -12,7 +12,7 @@ interface BookingsTabProps {
 export const BookingsTab: React.FC<BookingsTabProps> = ({ venue, onOpenWalkIn }) => {
   const { 
     bookings, resources, profiles, 
-    ownerCheckIn, ownerNoShow, cancelBooking, ownerCompleteBooking 
+    ownerCheckIn, ownerNoShow, cancelBooking, ownerCompleteBooking, verifyBookingPayment 
   } = useApp();
 
   // Filter States
@@ -124,19 +124,44 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({ venue, onOpenWalkIn })
     toast('Filters fully reset', { icon: '🔄' });
   };
 
-  const executeCompleteSession = () => {
-    if (completeTargetBooking) {
-      ownerCompleteBooking(completeTargetBooking.id);
-      toast.success('Session marked completed! Thank you alert triggered 🥳');
-      setCompleteTargetBooking(null);
+  const handleCheckIn = async (bookingId: string) => {
+    try {
+      await ownerCheckIn(bookingId);
+      toast.success('Customer checked in.');
+    } catch (err: any) {
+      toast.error(err.message || 'Could not check in this booking.');
     }
   };
 
-  const executeNoShowMark = () => {
-    if (noShowTargetBooking) {
-      ownerNoShow(noShowTargetBooking.id);
-      toast.success('Client marked No-Show. Slot recycled successfully!');
+  const handleVerifyPayment = async (bookingId: string) => {
+    const loadId = toast.loading('Checking and confirming payment...');
+    try {
+      await verifyBookingPayment(bookingId);
+      toast.success('Payment confirmed and booking secured.', { id: loadId });
+    } catch (err: any) {
+      toast.error(err.message || 'Payment could not be confirmed.', { id: loadId });
+    }
+  };
+
+  const executeCompleteSession = async () => {
+    if (!completeTargetBooking) return;
+    try {
+      await ownerCompleteBooking(completeTargetBooking.id);
+      toast.success('Session marked completed.');
+      setCompleteTargetBooking(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not complete this session.');
+    }
+  };
+
+  const executeNoShowMark = async () => {
+    if (!noShowTargetBooking) return;
+    try {
+      await ownerNoShow(noShowTargetBooking.id);
+      toast.success('Customer marked as a no-show and the slot was released.');
       setNoShowTargetBooking(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not mark this booking as a no-show.');
     }
   };
 
@@ -144,7 +169,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({ venue, onOpenWalkIn })
     if (cancelTargetBooking) {
       try {
         await cancelBooking(cancelTargetBooking.id, cancelReason);
-        toast.success('Booking cancelled. Settle refund dispatched successfully!');
+        toast.success('Booking cancelled. GARF cannot automatically refund payments made directly to the venue.');
         setCancelTargetBooking(null);
       } catch (err: any) {
         toast.error(err.message || 'Can not cancel');
@@ -391,7 +416,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({ venue, onOpenWalkIn })
                                   ? 'bg-amber-500/10 text-amber-500'
                                   : 'bg-red-500/15 text-red-500'
                         }`}>
-                          {b.booking_status === 'held' ? '⏳ Soft Hold' : b.booking_status}
+                          {b.booking_status === 'held' ? (b.upi_transaction_id ? 'Payment Review' : '⏳ Soft Hold') : b.booking_status}
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-right">
@@ -399,7 +424,7 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({ venue, onOpenWalkIn })
                           {b.booking_status === 'confirmed' && (
                             <>
                               <button
-                                onClick={() => ownerCheckIn(b.id)}
+                                onClick={() => { void handleCheckIn(b.id); }}
                                 className="px-2.5 py-1 bg-emerald-400 text-black text-[11px] font-bold rounded hover:bg-emerald-500 transition cursor-pointer"
                               >
                                 Check In
@@ -421,12 +446,22 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({ venue, onOpenWalkIn })
 
                           {b.booking_status === 'held' && (
                             <>
-                              <button
-                                onClick={() => ownerCheckIn(b.id)}
-                                className="px-2.5 py-1 bg-emerald-400 text-black text-[11px] font-bold rounded hover:bg-emerald-500 transition cursor-pointer"
-                              >
-                                Check In
-                              </button>
+                              {b.upi_transaction_id && (b.payment_method === 'online' || b.payment_method === 'token_advance') && (
+                                <button
+                                  onClick={() => { void handleVerifyPayment(b.id); }}
+                                  className="px-2.5 py-1 bg-brand-cyan text-black text-[11px] font-bold rounded hover:bg-cyan-400 transition cursor-pointer"
+                                >
+                                  Verify Payment
+                                </button>
+                              )}
+                              {b.payment_method === 'pay_at_venue' && (
+                                <button
+                                  onClick={() => { void handleCheckIn(b.id); }}
+                                  className="px-2.5 py-1 bg-emerald-400 text-black text-[11px] font-bold rounded hover:bg-emerald-500 transition cursor-pointer"
+                                >
+                                  Check In
+                                </button>
+                              )}
                               <button
                                 onClick={() => setNoShowTargetBooking(b)}
                                 className="px-2.5 py-1 bg-gray-700 hover:bg-gray-800 text-white text-[11px] font-bold rounded transition cursor-pointer"
@@ -441,7 +476,6 @@ export const BookingsTab: React.FC<BookingsTabProps> = ({ venue, onOpenWalkIn })
                               </button>
                             </>
                           )}
-
                           {b.booking_status === 'checked_in' && (
                             <button
                               onClick={() => setCompleteTargetBooking(b)}

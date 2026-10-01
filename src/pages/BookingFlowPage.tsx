@@ -15,7 +15,7 @@ export const BookingFlowPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   
   const { 
-    venues, resources, slots, currentUser, offers, createBookingHold, confirmOnlineBooking, platformFee, bookings, profiles, generateSlotsForNext7Days
+    venues, resources, slots, currentUser, offers, createBookingHold, confirmOnlineBooking, cancelBooking, platformFee, bookings, profiles, generateSlotsForNext7Days, isSupabaseConfigured
   } = useApp();
 
   const venue = venues.find(v => v.id === venueId);
@@ -25,6 +25,7 @@ export const BookingFlowPage: React.FC = () => {
     if (!venue) return null;
     return profiles.find(p => p.id === venue.owner_id);
   }, [venue, profiles]);
+  const ownerUpiId = ownerProfile?.upi_id?.trim() || '';
 
   // Flow State
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -81,6 +82,7 @@ export const BookingFlowPage: React.FC = () => {
   const [useCoins, setUseCoins] = useState(false);
   const [coinsToRedeem, setCoinsToRedeem] = useState<number>(10);
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'pay_at_venue'>('online');
+  const [paymentBookingHold, setPaymentBookingHold] = useState<Booking | null>(null);
   const [payAtVenueConfirmModal, setPayAtVenueConfirmModal] = useState(false);
   const [softHoldCheckboxAccepted, setSoftHoldCheckboxAccepted] = useState(false);
 
@@ -99,7 +101,16 @@ export const BookingFlowPage: React.FC = () => {
   }, [currentUser]);
 
   useEffect(() => {
-    if (step === 3 && confirmedBooking?.payment_method === 'pay_at_venue') {
+    if (confirmedBooking) {
+      const latestBooking = bookings.find(booking => booking.id === confirmedBooking.id);
+      if (latestBooking && JSON.stringify(latestBooking) !== JSON.stringify(confirmedBooking)) {
+        setConfirmedBooking(latestBooking);
+      }
+    }
+  }, [bookings, confirmedBooking?.id]);
+
+  useEffect(() => {
+    if (step === 3 && confirmedBooking?.payment_method === 'pay_at_venue' && confirmedBooking.booking_status === 'held') {
       const handle = setInterval(() => {
         setCountdownSeconds(prev => Math.max(0, prev - 1));
       }, 1000);
@@ -222,6 +233,10 @@ export const BookingFlowPage: React.FC = () => {
   const coinsDiscountAmountValue = coinsUsedBounded;
 
   const finalCheckoutAmount = Math.max(0, netBeforeCoins - coinsDiscountAmountValue + platformFee);
+  const paymentAmount = paymentBookingHold?.final_amount ?? finalCheckoutAmount;
+  const paymentFee = paymentBookingHold?.platform_fee ?? platformFee;
+  const paymentBasePrice = paymentBookingHold?.base_amount ?? basePrice;
+  const paymentDiscount = paymentBookingHold?.discount_amount ?? offerDiscountPrice;
 
   const isPayAtVenueAvailable = React.useMemo(() => {
     if (!selectedTimes.length || !selectedDate) return false;
@@ -252,38 +267,50 @@ export const BookingFlowPage: React.FC = () => {
     setStep(2);
   };
 
-  // Perform Final Booking Confirmation (Rule 1 & Rule 2)
+  // First reserve the database slots, then accept a transfer reference.
   const handleFinalCheckout = async () => {
     try {
       setLoading(true);
-      
-      // 1. Create Hold state in DB (instantly locks slots)
-      const bookingHold = await createBookingHold({
-        venueId: venue.id,
-        resourceId: selectedResource!.id,
-        date: selectedDate,
-        slots: selectedTimes,
-        coinsToUse: coinsUsedBounded,
-        offerId: matchedOffer ? matchedOffer.id : null,
-        paymentMethod: paymentMethod
-      });
-
-      // 2. Perform payment completions
       if (paymentMethod === 'online') {
-        // online completion delay simulator (1.5s)
-        await new Promise(res => setTimeout(res, 1500));
-        
-        // Confirm booking as paid online
-        const confirmedResult = await confirmOnlineBooking(bookingHold.id, upiTxnId);
-        setConfirmedBooking(confirmedResult);
-        toast.success('Online Payment complete! Slot confirmed 🎉');
+        if (isSupabaseConfigured && !ownerUpiId) {
+          throw new Error('This venue has not set up online payment yet. Choose pay at venue or another venue.');
+        }
+        if (!paymentBookingHold) {
+          const hold = await createBookingHold({
+            venueId: venue.id,
+            resourceId: selectedResource!.id,
+            date: selectedDate,
+            slots: selectedTimes,
+            coinsToUse: coinsUsedBounded,
+            offerId: matchedOffer ? matchedOffer.id : null,
+            paymentMethod: 'online'
+          });
+          setPaymentBookingHold(hold);
+          setPaidOwner(false);
+          setPaidPlatform(false);
+          setUpiTxnId('');
+          toast.success('Your selected hours are reserved. Pay the database-confirmed total and submit the transfer reference before the hold expires.');
+          return;
+        }
+        const submittedBooking = await confirmOnlineBooking(paymentBookingHold.id, upiTxnId);
+        setConfirmedBooking(submittedBooking);
+        setPaymentBookingHold(null);
+        toast.success('Payment reference submitted. The venue must verify it before your booking is confirmed.');
       } else {
-        // pay-at-venue transitions held
+        const bookingHold = await createBookingHold({
+          venueId: venue.id,
+          resourceId: selectedResource!.id,
+          date: selectedDate,
+          slots: selectedTimes,
+          coinsToUse: coinsUsedBounded,
+          offerId: matchedOffer ? matchedOffer.id : null,
+          paymentMethod: 'pay_at_venue'
+        });
         setConfirmedBooking(bookingHold);
-        
-        // Setup initial 15-min countdown
-        setCountdownSeconds(900); // 15 mins (Rule 2)
-        toast.success('Pay-At-Venue Hold activated! Arrive on time.');
+        setCountdownSeconds(bookingHold.hold_expires_at
+          ? Math.max(0, Math.ceil((new Date(bookingHold.hold_expires_at).getTime() - Date.now()) / 1000))
+          : 0);
+        toast.success('Pay-at-venue hold activated. Arrive before the displayed deadline.');
       }
 
       setStep(3);
@@ -292,6 +319,23 @@ export const BookingFlowPage: React.FC = () => {
     } finally {
       setLoading(false);
       setPayAtVenueConfirmModal(false);
+    }
+  };
+
+  const handleCancelPaymentHold = async () => {
+    if (!paymentBookingHold) return;
+    try {
+      setLoading(true);
+      await cancelBooking(paymentBookingHold.id, 'Customer released the payment hold before submitting payment details');
+      setPaymentBookingHold(null);
+      setUpiTxnId('');
+      setPaidOwner(false);
+      setPaidPlatform(false);
+      toast.success('The slot hold was released.');
+    } catch (err: any) {
+      toast.error(err.message || 'Could not release this slot hold.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -507,7 +551,7 @@ export const BookingFlowPage: React.FC = () => {
                 <div className="p-3 bg-brand-green/5 border border-dashed border-brand-green/30 rounded-lg flex items-center gap-2 text-xs">
                   <span className="text-base">🏷️</span>
                   <p className="text-brand-green font-medium">
-                    Offer <strong>{matchedOffer.title}</strong> automatically applied of -₹{offerDiscountPrice}!
+                    Offer <strong>{matchedOffer.title}</strong> automatically applied of -₹{paymentDiscount}!
                   </p>
                 </div>
               )}
@@ -555,33 +599,54 @@ export const BookingFlowPage: React.FC = () => {
             {/* B. GATEWAY INFO */}
             <div className="space-y-4">
               <span className="text-xs uppercase font-mono text-text-secondary font-bold tracking-widest block">PAYMENT MODE</span>
-              <div className="grid grid-cols-1 gap-4">
-                
-                {/* Method 1: Pay Online */}
-                <div
-                  className="text-left p-6 bg-[#12121A] rounded-2xl border border-brand-purple/30 glow-purple bg-brand-purple/5 relative flex flex-col gap-4 font-sans"
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('online')}
+                  disabled={Boolean(paymentBookingHold) || (isSupabaseConfigured && !ownerUpiId)}
+                  className={`p-4 text-left rounded-xl border transition disabled:opacity-40 ${paymentMethod === 'online' ? 'border-brand-cyan bg-brand-cyan/10' : 'border-border-dark bg-[#12121A]'}`}
                 >
-                  <span className="absolute top-3 right-3 bg-brand-green/10 border border-brand-green/30 text-brand-green text-[9px] font-mono font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    SECURED
-                  </span>
-
-                  <div className="space-y-2">
-                    <div className="flex gap-2 items-center text-brand-purple">
-                      <CreditCard className="h-5 w-5" />
-                      <h4 className="font-bold text-base text-white">Pay Online Securely</h4>
-                    </div>
-                    <ul className="text-xs text-text-secondary space-y-1.5 leading-relaxed">
-                      <li>• Instant slot lock-id (zero hold wait)</li>
-                      <li>• UPI, card, and digital networks secure</li>
-                    </ul>
-                  </div>
-                </div>
-
+                  <span className="block font-bold text-white text-sm">Pay by UPI</span>
+                  <span className="block mt-1 text-[11px] text-text-secondary">Reserve the slot first; the venue confirms after checking the reference.</span>
+                  {isSupabaseConfigured && !ownerUpiId && <span className="block mt-2 text-[10px] text-amber-400">Online payment is unavailable until the venue adds its UPI address.</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('pay_at_venue')}
+                  disabled={Boolean(paymentBookingHold) || !isPayAtVenueAvailable || Boolean(isBlockedFromSoftHold)}
+                  className={`p-4 text-left rounded-xl border transition disabled:opacity-40 ${paymentMethod === 'pay_at_venue' ? 'border-yellow-400 bg-yellow-400/10' : 'border-border-dark bg-[#12121A]'}`}
+                >
+                  <span className="block font-bold text-white text-sm">Pay at venue</span>
+                  <span className="block mt-1 text-[11px] text-text-secondary">Available for same-day sessions within two hours, subject to account eligibility.</span>
+                </button>
               </div>
+              {paymentMethod === 'pay_at_venue' && (
+                <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-xs text-yellow-200">
+                  This creates a short hold, not a prepaid booking. The venue must check you in before the displayed deadline.
+                </div>
+              )}
             </div>
 
-            {/* Direct Unified UPI Payment (Single destination: Owner) */}
-            {paymentMethod === 'online' && (
+            {paymentMethod === 'online' && !paymentBookingHold && (
+              <div className="bg-[#12121A] border border-brand-cyan/20 rounded-2xl p-6 space-y-4">
+                <h3 className="font-bold text-white">Reserve before you pay</h3>
+                <p className="text-xs text-text-secondary leading-relaxed">GARF will lock the selected hours and calculate the final amount from the current database values. Pay only after the reserved amount and venue payment address appear below.</p>
+                {isSupabaseConfigured && !ownerUpiId && (
+                  <p className="text-xs text-amber-400">This venue has not configured a valid UPI address. Choose pay at venue or select another venue.</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { void handleFinalCheckout(); }}
+                  disabled={loading || (isSupabaseConfigured && !ownerUpiId)}
+                  className="w-full py-3 bg-brand-cyan text-black rounded-xl text-sm font-bold disabled:opacity-40"
+                >
+                  {loading ? 'Reserving selected hours...' : 'Reserve selected hours'}
+                </button>
+              </div>
+            )}
+
+            {/* Direct UPI payment is manual; venue verification is required. */}
+            {paymentMethod === 'online' && paymentBookingHold && (
               <div className="bg-[#12121A] border border-brand-cyan/20 rounded-2xl p-6 space-y-6 animate-fade-in relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-2 h-full bg-brand-cyan" />
                 
@@ -592,10 +657,12 @@ export const BookingFlowPage: React.FC = () => {
                   <div>
                     <h3 className="font-bold text-lg text-white font-display">Direct UPI Payment</h3>
                     <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
-                      To secure your slot, please make a single UPI payment of the total booking amount. The entire amount (including the ₹5 platform fee) will go directly to the arena owner's UPI address.
+                      Pay the displayed amount to the venue using UPI, then enter the transfer reference. The venue will check the transfer and confirm your booking. GARF does not process or automatically verify this transfer.
                     </p>
                   </div>
                 </div>
+
+                <p className="text-[11px] text-amber-300">Reserved until {paymentBookingHold.hold_expires_at ? new Date(paymentBookingHold.hold_expires_at).toLocaleTimeString() : 'the venue completes review'}. After you submit your reference, the venue will review the reservation.</p>
 
                 <div className="max-w-md mx-auto bg-[#161622] border border-[#2a2a3e] rounded-xl p-5 space-y-4">
                   <div className="space-y-3 font-sans">
@@ -609,11 +676,11 @@ export const BookingFlowPage: React.FC = () => {
                     <div className="pt-1 flex justify-between items-end">
                       <div>
                         <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Total Amount</p>
-                        <p className="text-2xl font-black text-white font-mono">₹{finalCheckoutAmount}</p>
+                        <p className="text-2xl font-black text-white font-mono">₹{paymentAmount}</p>
                       </div>
                       <div className="text-right text-[11px] text-text-secondary font-sans leading-tight">
-                        <p>Slot Charge: <strong>₹{Math.max(0, finalCheckoutAmount - 5)}</strong></p>
-                        <p>Platform Fee: <strong>₹5</strong></p>
+                        <p>Slot Charge: <strong>₹{Math.max(0, paymentAmount - paymentFee)}</strong></p>
+                        <p>Platform Fee: <strong>₹{paymentFee}</strong></p>
                       </div>
                     </div>
 
@@ -621,12 +688,12 @@ export const BookingFlowPage: React.FC = () => {
                       <p className="text-[10px] text-[#8e8ea8] uppercase font-bold font-mono">Recipient Owner UPI ID</p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <code className="text-xs text-white font-mono bg-black/40 px-2 py-1 rounded border border-[#2a2a3e] truncate">
-                          {ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '') || 'venue'}@okaxis`}
+                          {ownerUpiId}
                         </code>
                         <button
                           type="button"
                           onClick={() => {
-                            navigator.clipboard.writeText(ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '') || 'venue'}@okaxis`);
+                            navigator.clipboard.writeText(ownerUpiId);
                             toast.success('Owner UPI ID copied! 📋');
                           }}
                           className="p-1.5 bg-[#202030] hover:bg-brand-cyan/20 hover:text-white text-text-secondary rounded-lg transition"
@@ -635,11 +702,7 @@ export const BookingFlowPage: React.FC = () => {
                           <Copy className="h-3 w-3" />
                         </button>
                       </div>
-                      {!ownerProfile?.upi_id && (
-                        <p className="text-[9px] text-yellow-500 mt-1">
-                          ⚠️ Owner has not configured their custom UPI; using name fallback.
-                        </p>
-                      )}
+
                     </div>
                   </div>
 
@@ -648,7 +711,7 @@ export const BookingFlowPage: React.FC = () => {
                     <div className="flex items-center gap-3 bg-black/20 p-3 rounded-lg">
                       <div className="p-1 bg-white rounded-lg border border-border-dark flex-shrink-0 w-20 h-20 flex items-center justify-center">
                         <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=${ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '') || 'venue'}@okaxis`}&pn=${encodeURIComponent(venue?.name || 'GARF Cafe')}&am=${finalCheckoutAmount}&cu=INR`)}`}
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=${ownerUpiId}&pn=${encodeURIComponent(venue?.name || 'GARF Cafe')}&am=${paymentAmount}&cu=INR`)}`}
                           alt="Pay UPI QR Code"
                           className="w-full h-full object-contain"
                           referrerPolicy="no-referrer"
@@ -659,7 +722,7 @@ export const BookingFlowPage: React.FC = () => {
                           Scan single QR to pay
                         </p>
                         <p className="text-[10px] text-text-secondary leading-normal">
-                          Funds go directly to the owner's bank account (<strong className="text-brand-cyan">{ownerProfile?.upi_id || `${venue?.name.toLowerCase().replace(/\s+/g, '') || 'venue'}@okaxis`}</strong>).
+                          Funds go directly to the owner's bank account (<strong className="text-brand-cyan">{ownerUpiId}</strong>).
                         </p>
                       </div>
                     </div>
@@ -696,7 +759,7 @@ export const BookingFlowPage: React.FC = () => {
                           className="rounded text-brand-cyan bg-[#1A1A2E] border-[#2a2a3e] focus:ring-brand-cyan focus:ring-offset-0 h-4.5 w-4.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                         <span className="text-xs font-bold text-white select-none leading-tight">
-                          I have paid ₹{finalCheckoutAmount} and entered my correct reference
+                          I have paid ₹{paymentAmount} to the venue and entered the correct reference
                         </span>
                       </label>
                     </div>
@@ -733,13 +796,13 @@ export const BookingFlowPage: React.FC = () => {
 
               <div className="flex justify-between">
                 <span>Customer secure platform fee</span>
-                <span className="text-white">+₹{platformFee}</span>
+                <span className="text-white">+₹{paymentFee}</span>
               </div>
 
               <div className="border-t border-[#2a2a3e] pt-4 flex flex-col gap-2">
                 <div className="flex justify-between items-end text-sm sm:text-base">
                   <span className="font-display font-bold text-white uppercase text-xs">TOTAL TO SECURE</span>
-                  <span className="text-2xl font-black font-mono text-white leading-none">₹{finalCheckoutAmount}</span>
+                  <span className="text-2xl font-black font-mono text-white leading-none">₹{paymentAmount}</span>
                 </div>
               </div>
             </div>
@@ -747,32 +810,24 @@ export const BookingFlowPage: React.FC = () => {
             {paymentMethod === 'online' && (
               <div className="text-[10px] text-red-400 font-mono text-center flex items-center justify-center gap-1.5 p-2 bg-red-500/10 border border-red-500/20 rounded-xl leading-tight">
                 <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                <span>No refund on cancellation</span>
+                <span>For direct UPI transfers, arrange any refund with the venue</span>
               </div>
             )}
 
             {/* Action Checkout Trigger */}
             {paymentMethod === 'online' ? (
-              <button
-                onClick={handleFinalCheckout}
-                disabled={loading || !paidOwner || !paidPlatform || upiTxnId.trim().length < 8}
-                className={`w-full py-4 text-center font-black text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-lg ${
-                  (!paidOwner || !paidPlatform || upiTxnId.trim().length < 8) 
-                    ? 'bg-[#1e1e2d] text-text-secondary/40 border border-border-dark cursor-not-allowed hover:bg-[#1e1e2d]' 
-                    : 'btn-gradient hover:opacity-95 text-white cursor-pointer'
-                }`}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Authorizing Split Settlements...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Verify Transfers & Book (₹{finalCheckoutAmount})</span>
-                  </>
-                )}
-              </button>
+              paymentBookingHold ? (
+                <div className="space-y-2">
+                  <button
+                    onClick={() => { void handleFinalCheckout(); }}
+                    disabled={loading || !paidOwner || !paidPlatform || upiTxnId.trim().length < 8}
+                    className="w-full py-4 text-center btn-gradient hover:opacity-95 text-white font-black text-sm rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {loading ? 'Submitting payment reference...' : `Submit payment reference (₹${paymentAmount})`}
+                  </button>
+                  <button type="button" onClick={() => { void handleCancelPaymentHold(); }} disabled={loading} className="w-full py-2 text-xs text-text-secondary hover:text-white disabled:opacity-40">Cancel this hold</button>
+                </div>
+              ) : null
             ) : (
               <button
                 type="button"
@@ -786,8 +841,7 @@ export const BookingFlowPage: React.FC = () => {
                 <span>Confirm - Pay at Venue</span>
               </button>
             )}
-
-            <p className="text-[10px] text-text-secondary/60 text-center uppercase tracking-wider font-mono">Direct routing active: Owner UPI ID + Admin Platform Fee split</p>
+            <p className="text-[10px] text-text-secondary/60 text-center uppercase tracking-wider font-mono">Payments go directly to the venue. The venue must verify UPI transfers before confirmation.</p>
           </aside>
 
         </div>
@@ -796,14 +850,22 @@ export const BookingFlowPage: React.FC = () => {
       {step === 3 && confirmedBooking && (
         <div className="max-w-xl mx-auto space-y-8 font-sans">
           
-          {/* A. BRANDING CONFIRMED CAP */}
-          {confirmedBooking.payment_method === 'online' ? (
+          {/* A. BOOKING STATUS */}
+          {confirmedBooking.booking_status === 'confirmed' || confirmedBooking.booking_status === 'checked_in' || confirmedBooking.booking_status === 'completed' ? (
             <div className="text-center space-y-4">
               <div className="inline-flex p-4 bg-brand-green/10 border border-brand-green/20 rounded-full text-brand-green shadow-xl shadow-brand-green/5 animate-pulse">
                 <ShieldCheck className="h-10 w-10 text-brand-green" />
               </div>
               <h1 className="text-4xl font-display font-black text-white">Booking Confirmed! 🎉</h1>
-              <p className="text-text-secondary text-sm sm:text-base">Your gaming station hours matches are permanently locked now.</p>
+              <p className="text-text-secondary text-sm sm:text-base">Your booking is confirmed by the venue.</p>
+            </div>
+          ) : confirmedBooking.payment_method === 'online' ? (
+            <div className="text-center space-y-4">
+              <div className="inline-flex p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-full text-yellow-400 shadow-xl shadow-yellow-500/5">
+                <Clock className="h-10 w-10 text-yellow-400" />
+              </div>
+              <h1 className="text-4xl font-display font-black text-white">Payment Submitted</h1>
+              <p className="text-text-secondary text-sm sm:text-base">The venue is checking your transfer reference. This booking is not confirmed until the venue approves it.</p>
             </div>
           ) : (
             <div className="text-center space-y-4">
@@ -864,7 +926,7 @@ export const BookingFlowPage: React.FC = () => {
             </div>
 
             {/* QR CARD */}
-            {confirmedBooking.payment_method === 'online' && (
+            {confirmedBooking.booking_status !== 'held' && confirmedBooking.payment_method === 'online' && (
               <div className="pt-6 border-t border-border-dark flex flex-col items-center text-center space-y-4">
                 <div className="bg-white p-2 rounded-lg border-2 border-brand-purple w-32 h-32 flex items-center justify-center">
                   <img

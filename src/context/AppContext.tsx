@@ -91,18 +91,19 @@ interface AppContextType {
   // Customer Booking actions
   createBookingHold: (data: { venueId: string, resourceId: string, date: string, slots: string[], coinsToUse: number, offerId: string | null, paymentMethod: 'online' | 'pay_at_venue' | 'token_advance' }) => Promise<Booking>;
   confirmOnlineBooking: (bookingId: string, upiTransactionId?: string) => Promise<Booking>;
-  cancelBooking: (bookingId: string, reason: string) => Promise<{ refund: number; coinsRestored: number }>;
+  cancelBooking: (bookingId: string, reason: string) => Promise<{ refund: number; coinsRestored: number; manualPaymentReferenceSubmitted?: boolean }>;
   
   // Owner operation actions
-  ownerCheckIn: (bookingId: string) => void;
-  ownerExtendHold: (bookingId: string) => void;
-  ownerReleaseSlot: (bookingId: string) => void;
+  ownerCheckIn: (bookingId: string) => Promise<void>;
+  ownerExtendHold: (bookingId: string) => Promise<void>;
+  ownerReleaseSlot: (bookingId: string) => Promise<void>;
   addWalkInBooking: (data: { resourceId: string, date: string, slots: string[], customerName?: string, customerPhone?: string, pricePerHr?: number, paymentBy: 'Cash' | 'UPI', actualStartTime?: string, actualEndTime?: string }) => void;
   extendBookingSession: (bookingId: string, additionalMinutes: number, additionalAmount?: number) => { success: boolean; message: string; newEndTime?: string };
   endBookingEarly: (bookingId: string, customAmountCollected?: number, paymentType?: 'cash' | 'upi') => { success: boolean; message: string; actualEndTime?: string };
   checkUnitAvailability: (resourceId: string, date: string, startTime: string, endTime: string, excludeBookingId?: string) => { available: boolean; conflictingBooking?: Booking; conflictingReason?: string };
-  ownerNoShow: (bookingId: string) => void;
-  ownerCompleteBooking: (bookingId: string) => void;
+  ownerNoShow: (bookingId: string) => Promise<void>;
+  ownerCompleteBooking: (bookingId: string) => Promise<void>;
+  verifyBookingPayment: (bookingId: string) => Promise<Booking>;
   bulkBlockSlots: (resourceId: string, date: string, slots: string[], reason: string) => void;
   bulkUnblockSlots: (resourceId: string, date: string, slots: string[]) => void;
   generateSlotsForNext7Days: (resourceId: string) => void;
@@ -180,6 +181,18 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 // Helper for dynamic seed date adjustment (to keep dates centered around today)
+const fetchAllSupabaseRows = async <T,>(query: any): Promise<T[]> => {
+  const pageSize = 500;
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await query.range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    const page = (data || []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+};
+
 const getOffsetDateString = (offsetDays: number) => {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
@@ -408,85 +421,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [profiles, currentUser]);
 
-  // Load profiles from Supabase on mount if active
+  // Load profiles from the active Supabase session. The database is authoritative
+  // in production; browser-cached profiles must never be merged into moderation state.
   useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+    let active = true;
     const loadSupabaseProfiles = async () => {
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const { data, error } = await supabase.from('profiles').select('*');
-          if (data && !error) {
-            // Map DB profiles by ID and normalized email
-            const dbProfilesById = new Map<string, any>();
-            const dbProfilesByEmail = new Map<string, any>();
-            data.forEach((p: any) => {
-              if (p && p.id) {
-                dbProfilesById.set(p.id, p);
-                if (p.email) {
-                  dbProfilesByEmail.set(p.email.toLowerCase().trim(), p);
-                }
-              }
-            });
-
-            // Local profiles
-            const localSaved = localStorage.getItem('garf_profiles');
-            let localProfiles: Profile[] = [];
-            if (localSaved) {
-              try {
-                localProfiles = JSON.parse(localSaved);
-              } catch (e) {
-                console.error('Error parsing local profiles during merge:', e);
-              }
-            }
-
-            const combinedMap = new Map<string, Profile>();
-
-            // 1. Keep non-conflicting local profiles (e.g. offline created users that don't collide with DB)
-            localProfiles.forEach(p => {
-              if (p && p.id) {
-                const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-                if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
-                  combinedMap.set(p.id, p);
-                }
-              }
-            });
-            
-            // 2. Add all authoritative DB profiles
-            data.forEach((p: any) => {
-              if (p && p.id) {
-                const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-                const matchingLocal = localProfiles.find(lp => lp && (lp.id === p.id || (normEmail && lp.email?.toLowerCase().trim() === normEmail)));
-                combinedMap.set(p.id, {
-                  ...matchingLocal,
-                  ...p,
-                  id: p.id,
-                  emailVerified: p.emailVerified ?? matchingLocal?.emailVerified ?? true
-                });
-              }
-            });
-
-            const mergedList = Array.from(combinedMap.values());
-            rawSetProfiles(mergedList);
-            localStorage.setItem('garf_profiles', JSON.stringify(mergedList));
-
-            // Align currentUser if they were logged in under a mock ID that now has a DB UUID
-            if (currentUser && currentUser.email) {
-              const currentEmail = currentUser.email.toLowerCase().trim();
-              const dbMatch = dbProfilesByEmail.get(currentEmail);
-              if (dbMatch && currentUser.id !== dbMatch.id) {
-                const alignedUser = { ...currentUser, ...dbMatch, id: dbMatch.id };
-                setCurrentUser(alignedUser);
-                localStorage.setItem('garf_current_user', JSON.stringify(alignedUser));
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Failed to sync profiles from Supabase:', err);
-        }
+      try {
+        const rows = await fetchAllSupabaseRows<Profile>(supabase.from('profiles').select('*'));
+        if (!active) return;
+        rawSetProfiles(rows);
+        localStorage.removeItem('garf_profiles');
+        const activeProfile = currentUser && rows.find(profile => profile.id === currentUser.id);
+        if (activeProfile) setCurrentUser(activeProfile);
+      } catch (error) {
+        console.error('Failed to load profiles from Supabase:', error);
       }
     };
-
-    loadSupabaseProfiles();
-  }, []);
+    void loadSupabaseProfiles();
+    return () => { active = false; };
+  }, [currentUser?.id, currentUser?.role]);
 
   // Restore identity only from the persisted Supabase Auth session, never from a
   // locally cached profile or password.
@@ -515,7 +469,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       const { password: _password, resetToken: _resetToken, resetTokenExpires: _resetTokenExpires, ...safeProfile } = data as any;
       const profile = safeProfile as Profile;
-      setProfiles(prev => [...prev.filter(p => p.id !== profile.id), profile]);
+      rawSetProfiles(prev => [...prev.filter(p => p.id !== profile.id), profile]);
       setCurrentUser(profile);
       localStorage.setItem('garf_current_user', JSON.stringify(profile));
     };
@@ -553,101 +507,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const isAdminUser = currentUser?.role === 'admin';
           if (!isAdminUser) {
             if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
-              query = query.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
+              query = query.or('status.eq.approved,owner_id.eq.' + currentUser.id);
             } else {
               query = query.eq('status', 'approved');
             }
           }
-          const { data, error } = await query;
-          if (data && !error) {
-            rawSetVenues(prev => {
-              const localSaved = localStorage.getItem('garf_venues');
-              let localVenues: Venue[] = [];
-              if (localSaved) {
-                try { localVenues = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, Venue>();
-              localVenues.forEach(v => { if (v && v.id) combinedMap.set(v.id, v); });
-              data.forEach((v: any) => { if (v && v.id) combinedMap.set(v.id, v); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_venues', JSON.stringify(merged));
-              return merged;
-            });
-          }
+          const rows = await fetchAllSupabaseRows<Venue>(query);
+          rawSetVenues(rows);
+          localStorage.setItem('garf_venues', JSON.stringify(rows));
         } catch (err) {
-          console.error('Error fetching venues from Supabase on mount:', err);
+          console.error('Error fetching venues from Supabase:', err);
         }
       };
 
       // Load resources
       const loadResources = async () => {
         try {
-          const { data, error } = await supabase.from('venue_resources').select('*');
-          if (data && !error) {
-            rawSetResources(prev => {
-              const localSaved = localStorage.getItem('garf_resources');
-              let localResources: VenueResource[] = [];
-              if (localSaved) {
-                try { localResources = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, VenueResource>();
-              localResources.forEach(r => { if (r && r.id) combinedMap.set(r.id, r); });
-              data.forEach((r: any) => { if (r && r.id) combinedMap.set(r.id, r); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_resources', JSON.stringify(merged));
-              return merged;
-            });
-          }
+          const rows = await fetchAllSupabaseRows<VenueResource>(supabase.from('venue_resources').select('*'));
+          rawSetResources(rows);
+          localStorage.setItem('garf_resources', JSON.stringify(rows));
         } catch (err) {
-          console.error('Error fetching venue_resources from Supabase on mount:', err);
+          console.error('Error fetching venue resources from Supabase:', err);
         }
       };
 
       // Load slots
       const loadSlots = async () => {
         try {
-          const { data, error } = await supabase.from('slots').select('*');
-          if (data && !error) {
-            rawSetSlots(prev => {
-              const localSaved = localStorage.getItem('garf_slots');
-              let localSlots: Slot[] = [];
-              if (localSaved) {
-                try { localSlots = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, Slot>();
-              localSlots.forEach(s => { if (s && s.id) combinedMap.set(s.id, s); });
-              data.forEach((s: any) => { if (s && s.id) combinedMap.set(s.id, s); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_slots', JSON.stringify(merged));
-              return merged;
-            });
-          }
+          const rows = await fetchAllSupabaseRows<Slot>(supabase.from('slots').select('*'));
+          rawSetSlots(rows);
+          localStorage.setItem('garf_slots', JSON.stringify(rows));
         } catch (err) {
-          console.error('Error fetching slots from Supabase on mount:', err);
+          console.error('Error fetching slots from Supabase:', err);
         }
       };
 
       // Load bookings
       const loadBookings = async () => {
         try {
-          const { data, error } = await supabase.from('bookings').select('*');
-          if (data && !error) {
-            rawSetBookings(prev => {
-              const localSaved = localStorage.getItem('garf_bookings');
-              let localBookings: Booking[] = [];
-              if (localSaved) {
-                try { localBookings = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, Booking>();
-              localBookings.forEach(b => { if (b && b.id) combinedMap.set(b.id, b); });
-              data.forEach((b: any) => { if (b && b.id) combinedMap.set(b.id, b); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_bookings', JSON.stringify(merged));
-              return merged;
-            });
-          }
+          const rows = await fetchAllSupabaseRows<Booking>(supabase.from('bookings').select('*'));
+          rawSetBookings(rows);
+          localStorage.setItem('garf_bookings', JSON.stringify(rows));
         } catch (err) {
-          console.error('Error fetching bookings from Supabase on mount:', err);
+          console.error('Error fetching bookings from Supabase:', err);
         }
       };
 
@@ -746,7 +648,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
               const item = payload.new as Profile;
-              setProfiles(prev => {
+              rawSetProfiles(prev => {
                 const updated = prev.some(p => p.id === item.id)
                   ? prev.map(p => p.id === item.id ? item : p)
                   : [...prev, item];
@@ -768,7 +670,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         channels.forEach(ch => supabase.removeChannel(ch));
       };
     }
-  }, []);
+  }, [currentUser?.id, currentUser?.role]);
 
   const saveProfileToSupabase = async (profile: Profile) => {
     if (isSupabaseConfigured && supabase) {
@@ -779,6 +681,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           full_name: profile.full_name || 'User',
           email: profile.email || '',
           phone: profile.phone || '',
+          upi_id: profile.upi_id || null,
           avatar_url: profile.avatar_url || '',
           role: profile.role || 'customer',
           garf_coins: profile.garf_coins ?? 0,
@@ -939,6 +842,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           operating_hours_start: venue.operating_hours_start,
           operating_hours_end: venue.operating_hours_end,
           operating_days: venue.operating_days,
+          closed_dates: venue.closed_dates || [],
           commission_percent: Number(venue.commission_percent),
           rejection_reason: venue.rejection_reason,
           verified_at: venue.verified_at,
@@ -1107,14 +1011,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const [venues, rawSetVenues] = useState<Venue[]>(() => {
-    const saved = localStorage.getItem('garf_venues');
+    const saved = isSupabaseConfigured ? null : localStorage.getItem('garf_venues');
     if (saved) return JSON.parse(saved);
     const seed: Venue[] = [];
     return seed;
   });
 
   const [resources, rawSetResources] = useState<VenueResource[]>(() => {
-    const saved = localStorage.getItem('garf_resources');
+    const saved = isSupabaseConfigured ? null : localStorage.getItem('garf_resources');
     if (saved) return JSON.parse(saved);
     const seed: VenueResource[] = [];
     return seed;
@@ -1122,13 +1026,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Unique slots state which gets populated for current +7 days automatically
   const [slots, rawSetSlots] = useState<Slot[]>(() => {
-    const saved = localStorage.getItem('garf_slots');
+    const saved = isSupabaseConfigured ? null : localStorage.getItem('garf_slots');
     if (saved) return JSON.parse(saved);
     return []; // Will build dynamically below!
   });
 
   const [bookings, rawSetBookings] = useState<Booking[]>(() => {
-    const saved = localStorage.getItem('garf_bookings');
+    const saved = isSupabaseConfigured ? null : localStorage.getItem('garf_bookings');
     if (saved) return JSON.parse(saved);
     const seed: Booking[] = [];
     return seed;
@@ -2626,6 +2530,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         operating_hours_start: newV.operating_hours_start || '09:00',
         operating_hours_end: newV.operating_hours_end || '23:00',
         operating_days: newV.operating_days || [],
+        closed_dates: newV.closed_dates || [],
         commission_percent: 10,
         rejection_reason: null,
         verified_at: null,
@@ -3143,6 +3048,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const persistBookingRpc = async (functionName: string, args: Record<string, unknown>): Promise<Booking> => {
+    if (!isSupabaseConfigured || !supabase) throw new Error('Supabase is not configured.');
+    const { data, error } = await supabase.rpc(functionName, args as any);
+    if (error) throw new Error(error.message || 'The booking could not be saved.');
+    const booking = (Array.isArray(data) ? data[0] : data) as Booking | null;
+    if (!booking?.id) throw new Error('The database did not return the saved booking. Please refresh before retrying.');
+
+    rawSetBookings(prev => [booking, ...prev.filter(existing => existing.id !== booking.id)]);
+
+    const { data: slotRows, error: slotError } = await supabase
+      .from('slots')
+      .select('*')
+      .eq('resource_id', booking.resource_id)
+      .eq('slot_date', booking.booking_date);
+    if (!slotError && slotRows) {
+      rawSetSlots(prev => [
+        ...prev.filter(slot => !(slot.resource_id === booking.resource_id && slot.slot_date === booking.booking_date)),
+        ...(slotRows as Slot[])
+      ]);
+    } else {
+      const slotStatus: Slot['status'] = booking.booking_status === 'held'
+        ? 'held'
+        : (booking.booking_status === 'confirmed' || booking.booking_status === 'checked_in') ? 'booked' : 'available';
+      rawSetSlots(prev => prev.map(slot => slot.booking_id === booking.id ? {
+        ...slot,
+        status: slotStatus,
+        booking_id: slotStatus === 'available' ? null : booking.id,
+        held_until: slotStatus === 'held' ? booking.hold_expires_at : null,
+        updated_at: booking.updated_at
+      } : slot));
+    }
+
+    const { data: profileRow } = await supabase.from('profiles').select('*').eq('id', booking.customer_id).maybeSingle();
+    if (profileRow) {
+      const safeProfile = profileRow as Profile;
+      rawSetProfiles(prev => [safeProfile, ...prev.filter(profile => profile.id !== safeProfile.id)]);
+      if (currentUser?.id === safeProfile.id) setCurrentUser(safeProfile);
+    }
+    if (currentUser?.id === booking.customer_id) {
+      const { data: transactions } = await supabase
+        .from('coin_transactions')
+        .select('*')
+        .eq('user_id', booking.customer_id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (transactions) rawSetCoinTransactions(transactions as CoinTransaction[]);
+    }
+    return booking;
+  };
+
+  const verifyBookingPayment = async (bookingId: string): Promise<Booking> => {
+    return persistBookingRpc('verify_booking_payment', { p_booking_id: bookingId });
+  };
+
   // CUSTOMER BOOKING FLOW ACTIONS
   const createBookingHold = async (data: {
     venueId: string, 
@@ -3154,6 +3113,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentMethod: 'online' | 'pay_at_venue' | 'token_advance'
   }) => {
     if (!currentUser) throw new Error('Authentication required');
+
+    if (isSupabaseConfigured && supabase) {
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || authData.user?.id !== currentUser.id) {
+        throw new Error('Your sign-in session could not be verified. Sign in again and retry.');
+      }
+      const booking = await persistBookingRpc('create_booking_hold', {
+        p_venue_id: data.venueId,
+        p_resource_id: data.resourceId,
+        p_booking_date: data.date,
+        p_slot_times: data.slots,
+        p_coins_requested: data.coinsToUse,
+        p_offer_id: data.offerId,
+        p_payment_method: data.paymentMethod
+      });
+      return booking;
+    }
 
     if (!data.slots || data.slots.length === 0) {
       throw new Error('Please select at least one slot to proceed with booking.');
@@ -3402,6 +3378,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const confirmOnlineBooking = async (bookingId: string, upiTransactionId?: string) => {
+    if (isSupabaseConfigured && supabase) {
+      if (!upiTransactionId?.trim()) throw new Error('Enter the UPI transaction reference first.');
+      return persistBookingRpc('submit_booking_payment', {
+        p_booking_id: bookingId,
+        p_upi_transaction_id: upiTransactionId.trim()
+      });
+    }
+
     let matchedB: Booking | undefined;
     let finalEarnings = 0; // Simplified requirements: no booking cashback earnings
 
@@ -3510,6 +3494,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const cancelBooking = async (bookingId: string, reason: string) => {
+    if (isSupabaseConfigured && supabase) {
+      const existing = bookings.find(booking => booking.id === bookingId);
+      const booking = await persistBookingRpc('cancel_booking', {
+        p_booking_id: bookingId,
+        p_reason: reason
+      });
+      return {
+        refund: 0,
+        coinsRestored: booking.payment_status === 'pending' ? booking.coins_used : 0,
+        manualPaymentReferenceSubmitted: Boolean(existing?.upi_transaction_id || booking.upi_transaction_id)
+      } as { refund: number; coinsRestored: number };
+    }
+
     let finalB: Booking | undefined;
     const now = new Date();
 
@@ -3634,7 +3631,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // VENUE OPERATIONAL LOGICS
-  const ownerCheckIn = (bookingId: string) => {
+  const ownerCheckIn = async (bookingId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      await persistBookingRpc('owner_booking_action', { p_booking_id: bookingId, p_action: 'check_in' });
+      return;
+    }
     setBookings(prev => prev.map(b => {
       if (b.id === bookingId) {
         // Also if check-in was Pay-At-Venue, flag it paid
@@ -3714,7 +3715,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const ownerExtendHold = (bookingId: string) => {
+  const ownerExtendHold = async (bookingId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      await persistBookingRpc('owner_booking_action', { p_booking_id: bookingId, p_action: 'extend_hold' });
+      return;
+    }
     // Adds +15 minutes to hold expiry (Rule 2)
     setBookings(prev => prev.map(b => {
       if (b.id === bookingId && b.hold_expires_at) {
@@ -3735,7 +3740,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const ownerReleaseSlot = (bookingId: string) => {
+  const ownerReleaseSlot = async (bookingId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      await persistBookingRpc('owner_booking_action', { p_booking_id: bookingId, p_action: 'release_hold' });
+      return;
+    }
     // Explicit manual release (Rule 2)
     setBookings(prev => prev.map(b => {
       if (b.id === bookingId) {
@@ -4074,7 +4083,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return isUnitAvailable(resourceId, date, startTime, endTime, bookings, excludeBookingId, slots);
   };
 
-  const ownerNoShow = (bookingId: string) => {
+  const ownerNoShow = async (bookingId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      await persistBookingRpc('owner_booking_action', { p_booking_id: bookingId, p_action: 'no_show' });
+      return;
+    }
     let customerId = '';
     
     setBookings(prev => prev.map(b => {
@@ -4130,7 +4143,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const ownerCompleteBooking = (bookingId: string) => {
+  const ownerCompleteBooking = async (bookingId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      await persistBookingRpc('owner_booking_action', { p_booking_id: bookingId, p_action: 'complete' });
+      return;
+    }
     setBookings(prev => {
       const active = prev.map(b => {
         if (b.id === bookingId) {
@@ -5643,189 +5660,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      // 1. Fetch profiles
-      const { data: profileList, error: profileErr } = await supabase.from('profiles').select('*');
-      if (profileErr) throw new Error(`Profiles: ${profileErr.message}`);
-
-      // 2. Fetch venues
+      const profileRows = await fetchAllSupabaseRows<Profile>(supabase.from('profiles').select('*'));
       let venueQuery = supabase.from('gaming_cafes').select('*');
       const isAdminUser = currentUser?.role === 'admin';
       if (!isAdminUser) {
         if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
-          venueQuery = venueQuery.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
+          venueQuery = venueQuery.or('status.eq.approved,owner_id.eq.' + currentUser.id);
         } else {
           venueQuery = venueQuery.eq('status', 'approved');
         }
       }
-      const { data: venueList, error: venueErr } = await venueQuery;
-      if (venueErr) throw new Error(`Venues: ${venueErr.message}`);
 
-      // 3. Fetch resources
-      const { data: resourceList, error: resourceErr } = await supabase.from('venue_resources').select('*');
-      if (resourceErr) throw new Error(`Resources: ${resourceErr.message}`);
+      const [venueRows, resourceRows, slotRows, bookingRows] = await Promise.all([
+        fetchAllSupabaseRows<Venue>(venueQuery),
+        fetchAllSupabaseRows<VenueResource>(supabase.from('venue_resources').select('*')),
+        fetchAllSupabaseRows<Slot>(supabase.from('slots').select('*')),
+        fetchAllSupabaseRows<Booking>(supabase.from('bookings').select('*'))
+      ]);
 
-      // 4. Fetch slots
-      const { data: slotList, error: slotErr } = await supabase.from('slots').select('*');
-      if (slotErr) throw new Error(`Slots: ${slotErr.message}`);
-
-      // 5. Fetch bookings
-      const { data: bookingList, error: bookingErr } = await supabase.from('bookings').select('*');
-      if (bookingErr) throw new Error(`Bookings: ${bookingErr.message}`);
-
-      if (profileList) {
-        const localSaved = localStorage.getItem('garf_profiles');
-        let localProfs: Profile[] = [];
-        if (localSaved) {
-          try { localProfs = JSON.parse(localSaved); } catch(e) {}
+      rawSetProfiles(profileRows);
+      localStorage.removeItem('garf_profiles');
+      if (currentUser) {
+        const refreshedProfile = profileRows.find(profile => profile.id === currentUser.id);
+        if (refreshedProfile) {
+          setCurrentUser(refreshedProfile);
+          localStorage.setItem('garf_current_user', JSON.stringify(refreshedProfile));
         }
-
-        const dbProfilesById = new Map<string, any>();
-        const dbProfilesByEmail = new Map<string, any>();
-        profileList.forEach((p: any) => {
-          if (p && p.id) {
-            dbProfilesById.set(p.id, p);
-            if (p.email) {
-              dbProfilesByEmail.set(p.email.toLowerCase().trim(), p);
-            }
-          }
-        });
-
-        const mergedMap = new Map<string, Profile>();
-        localProfs.forEach(p => {
-          if (p && p.id) {
-            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-            if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
-              mergedMap.set(p.id, p);
-            }
-          }
-        });
-        profileList.forEach((p: any) => {
-          if (p && p.id) {
-            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-            const matchingLocal = localProfs.find(lp => lp && (lp.id === p.id || (normEmail && lp.email?.toLowerCase().trim() === normEmail)));
-            mergedMap.set(p.id, {
-              ...matchingLocal,
-              ...p,
-              id: p.id,
-              emailVerified: p.emailVerified ?? matchingLocal?.emailVerified ?? true
-            });
-          }
-        });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetProfiles(merged);
-        localStorage.setItem('garf_profiles', JSON.stringify(merged));
-
-        // Self-heal: upload local-only, non-simulated profiles that don't collide with DB
-        localProfs.forEach(p => {
-          if (p && p.id) {
-            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-            if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
-              if (!p.id.startsWith('user-') && !p.id.startsWith('mock-')) {
-                saveProfileToSupabase(p);
-              }
-            }
-          }
-        });
       }
 
-      if (venueList) {
-        const localSaved = localStorage.getItem('garf_venues');
-        let localVenues: Venue[] = [];
-        if (localSaved) {
-          try { localVenues = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, Venue>();
-        localVenues.forEach(v => { if (v && v.id) mergedMap.set(v.id, v); });
-        venueList.forEach((v: any) => { if (v && v.id) mergedMap.set(v.id, v); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetVenues(merged);
-        localStorage.setItem('garf_venues', JSON.stringify(merged));
+      rawSetVenues(venueRows);
+      rawSetResources(resourceRows);
+      rawSetSlots(slotRows);
+      rawSetBookings(bookingRows);
 
-        // Self-heal: upload local-only venues to Supabase
-        const dbIds = new Set(venueList.map((v: any) => v.id));
-        localVenues.forEach(v => {
-          if (v && v.id && !dbIds.has(v.id)) {
-            saveVenueToSupabase(v);
-          }
-        });
-      }
-
-      if (resourceList) {
-        const localSaved = localStorage.getItem('garf_resources');
-        let localResources: VenueResource[] = [];
-        if (localSaved) {
-          try { localResources = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, VenueResource>();
-        localResources.forEach(r => { if (r && r.id) mergedMap.set(r.id, r); });
-        resourceList.forEach((r: any) => { if (r && r.id) mergedMap.set(r.id, r); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetResources(merged);
-        localStorage.setItem('garf_resources', JSON.stringify(merged));
-
-        // Self-heal: upload local-only resources
-        const dbIds = new Set(resourceList.map((r: any) => r.id));
-        localResources.forEach(r => {
-          if (r && r.id && !dbIds.has(r.id)) {
-            saveResourceToSupabase(r);
-          }
-        });
-      }
-
-      if (slotList) {
-        const localSaved = localStorage.getItem('garf_slots');
-        let localSlots: Slot[] = [];
-        if (localSaved) {
-          try { localSlots = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, Slot>();
-        localSlots.forEach(s => { if (s && s.id) mergedMap.set(s.id, s); });
-        slotList.forEach((s: any) => { if (s && s.id) mergedMap.set(s.id, s); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetSlots(merged);
-        localStorage.setItem('garf_slots', JSON.stringify(merged));
-
-        // Self-heal: upload local-only slots
-        const dbIds = new Set(slotList.map((s: any) => s.id));
-        localSlots.forEach(s => {
-          if (s && s.id && !dbIds.has(s.id)) {
-            saveSlotToSupabase(s);
-          }
-        });
-      }
-
-      if (bookingList) {
-        const localSaved = localStorage.getItem('garf_bookings');
-        let localBookings: Booking[] = [];
-        if (localSaved) {
-          try { localBookings = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, Booking>();
-        localBookings.forEach(b => { if (b && b.id) mergedMap.set(b.id, b); });
-        bookingList.forEach((b: any) => { if (b && b.id) mergedMap.set(b.id, b); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetBookings(merged);
-        localStorage.setItem('garf_bookings', JSON.stringify(merged));
-
-        // Self-heal: upload local-only bookings
-        const dbIds = new Set(bookingList.map((b: any) => b.id));
-        localBookings.forEach(b => {
-          if (b && b.id && !dbIds.has(b.id)) {
-            saveBookingToSupabase(b);
-          }
-        });
-      }
+      // Browser storage is only a cache; database rows are authoritative.
+      localStorage.setItem('garf_venues', JSON.stringify(venueRows));
+      localStorage.setItem('garf_resources', JSON.stringify(resourceRows));
+      localStorage.setItem('garf_slots', JSON.stringify(slotRows));
+      localStorage.setItem('garf_bookings', JSON.stringify(bookingRows));
     } catch (err: any) {
       console.error('Manual database sync failed:', err);
       throw err;
     }
   };
-
   const resetAllAppData = async () => {
     try {
       await fetch('/api/data/reset', { method: 'POST' });
