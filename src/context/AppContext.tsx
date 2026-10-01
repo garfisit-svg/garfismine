@@ -681,6 +681,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           full_name: profile.full_name || 'User',
           email: profile.email || '',
           phone: profile.phone || '',
+          upi_id: profile.upi_id || null,
           avatar_url: profile.avatar_url || '',
           role: profile.role || 'customer',
           garf_coins: profile.garf_coins ?? 0,
