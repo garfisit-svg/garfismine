@@ -186,6 +186,31 @@ const getOffsetDateString = (offsetDays: number) => {
   return d.toISOString().split('T')[0];
 };
 
+const fetchAllSupabaseRows = async (createPageQuery: (from: number, to: number) => any): Promise<any[]> => {
+  const pageSize = 1000;
+  const rows: any[] = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await createPageQuery(from, from + pageSize - 1);
+    if (error) throw error;
+
+    const page = (data || []) as any[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+};
+
+const insertSupabaseRowsInBatches = async (
+  rows: any[],
+  insertBatch: (batch: any[]) => any,
+  batchSize = 250
+) => {
+  for (let from = 0; from < rows.length; from += batchSize) {
+    const { error } = await insertBatch(rows.slice(from, from + batchSize));
+    if (error) throw error;
+  }
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // One-time purge of old seeded demo data so we start fresh and ready for real venues!
   const PURGE_KEY = 'garf_purged_dummy_data_v2';
@@ -410,82 +435,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Load profiles from Supabase on mount if active
   useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    let active = true;
     const loadSupabaseProfiles = async () => {
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const { data, error } = await supabase.from('profiles').select('*');
-          if (data && !error) {
-            // Map DB profiles by ID and normalized email
-            const dbProfilesById = new Map<string, any>();
-            const dbProfilesByEmail = new Map<string, any>();
-            data.forEach((p: any) => {
-              if (p && p.id) {
-                dbProfilesById.set(p.id, p);
-                if (p.email) {
-                  dbProfilesByEmail.set(p.email.toLowerCase().trim(), p);
-                }
-              }
-            });
+      try {
+        const profileList = await fetchAllSupabaseRows((from, to) =>
+          supabase.from('profiles').select('*').range(from, to)
+        );
+        if (!active) return;
 
-            // Local profiles
-            const localSaved = localStorage.getItem('garf_profiles');
-            let localProfiles: Profile[] = [];
-            if (localSaved) {
-              try {
-                localProfiles = JSON.parse(localSaved);
-              } catch (e) {
-                console.error('Error parsing local profiles during merge:', e);
-              }
-            }
-
-            const combinedMap = new Map<string, Profile>();
-
-            // 1. Keep non-conflicting local profiles (e.g. offline created users that don't collide with DB)
-            localProfiles.forEach(p => {
-              if (p && p.id) {
-                const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-                if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
-                  combinedMap.set(p.id, p);
-                }
-              }
-            });
-            
-            // 2. Add all authoritative DB profiles
-            data.forEach((p: any) => {
-              if (p && p.id) {
-                const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-                const matchingLocal = localProfiles.find(lp => lp && (lp.id === p.id || (normEmail && lp.email?.toLowerCase().trim() === normEmail)));
-                combinedMap.set(p.id, {
-                  ...matchingLocal,
-                  ...p,
-                  id: p.id,
-                  emailVerified: p.emailVerified ?? matchingLocal?.emailVerified ?? true
-                });
-              }
-            });
-
-            const mergedList = Array.from(combinedMap.values());
-            rawSetProfiles(mergedList);
-            localStorage.setItem('garf_profiles', JSON.stringify(mergedList));
-
-            // Align currentUser if they were logged in under a mock ID that now has a DB UUID
-            if (currentUser && currentUser.email) {
-              const currentEmail = currentUser.email.toLowerCase().trim();
-              const dbMatch = dbProfilesByEmail.get(currentEmail);
-              if (dbMatch && currentUser.id !== dbMatch.id) {
-                const alignedUser = { ...currentUser, ...dbMatch, id: dbMatch.id };
-                setCurrentUser(alignedUser);
-                localStorage.setItem('garf_current_user', JSON.stringify(alignedUser));
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Failed to sync profiles from Supabase:', err);
-        }
+        rawSetProfiles(profileList);
+        localStorage.setItem('garf_profiles', JSON.stringify(profileList));
+      } catch (err) {
+        console.error('Failed to sync profiles from Supabase:', err);
       }
     };
 
-    loadSupabaseProfiles();
+    void loadSupabaseProfiles();
+    return () => { active = false; };
   }, []);
 
   // Restore identity only from the persisted Supabase Auth session, never from a
@@ -515,7 +483,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       const { password: _password, resetToken: _resetToken, resetTokenExpires: _resetTokenExpires, ...safeProfile } = data as any;
       const profile = safeProfile as Profile;
-      setProfiles(prev => [...prev.filter(p => p.id !== profile.id), profile]);
+      rawSetProfiles(prev => [...prev.filter(p => p.id !== profile.id), profile]);
       setCurrentUser(profile);
       localStorage.setItem('garf_current_user', JSON.stringify(profile));
     };
@@ -543,232 +511,175 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Load venues, resources, slots, and bookings from Supabase on mount if active, and subscribe to real-time events
+  // Load venues, resources, slots, and bookings from Supabase for the active identity.
+  // The authenticated role changes what the user is allowed to see, so reload after
+  // Supabase restores or changes the session.
   useEffect(() => {
-    if (isSupabaseConfigured && supabase) {
-      // Load venues
-      const loadVenues = async () => {
-        try {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    let active = true;
+    let initialSnapshotApplied = false;
+    const pendingRealtimeEvents: Array<{ table: string; payload: any }> = [];
+
+    rawSetVenues([]);
+    rawSetResources([]);
+    rawSetSlots([]);
+    rawSetBookings([]);
+    localStorage.setItem('garf_venues', '[]');
+    localStorage.setItem('garf_resources', '[]');
+    localStorage.setItem('garf_slots', '[]');
+    localStorage.setItem('garf_bookings', '[]');
+
+    const canViewVenue = (venue: Venue) =>
+      currentUser?.role === 'admin' ||
+      venue.status === 'approved' ||
+      ((currentUser?.role === 'owner' || currentUser?.role === 'owner_pending') &&
+        venue.owner_id === currentUser.id);
+
+    const upsertRealtimeRow = <T extends { id: string }>(
+      setter: React.Dispatch<React.SetStateAction<T[]>>,
+      storageKey: string,
+      item: T
+    ) => {
+      setter(prev => {
+        const updated = prev.some(row => row.id === item.id)
+          ? prev.map(row => row.id === item.id ? item : row)
+          : [...prev, item];
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+        return updated;
+      });
+    };
+
+    const removeRealtimeRow = <T extends { id: string }>(
+      setter: React.Dispatch<React.SetStateAction<T[]>>,
+      storageKey: string,
+      id: string
+    ) => {
+      setter(prev => {
+        const updated = prev.filter(row => row.id !== id);
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+        return updated;
+      });
+    };
+
+    const applyRealtimeEvent = (table: string, payload: any) => {
+      if (payload.eventType === 'DELETE') {
+        const id = payload.old?.id;
+        if (!id) return;
+        if (table === 'gaming_cafes') removeRealtimeRow(rawSetVenues, 'garf_venues', id);
+        if (table === 'venue_resources') removeRealtimeRow(rawSetResources, 'garf_resources', id);
+        if (table === 'slots') removeRealtimeRow(rawSetSlots, 'garf_slots', id);
+        if (table === 'bookings') removeRealtimeRow(rawSetBookings, 'garf_bookings', id);
+        if (table === 'profiles') {
+          rawSetProfiles(prev => {
+            const updated = prev.filter(profile => profile.id !== id);
+            localStorage.setItem('garf_profiles', JSON.stringify(updated));
+            return updated;
+          });
+        }
+        return;
+      }
+
+      const item = payload.new;
+      if (!item?.id) return;
+      if (table === 'gaming_cafes') {
+        const venue = item as Venue;
+        if (canViewVenue(venue)) {
+          upsertRealtimeRow(rawSetVenues, 'garf_venues', venue);
+        } else {
+          removeRealtimeRow(rawSetVenues, 'garf_venues', venue.id);
+        }
+      }
+      if (table === 'venue_resources') upsertRealtimeRow(rawSetResources, 'garf_resources', item as VenueResource);
+      if (table === 'slots') upsertRealtimeRow(rawSetSlots, 'garf_slots', item as Slot);
+      if (table === 'bookings') upsertRealtimeRow(rawSetBookings, 'garf_bookings', item as Booking);
+      if (table === 'profiles') {
+        rawSetProfiles(prev => {
+          const profile = item as Profile;
+          const updated = prev.some(existing => existing.id === profile.id)
+            ? prev.map(existing => existing.id === profile.id ? profile : existing)
+            : [...prev, profile];
+          localStorage.setItem('garf_profiles', JSON.stringify(updated));
+          return updated;
+        });
+      }
+    };
+
+    const receiveRealtimeEvent = (table: string, payload: any) => {
+      if (!active) return;
+      if (!initialSnapshotApplied) {
+        pendingRealtimeEvents.push({ table, payload });
+        return;
+      }
+      applyRealtimeEvent(table, payload);
+    };
+
+    const applyPendingRealtimeEvents = () => {
+      initialSnapshotApplied = true;
+      pendingRealtimeEvents.splice(0).forEach(({ table, payload }) => applyRealtimeEvent(table, payload));
+    };
+
+    const loadInitialData = async () => {
+      try {
+        const venueRows = await fetchAllSupabaseRows((from, to) => {
           let query = supabase.from('gaming_cafes').select('*');
-          const isAdminUser = currentUser?.role === 'admin';
-          if (!isAdminUser) {
+          if (currentUser?.role !== 'admin') {
             if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
               query = query.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
             } else {
               query = query.eq('status', 'approved');
             }
           }
-          const { data, error } = await query;
-          if (data && !error) {
-            rawSetVenues(prev => {
-              const localSaved = localStorage.getItem('garf_venues');
-              let localVenues: Venue[] = [];
-              if (localSaved) {
-                try { localVenues = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, Venue>();
-              localVenues.forEach(v => { if (v && v.id) combinedMap.set(v.id, v); });
-              data.forEach((v: any) => { if (v && v.id) combinedMap.set(v.id, v); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_venues', JSON.stringify(merged));
-              return merged;
-            });
-          }
-        } catch (err) {
-          console.error('Error fetching venues from Supabase on mount:', err);
-        }
-      };
+          return query.range(from, to);
+        });
+        const [resourceRows, slotRows, bookingRows] = await Promise.all([
+          fetchAllSupabaseRows((from, to) => supabase.from('venue_resources').select('*').range(from, to)),
+          fetchAllSupabaseRows((from, to) => supabase.from('slots').select('*').range(from, to)),
+          fetchAllSupabaseRows((from, to) => supabase.from('bookings').select('*').range(from, to))
+        ]);
+        if (!active) return;
 
-      // Load resources
-      const loadResources = async () => {
-        try {
-          const { data, error } = await supabase.from('venue_resources').select('*');
-          if (data && !error) {
-            rawSetResources(prev => {
-              const localSaved = localStorage.getItem('garf_resources');
-              let localResources: VenueResource[] = [];
-              if (localSaved) {
-                try { localResources = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, VenueResource>();
-              localResources.forEach(r => { if (r && r.id) combinedMap.set(r.id, r); });
-              data.forEach((r: any) => { if (r && r.id) combinedMap.set(r.id, r); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_resources', JSON.stringify(merged));
-              return merged;
-            });
-          }
-        } catch (err) {
-          console.error('Error fetching venue_resources from Supabase on mount:', err);
-        }
-      };
+        rawSetVenues(venueRows);
+        rawSetResources(resourceRows);
+        rawSetSlots(slotRows);
+        rawSetBookings(bookingRows);
+        localStorage.setItem('garf_venues', JSON.stringify(venueRows));
+        localStorage.setItem('garf_resources', JSON.stringify(resourceRows));
+        localStorage.setItem('garf_slots', JSON.stringify(slotRows));
+        localStorage.setItem('garf_bookings', JSON.stringify(bookingRows));
+        applyPendingRealtimeEvents();
+      } catch (err) {
+        if (active) console.error('Error fetching application data from Supabase:', err);
+      } finally {
+        if (active && !initialSnapshotApplied) applyPendingRealtimeEvents();
+      }
+    };
 
-      // Load slots
-      const loadSlots = async () => {
-        try {
-          const { data, error } = await supabase.from('slots').select('*');
-          if (data && !error) {
-            rawSetSlots(prev => {
-              const localSaved = localStorage.getItem('garf_slots');
-              let localSlots: Slot[] = [];
-              if (localSaved) {
-                try { localSlots = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, Slot>();
-              localSlots.forEach(s => { if (s && s.id) combinedMap.set(s.id, s); });
-              data.forEach((s: any) => { if (s && s.id) combinedMap.set(s.id, s); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_slots', JSON.stringify(merged));
-              return merged;
-            });
-          }
-        } catch (err) {
-          console.error('Error fetching slots from Supabase on mount:', err);
-        }
-      };
+    const channels = [
+      supabase.channel('public-venues-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'gaming_cafes' }, payload => receiveRealtimeEvent('gaming_cafes', payload))
+        .subscribe(),
+      supabase.channel('public-resources-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'venue_resources' }, payload => receiveRealtimeEvent('venue_resources', payload))
+        .subscribe(),
+      supabase.channel('public-slots-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, payload => receiveRealtimeEvent('slots', payload))
+        .subscribe(),
+      supabase.channel('public-bookings-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, payload => receiveRealtimeEvent('bookings', payload))
+        .subscribe(),
+      supabase.channel('public-profiles-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => receiveRealtimeEvent('profiles', payload))
+        .subscribe()
+    ];
 
-      // Load bookings
-      const loadBookings = async () => {
-        try {
-          const { data, error } = await supabase.from('bookings').select('*');
-          if (data && !error) {
-            rawSetBookings(prev => {
-              const localSaved = localStorage.getItem('garf_bookings');
-              let localBookings: Booking[] = [];
-              if (localSaved) {
-                try { localBookings = JSON.parse(localSaved); } catch(e) {}
-              }
-              const combinedMap = new Map<string, Booking>();
-              localBookings.forEach(b => { if (b && b.id) combinedMap.set(b.id, b); });
-              data.forEach((b: any) => { if (b && b.id) combinedMap.set(b.id, b); });
-              const merged = Array.from(combinedMap.values());
-              localStorage.setItem('garf_bookings', JSON.stringify(merged));
-              return merged;
-            });
-          }
-        } catch (err) {
-          console.error('Error fetching bookings from Supabase on mount:', err);
-        }
-      };
+    void loadInitialData();
 
-      loadVenues();
-      loadResources();
-      loadSlots();
-      loadBookings();
-
-      // Subscribe to real-time postgres changes
-      const channels = [
-        supabase.channel('public-venues-sync')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'gaming_cafes' }, payload => {
-            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-              const item = payload.new as Venue;
-              rawSetVenues(prev => {
-                const updated = prev.some(v => v.id === item.id)
-                  ? prev.map(v => v.id === item.id ? item : v)
-                  : [...prev, item];
-                localStorage.setItem('garf_venues', JSON.stringify(updated));
-                return updated;
-              });
-            } else if (payload.eventType === 'DELETE') {
-              const oldId = payload.old.id;
-              rawSetVenues(prev => {
-                const updated = prev.filter(v => v.id !== oldId);
-                localStorage.setItem('garf_venues', JSON.stringify(updated));
-                return updated;
-              });
-            }
-          }).subscribe(),
-
-        supabase.channel('public-resources-sync')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'venue_resources' }, payload => {
-            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-              const item = payload.new as VenueResource;
-              rawSetResources(prev => {
-                const updated = prev.some(r => r.id === item.id)
-                  ? prev.map(r => r.id === item.id ? item : r)
-                  : [...prev, item];
-                localStorage.setItem('garf_resources', JSON.stringify(updated));
-                return updated;
-              });
-            } else if (payload.eventType === 'DELETE') {
-              const oldId = payload.old.id;
-              rawSetResources(prev => {
-                const updated = prev.filter(r => r.id !== oldId);
-                localStorage.setItem('garf_resources', JSON.stringify(updated));
-                return updated;
-              });
-            }
-          }).subscribe(),
-
-        supabase.channel('public-slots-sync')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, payload => {
-            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-              const item = payload.new as Slot;
-              rawSetSlots(prev => {
-                const updated = prev.some(s => s.id === item.id)
-                  ? prev.map(s => s.id === item.id ? item : s)
-                  : [...prev, item];
-                localStorage.setItem('garf_slots', JSON.stringify(updated));
-                return updated;
-              });
-            } else if (payload.eventType === 'DELETE') {
-              const oldId = payload.old.id;
-              rawSetSlots(prev => {
-                const updated = prev.filter(s => s.id !== oldId);
-                localStorage.setItem('garf_slots', JSON.stringify(updated));
-                return updated;
-              });
-            }
-          }).subscribe(),
-
-        supabase.channel('public-bookings-sync')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, payload => {
-            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-              const item = payload.new as Booking;
-              rawSetBookings(prev => {
-                const updated = prev.some(b => b.id === item.id)
-                  ? prev.map(b => b.id === item.id ? item : b)
-                  : [...prev, item];
-                localStorage.setItem('garf_bookings', JSON.stringify(updated));
-                return updated;
-              });
-            } else if (payload.eventType === 'DELETE') {
-              const oldId = payload.old.id;
-              rawSetBookings(prev => {
-                const updated = prev.filter(b => b.id !== oldId);
-                localStorage.setItem('garf_bookings', JSON.stringify(updated));
-                return updated;
-              });
-            }
-          }).subscribe(),
-
-        supabase.channel('public-profiles-sync')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
-            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-              const item = payload.new as Profile;
-              setProfiles(prev => {
-                const updated = prev.some(p => p.id === item.id)
-                  ? prev.map(p => p.id === item.id ? item : p)
-                  : [...prev, item];
-                localStorage.setItem('garf_profiles', JSON.stringify(updated));
-                return updated;
-              });
-            } else if (payload.eventType === 'DELETE') {
-              const oldId = payload.old.id;
-              setProfiles(prev => {
-                const updated = prev.filter(p => p.id !== oldId);
-                localStorage.setItem('garf_profiles', JSON.stringify(updated));
-                return updated;
-              });
-            }
-          }).subscribe(),
-      ];
-
-      return () => {
-        channels.forEach(ch => supabase.removeChannel(ch));
-      };
-    }
-  }, []);
+    return () => {
+      active = false;
+      channels.forEach(channel => supabase.removeChannel(channel));
+    };
+  }, [currentUser?.id, currentUser?.role]);
 
   const saveProfileToSupabase = async (profile: Profile) => {
     if (isSupabaseConfigured && supabase) {
@@ -1107,31 +1018,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const [venues, rawSetVenues] = useState<Venue[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem('garf_venues');
-    if (saved) return JSON.parse(saved);
-    const seed: Venue[] = [];
-    return seed;
+    if (saved) {
+      try { return JSON.parse(saved); } catch (error) { return []; }
+    }
+    return [];
   });
 
   const [resources, rawSetResources] = useState<VenueResource[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem('garf_resources');
-    if (saved) return JSON.parse(saved);
-    const seed: VenueResource[] = [];
-    return seed;
+    if (saved) {
+      try { return JSON.parse(saved); } catch (error) { return []; }
+    }
+    return [];
   });
 
   // Unique slots state which gets populated for current +7 days automatically
   const [slots, rawSetSlots] = useState<Slot[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem('garf_slots');
-    if (saved) return JSON.parse(saved);
-    return []; // Will build dynamically below!
+    if (saved) {
+      try { return JSON.parse(saved); } catch (error) { return []; }
+    }
+    return [];
   });
 
   const [bookings, rawSetBookings] = useState<Booking[]>(() => {
+    if (isSupabaseConfigured) return [];
     const saved = localStorage.getItem('garf_bookings');
-    if (saved) return JSON.parse(saved);
-    const seed: Booking[] = [];
-    return seed;
+    if (saved) {
+      try { return JSON.parse(saved); } catch (error) { return []; }
+    }
+    return [];
   });
 
   const setVenues = (val: Venue[] | ((prev: Venue[]) => Venue[])) => {
@@ -2651,8 +2571,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             sort_order: res.sort_order,
             created_at: res.created_at
           }));
-          const { error } = await supabase.from('venue_resources').insert(resourcesPayload);
-          if (error) throw new Error(`Venue resources could not be saved: ${error.message}`);
+          try {
+            await insertSupabaseRowsInBatches(resourcesPayload, batch =>
+              supabase.from('venue_resources').insert(batch)
+            );
+          } catch (error: any) {
+            throw new Error(`Venue resources could not be saved: ${error?.message || 'Unknown database error'}`);
+          }
         }
 
         if (allNewSlots.length > 0) {
@@ -2670,8 +2595,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             created_at: slot.created_at,
             updated_at: slot.updated_at
           }));
-          const { error } = await supabase.from('slots').insert(slotsPayload);
-          if (error) throw new Error(`Availability could not be initialized: ${error.message}`);
+          try {
+            await insertSupabaseRowsInBatches(slotsPayload, batch =>
+              supabase.from('slots').insert(batch)
+            );
+          } catch (error: any) {
+            throw new Error(`Availability could not be initialized: ${error?.message || 'Unknown database error'}`);
+          }
         }
       } catch (error: any) {
         // Roll back the parent row; FK cascades remove any resources/slots already
@@ -5642,188 +5572,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw new Error('Supabase is not configured. Real-time sync is unavailable in emulator mode.');
     }
 
-    try {
-      // 1. Fetch profiles
-      const { data: profileList, error: profileErr } = await supabase.from('profiles').select('*');
-      if (profileErr) throw new Error(`Profiles: ${profileErr.message}`);
+    const profileList = await fetchAllSupabaseRows((from, to) =>
+      supabase.from('profiles').select('*').range(from, to)
+    );
 
-      // 2. Fetch venues
-      let venueQuery = supabase.from('gaming_cafes').select('*');
-      const isAdminUser = currentUser?.role === 'admin';
-      if (!isAdminUser) {
+    const venueList = await fetchAllSupabaseRows((from, to) => {
+      let query = supabase.from('gaming_cafes').select('*');
+      if (currentUser?.role !== 'admin') {
         if (currentUser && (currentUser.role === 'owner' || currentUser.role === 'owner_pending')) {
-          venueQuery = venueQuery.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
+          query = query.or(`status.eq.approved,owner_id.eq.${currentUser.id}`);
         } else {
-          venueQuery = venueQuery.eq('status', 'approved');
+          query = query.eq('status', 'approved');
         }
       }
-      const { data: venueList, error: venueErr } = await venueQuery;
-      if (venueErr) throw new Error(`Venues: ${venueErr.message}`);
+      return query.range(from, to);
+    });
 
-      // 3. Fetch resources
-      const { data: resourceList, error: resourceErr } = await supabase.from('venue_resources').select('*');
-      if (resourceErr) throw new Error(`Resources: ${resourceErr.message}`);
+    const [resourceList, slotList, bookingList] = await Promise.all([
+      fetchAllSupabaseRows((from, to) => supabase.from('venue_resources').select('*').range(from, to)),
+      fetchAllSupabaseRows((from, to) => supabase.from('slots').select('*').range(from, to)),
+      fetchAllSupabaseRows((from, to) => supabase.from('bookings').select('*').range(from, to))
+    ]);
 
-      // 4. Fetch slots
-      const { data: slotList, error: slotErr } = await supabase.from('slots').select('*');
-      if (slotErr) throw new Error(`Slots: ${slotErr.message}`);
-
-      // 5. Fetch bookings
-      const { data: bookingList, error: bookingErr } = await supabase.from('bookings').select('*');
-      if (bookingErr) throw new Error(`Bookings: ${bookingErr.message}`);
-
-      if (profileList) {
-        const localSaved = localStorage.getItem('garf_profiles');
-        let localProfs: Profile[] = [];
-        if (localSaved) {
-          try { localProfs = JSON.parse(localSaved); } catch(e) {}
-        }
-
-        const dbProfilesById = new Map<string, any>();
-        const dbProfilesByEmail = new Map<string, any>();
-        profileList.forEach((p: any) => {
-          if (p && p.id) {
-            dbProfilesById.set(p.id, p);
-            if (p.email) {
-              dbProfilesByEmail.set(p.email.toLowerCase().trim(), p);
-            }
-          }
-        });
-
-        const mergedMap = new Map<string, Profile>();
-        localProfs.forEach(p => {
-          if (p && p.id) {
-            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-            if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
-              mergedMap.set(p.id, p);
-            }
-          }
-        });
-        profileList.forEach((p: any) => {
-          if (p && p.id) {
-            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-            const matchingLocal = localProfs.find(lp => lp && (lp.id === p.id || (normEmail && lp.email?.toLowerCase().trim() === normEmail)));
-            mergedMap.set(p.id, {
-              ...matchingLocal,
-              ...p,
-              id: p.id,
-              emailVerified: p.emailVerified ?? matchingLocal?.emailVerified ?? true
-            });
-          }
-        });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetProfiles(merged);
-        localStorage.setItem('garf_profiles', JSON.stringify(merged));
-
-        // Self-heal: upload local-only, non-simulated profiles that don't collide with DB
-        localProfs.forEach(p => {
-          if (p && p.id) {
-            const normEmail = p.email ? p.email.toLowerCase().trim() : '';
-            if (!dbProfilesById.has(p.id) && (!normEmail || !dbProfilesByEmail.has(normEmail))) {
-              if (!p.id.startsWith('user-') && !p.id.startsWith('mock-')) {
-                saveProfileToSupabase(p);
-              }
-            }
-          }
-        });
-      }
-
-      if (venueList) {
-        const localSaved = localStorage.getItem('garf_venues');
-        let localVenues: Venue[] = [];
-        if (localSaved) {
-          try { localVenues = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, Venue>();
-        localVenues.forEach(v => { if (v && v.id) mergedMap.set(v.id, v); });
-        venueList.forEach((v: any) => { if (v && v.id) mergedMap.set(v.id, v); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetVenues(merged);
-        localStorage.setItem('garf_venues', JSON.stringify(merged));
-
-        // Self-heal: upload local-only venues to Supabase
-        const dbIds = new Set(venueList.map((v: any) => v.id));
-        localVenues.forEach(v => {
-          if (v && v.id && !dbIds.has(v.id)) {
-            saveVenueToSupabase(v);
-          }
-        });
-      }
-
-      if (resourceList) {
-        const localSaved = localStorage.getItem('garf_resources');
-        let localResources: VenueResource[] = [];
-        if (localSaved) {
-          try { localResources = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, VenueResource>();
-        localResources.forEach(r => { if (r && r.id) mergedMap.set(r.id, r); });
-        resourceList.forEach((r: any) => { if (r && r.id) mergedMap.set(r.id, r); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetResources(merged);
-        localStorage.setItem('garf_resources', JSON.stringify(merged));
-
-        // Self-heal: upload local-only resources
-        const dbIds = new Set(resourceList.map((r: any) => r.id));
-        localResources.forEach(r => {
-          if (r && r.id && !dbIds.has(r.id)) {
-            saveResourceToSupabase(r);
-          }
-        });
-      }
-
-      if (slotList) {
-        const localSaved = localStorage.getItem('garf_slots');
-        let localSlots: Slot[] = [];
-        if (localSaved) {
-          try { localSlots = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, Slot>();
-        localSlots.forEach(s => { if (s && s.id) mergedMap.set(s.id, s); });
-        slotList.forEach((s: any) => { if (s && s.id) mergedMap.set(s.id, s); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetSlots(merged);
-        localStorage.setItem('garf_slots', JSON.stringify(merged));
-
-        // Self-heal: upload local-only slots
-        const dbIds = new Set(slotList.map((s: any) => s.id));
-        localSlots.forEach(s => {
-          if (s && s.id && !dbIds.has(s.id)) {
-            saveSlotToSupabase(s);
-          }
-        });
-      }
-
-      if (bookingList) {
-        const localSaved = localStorage.getItem('garf_bookings');
-        let localBookings: Booking[] = [];
-        if (localSaved) {
-          try { localBookings = JSON.parse(localSaved); } catch(e) {}
-        }
-        const mergedMap = new Map<string, Booking>();
-        localBookings.forEach(b => { if (b && b.id) mergedMap.set(b.id, b); });
-        bookingList.forEach((b: any) => { if (b && b.id) mergedMap.set(b.id, b); });
-        const merged = Array.from(mergedMap.values());
-        
-        rawSetBookings(merged);
-        localStorage.setItem('garf_bookings', JSON.stringify(merged));
-
-        // Self-heal: upload local-only bookings
-        const dbIds = new Set(bookingList.map((b: any) => b.id));
-        localBookings.forEach(b => {
-          if (b && b.id && !dbIds.has(b.id)) {
-            saveBookingToSupabase(b);
-          }
-        });
-      }
-    } catch (err: any) {
-      console.error('Manual database sync failed:', err);
-      throw err;
-    }
+    // Replace the snapshot instead of merging browser cache into server data. This keeps
+    // admin approvals, owner submissions, and customer availability consistent.
+    rawSetProfiles(profileList);
+    rawSetVenues(venueList);
+    rawSetResources(resourceList);
+    rawSetSlots(slotList);
+    rawSetBookings(bookingList);
+    localStorage.setItem('garf_profiles', JSON.stringify(profileList));
+    localStorage.setItem('garf_venues', JSON.stringify(venueList));
+    localStorage.setItem('garf_resources', JSON.stringify(resourceList));
+    localStorage.setItem('garf_slots', JSON.stringify(slotList));
+    localStorage.setItem('garf_bookings', JSON.stringify(bookingList));
   };
 
   const resetAllAppData = async () => {
