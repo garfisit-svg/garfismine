@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   full_name TEXT NOT NULL,
   email TEXT UNIQUE,
   phone TEXT,
+  upi_id TEXT,
   avatar_url TEXT,
   role TEXT NOT NULL CHECK (role IN ('customer', 'owner', 'admin', 'owner_pending')),
   garf_coins INTEGER DEFAULT 0 NOT NULL,
