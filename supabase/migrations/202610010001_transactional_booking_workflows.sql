@@ -18,6 +18,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS bookings_upi_transaction_id_unique
 -- Venue operators can see the minimum customer profile needed to manage their
 -- own bookings. Customers and administrators retain their existing access.
 DROP POLICY IF EXISTS profiles_read_booking_customers ON public.profiles;
+ALTER TABLE public.coin_transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS coin_transactions_read_self_or_admin ON public.coin_transactions;
+CREATE POLICY coin_transactions_read_self_or_admin
+  ON public.coin_transactions FOR SELECT TO authenticated
+  USING (user_id = auth.uid()::text OR public.is_current_user_admin());
 CREATE POLICY profiles_read_booking_customers
   ON public.profiles FOR SELECT TO authenticated
   USING (EXISTS (
@@ -465,8 +470,7 @@ BEGIN
      OR booking_row.booking_status <> 'held'
      OR booking_row.payment_status <> 'pending'
      OR nullif(btrim(booking_row.upi_transaction_id), '') IS NULL
-     OR booking_row.hold_expires_at IS NULL
-     OR booking_row.hold_expires_at <= now() THEN
+ THEN
     RAISE EXCEPTION 'This booking has no verifiable active payment reference.';
   END IF;
 
