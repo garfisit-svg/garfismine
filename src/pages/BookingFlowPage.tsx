@@ -99,7 +99,16 @@ export const BookingFlowPage: React.FC = () => {
   }, [currentUser]);
 
   useEffect(() => {
-    if (step === 3 && confirmedBooking?.payment_method === 'pay_at_venue') {
+    if (confirmedBooking) {
+      const latestBooking = bookings.find(booking => booking.id === confirmedBooking.id);
+      if (latestBooking && JSON.stringify(latestBooking) !== JSON.stringify(confirmedBooking)) {
+        setConfirmedBooking(latestBooking);
+      }
+    }
+  }, [bookings, confirmedBooking?.id]);
+
+  useEffect(() => {
+    if (step === 3 && confirmedBooking?.payment_method === 'pay_at_venue' && confirmedBooking.booking_status === 'held') {
       const handle = setInterval(() => {
         setCountdownSeconds(prev => Math.max(0, prev - 1));
       }, 1000);
@@ -270,19 +279,19 @@ export const BookingFlowPage: React.FC = () => {
 
       // 2. Perform payment completions
       if (paymentMethod === 'online') {
-        // online completion delay simulator (1.5s)
-        await new Promise(res => setTimeout(res, 1500));
-        
-        // Confirm booking as paid online
-        const confirmedResult = await confirmOnlineBooking(bookingHold.id, upiTxnId);
-        setConfirmedBooking(confirmedResult);
-        toast.success('Online Payment complete! Slot confirmed 🎉');
+        const submittedBooking = await confirmOnlineBooking(bookingHold.id, upiTxnId);
+        setConfirmedBooking(submittedBooking);
+        toast.success(submittedBooking.booking_status === 'confirmed'
+          ? 'Payment verified and booking confirmed.'
+          : 'Payment reference submitted. The venue must verify it before your booking is confirmed.');
       } else {
         // pay-at-venue transitions held
         setConfirmedBooking(bookingHold);
         
-        // Setup initial 15-min countdown
-        setCountdownSeconds(900); // 15 mins (Rule 2)
+        // Count down to the database hold deadline (slot start + 15 minutes).
+        setCountdownSeconds(bookingHold.hold_expires_at
+          ? Math.max(0, Math.ceil((new Date(bookingHold.hold_expires_at).getTime() - Date.now()) / 1000))
+          : 0);
         toast.success('Pay-At-Venue Hold activated! Arrive on time.');
       }
 
@@ -568,11 +577,11 @@ export const BookingFlowPage: React.FC = () => {
                   <div className="space-y-2">
                     <div className="flex gap-2 items-center text-brand-purple">
                       <CreditCard className="h-5 w-5" />
-                      <h4 className="font-bold text-base text-white">Pay Online Securely</h4>
+                      <h4 className="font-bold text-base text-white">Pay by UPI</h4>
                     </div>
                     <ul className="text-xs text-text-secondary space-y-1.5 leading-relaxed">
-                      <li>• Instant slot lock-id (zero hold wait)</li>
-                      <li>• UPI, card, and digital networks secure</li>
+                      <li>• The slot is held while the venue checks your reference</li>
+                      <li>• Booking confirmation appears after the venue verifies payment</li>
                     </ul>
                   </div>
                 </div>
@@ -592,7 +601,7 @@ export const BookingFlowPage: React.FC = () => {
                   <div>
                     <h3 className="font-bold text-lg text-white font-display">Direct UPI Payment</h3>
                     <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
-                      To secure your slot, please make a single UPI payment of the total booking amount. The entire amount (including the ₹5 platform fee) will go directly to the arena owner's UPI address.
+                      Pay the displayed amount to the venue using UPI, then enter the transfer reference. The venue will check the transfer and confirm your booking. GARF does not process or automatically verify this transfer.
                     </p>
                   </div>
                 </div>
@@ -696,7 +705,7 @@ export const BookingFlowPage: React.FC = () => {
                           className="rounded text-brand-cyan bg-[#1A1A2E] border-[#2a2a3e] focus:ring-brand-cyan focus:ring-offset-0 h-4.5 w-4.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                         <span className="text-xs font-bold text-white select-none leading-tight">
-                          I have paid ₹{finalCheckoutAmount} and entered my correct reference
+                          I have paid ₹{finalCheckoutAmount} to the venue and entered the correct reference
                         </span>
                       </label>
                     </div>
@@ -796,14 +805,22 @@ export const BookingFlowPage: React.FC = () => {
       {step === 3 && confirmedBooking && (
         <div className="max-w-xl mx-auto space-y-8 font-sans">
           
-          {/* A. BRANDING CONFIRMED CAP */}
-          {confirmedBooking.payment_method === 'online' ? (
+          {/* A. BOOKING STATUS */}
+          {confirmedBooking.booking_status === 'confirmed' || confirmedBooking.booking_status === 'checked_in' || confirmedBooking.booking_status === 'completed' ? (
             <div className="text-center space-y-4">
               <div className="inline-flex p-4 bg-brand-green/10 border border-brand-green/20 rounded-full text-brand-green shadow-xl shadow-brand-green/5 animate-pulse">
                 <ShieldCheck className="h-10 w-10 text-brand-green" />
               </div>
               <h1 className="text-4xl font-display font-black text-white">Booking Confirmed! 🎉</h1>
-              <p className="text-text-secondary text-sm sm:text-base">Your gaming station hours matches are permanently locked now.</p>
+              <p className="text-text-secondary text-sm sm:text-base">Your booking is confirmed by the venue.</p>
+            </div>
+          ) : confirmedBooking.payment_method === 'online' ? (
+            <div className="text-center space-y-4">
+              <div className="inline-flex p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-full text-yellow-400 shadow-xl shadow-yellow-500/5">
+                <Clock className="h-10 w-10 text-yellow-400" />
+              </div>
+              <h1 className="text-4xl font-display font-black text-white">Payment Submitted</h1>
+              <p className="text-text-secondary text-sm sm:text-base">The venue is checking your transfer reference. This booking is not confirmed until the venue approves it.</p>
             </div>
           ) : (
             <div className="text-center space-y-4">
@@ -864,7 +881,7 @@ export const BookingFlowPage: React.FC = () => {
             </div>
 
             {/* QR CARD */}
-            {confirmedBooking.payment_method === 'online' && (
+            {confirmedBooking.booking_status !== 'held' && confirmedBooking.payment_method === 'online' && (
               <div className="pt-6 border-t border-border-dark flex flex-col items-center text-center space-y-4">
                 <div className="bg-white p-2 rounded-lg border-2 border-brand-purple w-32 h-32 flex items-center justify-center">
                   <img
