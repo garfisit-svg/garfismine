@@ -472,7 +472,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       const { password: _password, resetToken: _resetToken, resetTokenExpires: _resetTokenExpires, ...safeProfile } = data as any;
       const profile = safeProfile as Profile;
-      setProfiles(prev => [...prev.filter(p => p.id !== profile.id), profile]);
+      rawSetProfiles(prev => [...prev.filter(p => p.id !== profile.id), profile]);
       setCurrentUser(profile);
       localStorage.setItem('garf_current_user', JSON.stringify(profile));
     };
@@ -507,6 +507,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!isSupabaseConfigured || !supabase) return;
 
     let active = true;
+    let initialSnapshotApplied = false;
+    const pendingRealtimeEvents: Array<{ table: string; payload: any }> = [];
+
     rawSetVenues([]);
     rawSetResources([]);
     rawSetSlots([]);
@@ -521,6 +524,89 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       venue.status === 'approved' ||
       ((currentUser?.role === 'owner' || currentUser?.role === 'owner_pending') &&
         venue.owner_id === currentUser.id);
+
+    const upsertRealtimeRow = <T extends { id: string }>(
+      setter: React.Dispatch<React.SetStateAction<T[]>>,
+      storageKey: string,
+      item: T
+    ) => {
+      setter(prev => {
+        const updated = prev.some(row => row.id === item.id)
+          ? prev.map(row => row.id === item.id ? item : row)
+          : [...prev, item];
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+        return updated;
+      });
+    };
+
+    const removeRealtimeRow = <T extends { id: string }>(
+      setter: React.Dispatch<React.SetStateAction<T[]>>,
+      storageKey: string,
+      id: string
+    ) => {
+      setter(prev => {
+        const updated = prev.filter(row => row.id !== id);
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+        return updated;
+      });
+    };
+
+    const applyRealtimeEvent = (table: string, payload: any) => {
+      if (payload.eventType === 'DELETE') {
+        const id = payload.old?.id;
+        if (!id) return;
+        if (table === 'gaming_cafes') removeRealtimeRow(rawSetVenues, 'garf_venues', id);
+        if (table === 'venue_resources') removeRealtimeRow(rawSetResources, 'garf_resources', id);
+        if (table === 'slots') removeRealtimeRow(rawSetSlots, 'garf_slots', id);
+        if (table === 'bookings') removeRealtimeRow(rawSetBookings, 'garf_bookings', id);
+        if (table === 'profiles') {
+          rawSetProfiles(prev => {
+            const updated = prev.filter(profile => profile.id !== id);
+            localStorage.setItem('garf_profiles', JSON.stringify(updated));
+            return updated;
+          });
+        }
+        return;
+      }
+
+      const item = payload.new;
+      if (!item?.id) return;
+      if (table === 'gaming_cafes') {
+        const venue = item as Venue;
+        if (canViewVenue(venue)) {
+          upsertRealtimeRow(rawSetVenues, 'garf_venues', venue);
+        } else {
+          removeRealtimeRow(rawSetVenues, 'garf_venues', venue.id);
+        }
+      }
+      if (table === 'venue_resources') upsertRealtimeRow(rawSetResources, 'garf_resources', item as VenueResource);
+      if (table === 'slots') upsertRealtimeRow(rawSetSlots, 'garf_slots', item as Slot);
+      if (table === 'bookings') upsertRealtimeRow(rawSetBookings, 'garf_bookings', item as Booking);
+      if (table === 'profiles') {
+        rawSetProfiles(prev => {
+          const profile = item as Profile;
+          const updated = prev.some(existing => existing.id === profile.id)
+            ? prev.map(existing => existing.id === profile.id ? profile : existing)
+            : [...prev, profile];
+          localStorage.setItem('garf_profiles', JSON.stringify(updated));
+          return updated;
+        });
+      }
+    };
+
+    const receiveRealtimeEvent = (table: string, payload: any) => {
+      if (!active) return;
+      if (!initialSnapshotApplied) {
+        pendingRealtimeEvents.push({ table, payload });
+        return;
+      }
+      applyRealtimeEvent(table, payload);
+    };
+
+    const applyPendingRealtimeEvents = () => {
+      initialSnapshotApplied = true;
+      pendingRealtimeEvents.splice(0).forEach(({ table, payload }) => applyRealtimeEvent(table, payload));
+    };
 
     const loadInitialData = async () => {
       try {
@@ -550,104 +636,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         localStorage.setItem('garf_resources', JSON.stringify(resourceRows));
         localStorage.setItem('garf_slots', JSON.stringify(slotRows));
         localStorage.setItem('garf_bookings', JSON.stringify(bookingRows));
+        applyPendingRealtimeEvents();
       } catch (err) {
-        console.error('Error fetching application data from Supabase:', err);
+        if (active) console.error('Error fetching application data from Supabase:', err);
+      } finally {
+        if (active && !initialSnapshotApplied) applyPendingRealtimeEvents();
       }
-    };
-
-    void loadInitialData();
-
-    const upsertRealtimeRow = <T extends { id: string }>(
-      setter: React.Dispatch<React.SetStateAction<T[]>>,
-      storageKey: string,
-      item: T
-    ) => {
-      if (!active) return;
-      setter(prev => {
-        const updated = prev.some(row => row.id === item.id)
-          ? prev.map(row => row.id === item.id ? item : row)
-          : [...prev, item];
-        localStorage.setItem(storageKey, JSON.stringify(updated));
-        return updated;
-      });
-    };
-
-    const removeRealtimeRow = <T extends { id: string }>(
-      setter: React.Dispatch<React.SetStateAction<T[]>>,
-      storageKey: string,
-      id: string
-    ) => {
-      if (!active) return;
-      setter(prev => {
-        const updated = prev.filter(row => row.id !== id);
-        localStorage.setItem(storageKey, JSON.stringify(updated));
-        return updated;
-      });
     };
 
     const channels = [
       supabase.channel('public-venues-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'gaming_cafes' }, payload => {
-          if (payload.eventType === 'DELETE') {
-            removeRealtimeRow(rawSetVenues, 'garf_venues', payload.old.id);
-            return;
-          }
-          const item = payload.new as Venue;
-          if (canViewVenue(item)) {
-            upsertRealtimeRow(rawSetVenues, 'garf_venues', item);
-          } else {
-            removeRealtimeRow(rawSetVenues, 'garf_venues', item.id);
-          }
-        }).subscribe(),
-
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'gaming_cafes' }, payload => receiveRealtimeEvent('gaming_cafes', payload))
+        .subscribe(),
       supabase.channel('public-resources-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'venue_resources' }, payload => {
-          if (payload.eventType === 'DELETE') {
-            removeRealtimeRow(rawSetResources, 'garf_resources', payload.old.id);
-          } else {
-            upsertRealtimeRow(rawSetResources, 'garf_resources', payload.new as VenueResource);
-          }
-        }).subscribe(),
-
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'venue_resources' }, payload => receiveRealtimeEvent('venue_resources', payload))
+        .subscribe(),
       supabase.channel('public-slots-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, payload => {
-          if (payload.eventType === 'DELETE') {
-            removeRealtimeRow(rawSetSlots, 'garf_slots', payload.old.id);
-          } else {
-            upsertRealtimeRow(rawSetSlots, 'garf_slots', payload.new as Slot);
-          }
-        }).subscribe(),
-
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'slots' }, payload => receiveRealtimeEvent('slots', payload))
+        .subscribe(),
       supabase.channel('public-bookings-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, payload => {
-          if (payload.eventType === 'DELETE') {
-            removeRealtimeRow(rawSetBookings, 'garf_bookings', payload.old.id);
-          } else {
-            upsertRealtimeRow(rawSetBookings, 'garf_bookings', payload.new as Booking);
-          }
-        }).subscribe(),
-
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, payload => receiveRealtimeEvent('bookings', payload))
+        .subscribe(),
       supabase.channel('public-profiles-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
-          if (payload.eventType === 'DELETE') {
-            const oldId = payload.old.id;
-            rawSetProfiles(prev => {
-              const updated = prev.filter(profile => profile.id !== oldId);
-              localStorage.setItem('garf_profiles', JSON.stringify(updated));
-              return updated;
-            });
-          } else {
-            const item = payload.new as Profile;
-            rawSetProfiles(prev => {
-              const updated = prev.some(profile => profile.id === item.id)
-                ? prev.map(profile => profile.id === item.id ? item : profile)
-                : [...prev, item];
-              localStorage.setItem('garf_profiles', JSON.stringify(updated));
-              return updated;
-            });
-          }
-        }).subscribe()
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => receiveRealtimeEvent('profiles', payload))
+        .subscribe()
     ];
+
+    void loadInitialData();
 
     return () => {
       active = false;
@@ -655,7 +670,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser?.id, currentUser?.role]);
 
-    const saveProfileToSupabase = async (profile: Profile) => {
+  const saveProfileToSupabase = async (profile: Profile) => {
     if (isSupabaseConfigured && supabase) {
       try {
         const cleanEmail = profile.email ? profile.email.toLowerCase().trim() : '';
