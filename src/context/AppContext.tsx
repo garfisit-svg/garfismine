@@ -91,7 +91,7 @@ interface AppContextType {
   // Customer Booking actions
   createBookingHold: (data: { venueId: string, resourceId: string, date: string, slots: string[], coinsToUse: number, offerId: string | null, paymentMethod: 'online' | 'pay_at_venue' | 'token_advance' }) => Promise<Booking>;
   confirmOnlineBooking: (bookingId: string, upiTransactionId?: string) => Promise<Booking>;
-  cancelBooking: (bookingId: string, reason: string) => Promise<{ refund: number; coinsRestored: number }>;
+  cancelBooking: (bookingId: string, reason: string) => Promise<{ refund: number; coinsRestored: number; manualPaymentReferenceSubmitted?: boolean }>;
   
   // Owner operation actions
   ownerCheckIn: (bookingId: string) => Promise<void>;
@@ -3628,7 +3628,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // VENUE OPERATIONAL LOGICS
-  const ownerCheckIn = (bookingId: string) => {
+  const ownerCheckIn = async (bookingId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      await persistBookingRpc('owner_booking_action', { p_booking_id: bookingId, p_action: 'check_in' });
+      return;
+    }
     setBookings(prev => prev.map(b => {
       if (b.id === bookingId) {
         // Also if check-in was Pay-At-Venue, flag it paid
@@ -3708,7 +3712,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const ownerExtendHold = (bookingId: string) => {
+  const ownerExtendHold = async (bookingId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      await persistBookingRpc('owner_booking_action', { p_booking_id: bookingId, p_action: 'extend_hold' });
+      return;
+    }
     // Adds +15 minutes to hold expiry (Rule 2)
     setBookings(prev => prev.map(b => {
       if (b.id === bookingId && b.hold_expires_at) {
@@ -3729,7 +3737,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const ownerReleaseSlot = (bookingId: string) => {
+  const ownerReleaseSlot = async (bookingId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      await persistBookingRpc('owner_booking_action', { p_booking_id: bookingId, p_action: 'release_hold' });
+      return;
+    }
     // Explicit manual release (Rule 2)
     setBookings(prev => prev.map(b => {
       if (b.id === bookingId) {
@@ -4068,7 +4080,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return isUnitAvailable(resourceId, date, startTime, endTime, bookings, excludeBookingId, slots);
   };
 
-  const ownerNoShow = (bookingId: string) => {
+  const ownerNoShow = async (bookingId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      await persistBookingRpc('owner_booking_action', { p_booking_id: bookingId, p_action: 'no_show' });
+      return;
+    }
     let customerId = '';
     
     setBookings(prev => prev.map(b => {
@@ -4124,7 +4140,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const ownerCompleteBooking = (bookingId: string) => {
+  const ownerCompleteBooking = async (bookingId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      await persistBookingRpc('owner_booking_action', { p_booking_id: bookingId, p_action: 'complete' });
+      return;
+    }
     setBookings(prev => {
       const active = prev.map(b => {
         if (b.id === bookingId) {
