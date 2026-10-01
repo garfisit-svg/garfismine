@@ -110,22 +110,22 @@ export const MyBookingsPage: React.FC = () => {
     );
   };
 
-  // Refund calculation previews (Rule 4)
+  // GARF does not receive manual UPI transfers, so refunds for those transfers must be arranged with the venue.
   const previewCancellationRefund = (booking: Booking) => {
-    if (booking.payment_method !== 'online') {
-      return { refund: 0, pct: 0, msg: 'Pay-at-Venue hold will be cancelled safely. Zero charge is applied!' };
+    if (booking.payment_method !== 'online' || booking.payment_status === 'pending') {
+      return { refund: 0, pct: 0, msg: 'This unpaid reservation will be cancelled and any reserved GARF coins will be restored.' };
     }
-    return { refund: 0, pct: 0, msg: '⚠️ NO REFUND APPLICABLE: Paid online bookings do not qualify for any refund on cancellation under our policy.' };
+    return { refund: 0, pct: 0, msg: 'Payment was made directly to the venue. GARF cannot issue an automatic refund; contact the venue to arrange one.' };
   };
 
   const handleCancelConfirm = async () => {
     if (!selectedCancelBooking) return;
     try {
-      await cancelBooking(selectedCancelBooking.id, cancelReason || 'Cancelled by player');
-      if (selectedCancelBooking.payment_method === 'online') {
-        toast.success('Slot cancelled and recycled! (No refund was issued as per policy) ❌');
+      const result = await cancelBooking(selectedCancelBooking.id, cancelReason || 'Cancelled by player');
+      if (result.manualPaymentReferenceSubmitted || selectedCancelBooking.payment_status === 'completed') {
+        toast.success('Booking cancelled. Contact the venue directly about any UPI payment or refund.');
       } else {
-        toast.success('Reservation cancelled safely and slots recycled! ❌');
+        toast.success('Reservation cancelled. Any reserved GARF coins were restored.');
       }
       setSelectedCancelBooking(null);
       setCancelReason('');
