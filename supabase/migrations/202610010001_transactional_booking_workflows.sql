@@ -47,6 +47,7 @@ BEGIN
     WHERE booking_status = 'held'
       AND payment_status = 'pending'
       AND hold_expires_at IS NOT NULL
+      AND upi_transaction_id IS NULL
       AND hold_expires_at <= now()
     ORDER BY hold_expires_at, id
     FOR UPDATE SKIP LOCKED
@@ -205,11 +206,15 @@ BEGIN
   END LOOP;
 
   slot_start := p_slot_times[1]::time;
-  slot_end := slot_start + make_interval(hours => duration);
-  IF slot_start < venue_row.operating_hours_start::time
-     OR slot_end > venue_row.operating_hours_end::time THEN
+  IF extract(epoch FROM slot_start) / 60 + duration * 60
+       > extract(epoch FROM venue_row.operating_hours_end::time) / 60
+     OR slot_start < venue_row.operating_hours_start::time THEN
     RAISE EXCEPTION 'The selected time is outside the venue operating hours.';
   END IF;
+  slot_end := CASE
+    WHEN extract(epoch FROM slot_start) / 60 + duration * 60 >= 1440 THEN '24:00'::time
+    ELSE slot_start + make_interval(hours => duration)
+  END;
 
   booking_start := (p_booking_date + slot_start) AT TIME ZONE 'Asia/Kolkata';
   IF booking_start <= now() THEN
@@ -246,7 +251,7 @@ BEGIN
     WHERE b.resource_id = p_resource_id
       AND b.booking_date = p_booking_date
       AND b.booking_status IN ('held', 'confirmed', 'checked_in')
-      AND (b.booking_status <> 'held' OR b.hold_expires_at > now())
+      AND (b.booking_status <> 'held' OR b.upi_transaction_id IS NOT NULL OR b.hold_expires_at > now())
       AND b.start_time::time < slot_end
       AND b.end_time::time > slot_start
   ) THEN
@@ -285,7 +290,7 @@ BEGIN
     FOR SHARE;
     IF NOT FOUND
        OR duration < offer_row.min_booking_hours
-       OR NOT (offer_row.valid_days @> ARRAY[to_char(p_booking_date, 'FMDay')])
+       OR NOT EXISTS (SELECT 1 FROM unnest(offer_row.valid_days) d WHERE lower(btrim(d)) = lower(to_char(p_booking_date, 'FMDay')))
        OR (offer_row.valid_from_date IS NOT NULL AND p_booking_date < offer_row.valid_from_date)
        OR (offer_row.valid_to_date IS NOT NULL AND p_booking_date > offer_row.valid_to_date)
        OR (offer_row.valid_from_time IS NOT NULL AND slot_start < offer_row.valid_from_time::time)
@@ -324,7 +329,7 @@ BEGIN
     walk_in_customer_phone, quantity, created_at, updated_at
   ) VALUES (
     booking_id, booking_ref, actor_id, p_venue_id, p_resource_id, p_booking_date,
-    p_slot_times[1], slot_end::text, duration, base_amount, discount_amount,
+    p_slot_times[1], to_char(slot_end, 'HH24:MI'), duration, base_amount, discount_amount,
     coins_to_use, coins_to_use, 5, final_amount,
     p_payment_method, 'pending', 'held', hold_expiry,
     NULL, NULL, NULL, NULL, 0, 0, p_offer_id, NULL, NULL, 1, now(), now()
@@ -382,7 +387,6 @@ DECLARE
   actor_id text := auth.uid()::text;
   booking_row public.bookings%ROWTYPE;
   transaction_ref text;
-  new_expiry timestamptz;
 BEGIN
   IF actor_id IS NULL THEN RAISE EXCEPTION 'Sign in to submit payment details.'; END IF;
   transaction_ref := regexp_replace(btrim(coalesce(p_upi_transaction_id, '')), '\s+', '', 'g');
@@ -400,8 +404,8 @@ BEGIN
   IF booking_row.payment_method NOT IN ('online', 'token_advance')
      OR booking_row.booking_status <> 'held'
      OR booking_row.payment_status <> 'pending'
-     OR booking_row.hold_expires_at IS NULL
-     OR booking_row.hold_expires_at <= now() THEN
+     OR (booking_row.upi_transaction_id IS NULL
+         AND (booking_row.hold_expires_at IS NULL OR booking_row.hold_expires_at <= now())) THEN
     RAISE EXCEPTION 'This booking hold has expired or cannot accept payment details.';
   END IF;
   IF booking_row.upi_transaction_id IS NOT NULL
@@ -409,16 +413,15 @@ BEGIN
     RAISE EXCEPTION 'A payment reference was already submitted for this booking.';
   END IF;
 
-  new_expiry := greatest(booking_row.hold_expires_at, now() + interval '30 minutes');
   UPDATE public.bookings
   SET upi_transaction_id = transaction_ref,
-      hold_expires_at = new_expiry,
+      hold_expires_at = NULL,
       updated_at = now()
   WHERE id = booking_row.id
   RETURNING * INTO booking_row;
 
   UPDATE public.slots
-  SET held_until = new_expiry,
+  SET held_until = NULL,
       updated_at = now()
   WHERE booking_id = booking_row.id
     AND status = 'held';
